@@ -1,16 +1,15 @@
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+from sqlalchemy.orm import declarative_base
 
 from app.config import settings
 
+# postgresql+asyncpg:// indica a SQLAlchemy que use asyncpg como driver.
+# La URL viene de config.py — debe tener ese prefijo en la variable de entorno.
+engine = create_async_engine(settings.async_database_url)
 
-# Pool de conexiones a PostgreSQL. No abre conexiones todavía (lazy).
-engine = create_engine(settings.database_url)
+# async_sessionmaker produce AsyncSession. expire_on_commit=False evita que
+# SQLAlchemy expire los atributos del objeto después del commit, lo que causaría
+# un error al acceder a ellos fuera de la sesión en contextos async.
+AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
-# Fábrica de sesiones. Cada request obtiene una sesión propia desde acá.
-# autocommit=False → el commit es explícito, permite rollback ante errores.
-# autoflush=False  → SQLAlchemy no envía SQL hasta que se lo indiques.
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-# Clase base de la que heredarán todos los modelos ORM (User, Report, etc.).
 Base = declarative_base()

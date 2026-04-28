@@ -5,6 +5,11 @@ class Settings(BaseSettings):
     # Pydantic lee DATABASE_URL del entorno automáticamente.
     # Sin default → la app no arranca si la variable no está definida.
     database_url: str
+
+    @property
+    def async_database_url(self) -> str:
+        # Railway genera URLs con prefijo postgresql://, asyncpg necesita postgresql+asyncpg://
+        return self.database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
     secret_key: str           # Clave para firmar los JWT — obligatoria, sin default
     access_token_expire_minutes: int = 30  # Vida del token; 30 min es el estándar seguro
 

@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_db
 from app.models.user import User
@@ -10,9 +11,9 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-def register(user_data: UserCreate, db: Session = Depends(get_db)):
-    existing = db.query(User).filter(User.email == user_data.email).first()
-    if existing:
+async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(User).where(User.email == user_data.email))
+    if result.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Email ya registrado")
 
     user = User(
@@ -20,14 +21,15 @@ def register(user_data: UserCreate, db: Session = Depends(get_db)):
         hashed_password=hash_password(user_data.password),
     )
     db.add(user)
-    db.commit()
-    db.refresh(user)  # Carga los campos generados por la BD (id, created_at)
+    await db.commit()
+    await db.refresh(user)
     return user
 
 
 @router.post("/login", response_model=Token)
-def login(credentials: UserCreate, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == credentials.email).first()
+async def login(credentials: UserCreate, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(User).where(User.email == credentials.email))
+    user = result.scalar_one_or_none()
 
     # Mismo error para "email no existe" y "password incorrecta" — evita enumeración de usuarios
     if not user or not verify_password(credentials.password, user.hashed_password):
