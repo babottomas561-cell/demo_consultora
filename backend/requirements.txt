@@ -1,0 +1,10 @@
+# Dependencias del backend Python.
+# Se instalan con: pip install -r requirements.txt
+# fastapi          → framework web
+# uvicorn          → servidor ASGI para correr FastAPI
+# sqlalchemy       → ORM para PostgreSQL
+# alembic          → migraciones de base de datos
+# psycopg2-binary  → driver PostgreSQL para SQLAlchemy
+# pydantic-settings → leer config desde variables de entorno
+# python-jose      → generar y validar tokens JWT
+# passlib[bcrypt]  → hashear passwords de forma segura

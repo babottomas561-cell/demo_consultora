@@ -1,0 +1,3 @@
+# Configuración de deploy en Railway.
+# Define los servicios a deployar (backend, frontend),
+# sus comandos de build/start, y las variables de entorno requeridas.
