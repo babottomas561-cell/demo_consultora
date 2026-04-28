@@ -1,3 +1,8 @@
-# Configuración de deploy en Railway.
-# Define los servicios a deployar (backend, frontend),
-# sus comandos de build/start, y las variables de entorno requeridas.
+[build]
+builder = "dockerfile"
+dockerfilePath = "backend/Dockerfile"
+buildContext = "backend"
+
+[deploy]
+startCommand = "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+healthcheckPath = "/health"
