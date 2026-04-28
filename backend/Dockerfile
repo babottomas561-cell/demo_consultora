@@ -1,3 +1,11 @@
-# Dockerfile para el backend en producción (Railway).
-# Construye una imagen Python, instala dependencias,
-# y arranca el servidor uvicorn apuntando a app.main:app.
+FROM python:3.12-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+# Railway inyecta $PORT dinámicamente — uvicorn debe escuchar en ese puerto.
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
