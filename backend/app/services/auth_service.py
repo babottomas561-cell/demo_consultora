@@ -1,27 +1,22 @@
 from datetime import datetime, timedelta, timezone
 
+import bcrypt
 from jose import jwt
-from passlib.context import CryptContext
 
 from app.config import settings
 
 ALGORITHM = "HS256"  # HMAC-SHA256: estándar para JWT simétricos (misma clave para firmar y verificar)
 
-# CryptContext abstrae el algoritmo de hashing. Si en el futuro cambiás de
-# bcrypt a argon2, solo cambiás esta línea — el resto del código no se toca.
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 
 def hash_password(password: str) -> str:
-    # bcrypt genera un salt aleatorio internamente y lo embebe en el hash.
-    # El resultado es distinto cada vez aunque la password sea la misma.
-    return pwd_context.hash(password)
+    # truncate_error=False evita el ValueError de versiones nuevas de bcrypt
+    # cuando la password supera 72 bytes — en su lugar trunca silenciosamente.
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(password.encode("utf-8"), salt, truncate_error=False).decode("utf-8")  # type: ignore[call-arg]
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    # Extrae el salt del hash guardado, recomputa y compara.
-    # Nunca comparás strings directamente — eso sería vulnerable a timing attacks.
-    return pwd_context.verify(plain_password, hashed_password)
+    return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
 
 
 def create_access_token(user_id: int, role: str) -> str:
