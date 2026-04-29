@@ -9,14 +9,14 @@ ALGORITHM = "HS256"  # HMAC-SHA256: estándar para JWT simétricos (misma clave 
 
 
 def hash_password(password: str) -> str:
-    # truncate_error=False evita el ValueError de versiones nuevas de bcrypt
-    # cuando la password supera 72 bytes — en su lugar trunca silenciosamente.
+    # bcrypt solo usa los primeros 72 bytes. Lo truncamos explícitamente para
+    # evitar diferencias entre versiones de la librería.
     salt = bcrypt.gensalt()
-    return bcrypt.hashpw(password.encode("utf-8"), salt, truncate_error=False).decode("utf-8")  # type: ignore[call-arg]
+    return bcrypt.hashpw(password.encode("utf-8")[:72], salt).decode("utf-8")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
+    return bcrypt.checkpw(plain_password.encode("utf-8")[:72], hashed_password.encode("utf-8"))
 
 
 def create_access_token(user_id: int, role: str) -> str:
