@@ -1,2 +1,4 @@
-# Exporta todos los modelos SQLAlchemy para que Alembic los detecte
-# automáticamente al generar migraciones de base de datos.
+from app.models.sale import Sale
+from app.models.user import User
+
+__all__ = ["Sale", "User"]

@@ -3,8 +3,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.database import Base, engine
-from app.routers import auth
+from app.database import AsyncSessionLocal, Base, engine
+from app.models import Sale, User
+from app.routers import auth, demo
+from app.services.demo_seed import seed_demo_sales_if_empty
 
 
 @asynccontextmanager
@@ -13,6 +15,8 @@ async def lifespan(app: FastAPI):
     # pero para el primer deploy en Railway es suficiente para arrancar.
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    async with AsyncSessionLocal() as db:
+        await seed_demo_sales_if_empty(db)
     yield
     # Shutdown: libera el pool de conexiones del engine.
     await engine.dispose()
@@ -34,6 +38,7 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+app.include_router(demo.router)
 
 
 @app.get("/health")
