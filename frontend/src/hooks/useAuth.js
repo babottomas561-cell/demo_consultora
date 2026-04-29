@@ -1,2 +1,5 @@
-// Custom hook que expone el estado de autenticación y las acciones:
-// { user, isAuthenticated, login, logout } para usar en cualquier componente.
+import { useAuthStore } from "../store/authStore";
+
+export function useAuth() {
+  return useAuthStore();
+}

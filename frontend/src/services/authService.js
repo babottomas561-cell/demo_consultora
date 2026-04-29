@@ -1,2 +1,8 @@
-// Funciones para interactuar con los endpoints de autenticación del backend:
-// login(email, password) → devuelve JWT, register(data) → crea usuario.
+import { apiRequest } from "./api";
+
+export async function login(email, password) {
+  return apiRequest("/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  });
+}

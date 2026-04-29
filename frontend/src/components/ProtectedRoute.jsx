@@ -1,2 +1,8 @@
-// HOC/wrapper que verifica si el usuario tiene sesión activa.
-// Si no hay token JWT válido en el store, redirige a /login.
+import { Navigate } from "react-router-dom";
+
+import { useAuth } from "../hooks/useAuth";
+
+export function ProtectedRoute({ children }) {
+  const { isAuthenticated } = useAuth();
+  return isAuthenticated ? children : <Navigate to="/login" replace />;
+}
