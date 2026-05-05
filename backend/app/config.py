@@ -10,8 +10,15 @@ class Settings(BaseSettings):
     def async_database_url(self) -> str:
         # Railway genera URLs con prefijo postgresql://, asyncpg necesita postgresql+asyncpg://
         return self.database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
-    secret_key: str           # Clave para firmar los JWT — obligatoria, sin default
-    access_token_expire_minutes: int = 30  # Vida del token; 30 min es el estándar seguro
+    secret_key: str
+    access_token_expire_minutes: int = 30
+
+    # Credenciales Infomanager — se configuran en Railway como variables de entorno
+    im_base_url: str = "https://impedidos.infomanager.com.ar/api"
+    im_client_id: str = ""
+    im_client_secret: str = ""
+    im_sync_interval_seconds: int = 150  # sync cada 2.5 minutos
+    im_sync_days_initial: int = 90       # cuántos días atrás al primer sync
 
     class Config:
         # Le dice a Pydantic que también busque variables en un archivo .env

@@ -1,24 +1,61 @@
+import asyncio
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.config import settings
 from app.database import AsyncSessionLocal, Base, engine
 from app.models import Sale, User
+from app.models.im_venta import ImVenta
+from app.models.im_venta_item import ImVentaItem
 from app.routers import auth, demo
 from app.services.demo_seed import seed_demo_sales_if_empty
+from app.services.infomanager_client import im_client
+from app.services.sync_service import sync_ventas
+
+logger = logging.getLogger(__name__)
+
+
+async def _sync_loop() -> None:
+    """Loop infinito que sincroniza Infomanager cada IM_SYNC_INTERVAL_SECONDS."""
+    # Solo corre si hay credenciales configuradas
+    if not settings.im_client_id or not settings.im_client_secret:
+        logger.info("Infomanager: credenciales no configuradas, sync deshabilitado")
+        return
+
+    logger.info("Infomanager: sync loop iniciado (intervalo: %ds)", settings.im_sync_interval_seconds)
+    while True:
+        try:
+            async with AsyncSessionLocal() as db:
+                count = await sync_ventas(db)
+                if count:
+                    logger.info("Infomanager: %d ventas sincronizadas", count)
+        except Exception as exc:
+            logger.error("Infomanager sync loop error: %s", exc)
+
+        await asyncio.sleep(settings.im_sync_interval_seconds)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: crea las tablas si no existen. En producción esto lo haría Alembic,
-    # pero para el primer deploy en Railway es suficiente para arrancar.
+    # Crea tablas nuevas (ImVenta, ImVentaItem) sin tocar las existentes
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+    # Seed de datos demo (solo si la tabla está vacía)
     async with AsyncSessionLocal() as db:
         await seed_demo_sales_if_empty(db)
+
+    # Lanza el sync loop en background — no bloquea el arranque
+    sync_task = asyncio.create_task(_sync_loop())
+
     yield
-    # Shutdown: libera el pool de conexiones del engine.
+
+    # Shutdown limpio
+    sync_task.cancel()
+    await im_client.close()
     await engine.dispose()
 
 
@@ -44,3 +81,14 @@ app.include_router(demo.router)
 @app.get("/health")
 async def health_check():
     return {"status": "ok"}
+
+
+@app.get("/sync/status")
+async def sync_status():
+    """Endpoint para verificar el estado del sync desde Railway logs o el frontend."""
+    from app.services.sync_service import _last_sync_at
+    return {
+        "im_enabled": bool(settings.im_client_id and settings.im_client_secret),
+        "last_sync_at": _last_sync_at.isoformat() if _last_sync_at else None,
+        "sync_interval_seconds": settings.im_sync_interval_seconds,
+    }
