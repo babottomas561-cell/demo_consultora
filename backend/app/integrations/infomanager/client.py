@@ -88,3 +88,10 @@ class InfomanagerApiClient:
             "/api/v1/ventas/items",
             params={"fechaDesde": fecha_desde, "fechaHasta": fecha_hasta},
         )
+
+    async def get_vendedores(self) -> list[dict]:
+        return await self.get_paginated("/api/v1/vendedores")
+
+    async def get_rubros(self) -> list[dict]:
+        payload = await self.request("GET", "/api/v1/rubros/All")
+        return payload if isinstance(payload, list) else payload.get("data", [])

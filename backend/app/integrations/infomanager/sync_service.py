@@ -8,13 +8,18 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.integrations.infomanager.adapter import adapt_customer, adapt_product, adapt_sale, adapt_sale_item
+from app.integrations.infomanager.adapter import (
+    adapt_customer, adapt_product, adapt_rubro,
+    adapt_sale, adapt_sale_item, adapt_vendedor,
+)
 from app.integrations.infomanager.client import InfomanagerApiClient
 from app.models.bi_customer import BiCustomer
 from app.models.bi_data_source import BiDataSource
 from app.models.bi_product import BiProduct
+from app.models.bi_rubro import BiRubro
 from app.models.bi_sale import BiSale
 from app.models.bi_sale_item import BiSaleItem
+from app.models.bi_vendedor import BiVendedor
 
 logger = logging.getLogger(__name__)
 
@@ -78,13 +83,20 @@ async def sync_infomanager(db: AsyncSession) -> dict[str, int | str]:
 
     clientes_raw = await im_client.get_clientes()
     articulos_raw = await im_client.get_articulos()
+    vendedores_raw = await im_client.get_vendedores()
+    rubros_raw = await im_client.get_rubros()
     ventas_raw = await im_client.get_ventas(fecha_desde_im, fecha_hasta_im)
     items_raw = await im_client.get_venta_items(fecha_desde_im, fecha_hasta_im)
 
     customers = [adapt_customer(row, source.id) for row in clientes_raw]
     products = [adapt_product(row, source.id) for row in articulos_raw]
+    vendedores = [adapt_vendedor(row, source.id) for row in vendedores_raw]
+    rubros = [adapt_rubro(row, source.id) for row in rubros_raw]
     sales = [adapt_sale(row, source.id) for row in ventas_raw]
     sale_items = [adapt_sale_item(row, source.id) for row in items_raw]
+
+    await _upsert(db, BiVendedor, vendedores, ["source_id", "cod_vendedor"], ["nombre", "habilitado", "synced_at"])
+    await _upsert(db, BiRubro, rubros, ["source_id", "cod_rubro"], ["descripcion", "synced_at"])
 
     await _upsert(
         db,
@@ -185,6 +197,8 @@ async def sync_infomanager(db: AsyncSession) -> dict[str, int | str]:
     result = {
         "customers": len(customers),
         "products": len(products),
+        "vendedores": len(vendedores),
+        "rubros": len(rubros),
         "sales": len(sales),
         "sale_items": len(sale_items),
         "fecha_desde": fecha_desde.isoformat(),
@@ -215,6 +229,8 @@ async def get_bi_status(db: AsyncSession) -> dict:
         "counts": {
             "bi_customers": await count(BiCustomer),
             "bi_products": await count(BiProduct),
+            "bi_vendedores": await count(BiVendedor),
+            "bi_rubros": await count(BiRubro),
             "bi_sales": await count(BiSale),
             "bi_sale_items": await count(BiSaleItem),
             "bi_data_sources": await count(BiDataSource),

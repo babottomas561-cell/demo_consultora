@@ -1,6 +1,7 @@
 import { ChartWidget } from "../components/ChartWidget";
 import { KpiCard } from "../components/KpiCard";
 import { Navbar } from "../components/Navbar";
+import { Sidebar } from "../components/Sidebar";
 import { useDashboard } from "../hooks/useDashboard";
 import { formatCompactCurrency, formatCurrency, formatDate, formatPercent } from "../utils/format";
 
@@ -30,18 +31,24 @@ export function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="app-shell">
-        <Navbar />
-        <div className="loading-state">Cargando datos de Distribuidora San Miguel...</div>
+      <div className="app-shell with-sidebar">
+        <Sidebar />
+        <div className="main-content">
+          <Navbar />
+          <div className="loading-state">Cargando datos...</div>
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="app-shell">
-        <Navbar />
-        <div className="loading-state">{error}</div>
+      <div className="app-shell with-sidebar">
+        <Sidebar />
+        <div className="main-content">
+          <Navbar />
+          <div className="loading-state">{error}</div>
+        </div>
       </div>
     );
   }
@@ -49,7 +56,9 @@ export function DashboardPage() {
   const { kpis, series, products, customers, sales } = data;
 
   return (
-    <div className="app-shell">
+    <div className="app-shell with-sidebar">
+      <Sidebar />
+      <div className="main-content">
       <Navbar />
       <main className="dashboard">
         <section className="dashboard-header">
@@ -149,6 +158,7 @@ export function DashboardPage() {
           </section>
         </section>
       </main>
+      </div>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import enum
 
-from sqlalchemy import Boolean, Column, DateTime, Enum, Integer, String, func
+from sqlalchemy import Boolean, Column, DateTime, Enum, ForeignKey, Integer, String, func
 
 from app.database import Base
 
@@ -22,6 +22,9 @@ class User(Base):
 
     # False deshabilita el acceso sin borrar el usuario ni su historial.
     is_active = Column(Boolean, nullable=False, default=True)
+
+    # Empresa a la que pertenece (null = admin global sin empresa asignada)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=True, index=True)
 
     # server_default delega el timestamp a PostgreSQL, no a Python.
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

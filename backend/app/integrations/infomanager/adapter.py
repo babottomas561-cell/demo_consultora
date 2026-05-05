@@ -102,3 +102,20 @@ def adapt_sale_item(row: dict[str, Any], data_source_id: int) -> dict[str, Any]:
         "cod_barra": row.get("cod_barra"),
         "raw": row,
     }
+
+
+def adapt_vendedor(row: dict[str, Any], data_source_id: int) -> dict[str, Any]:
+    return {
+        "source_id": data_source_id,
+        "cod_vendedor": _to_int(row.get("cod_vendedor"), 0),
+        "nombre": row.get("nombre") or "",
+        "habilitado": str(row.get("habilitado", "S")),
+    }
+
+
+def adapt_rubro(row: dict[str, Any], data_source_id: int) -> dict[str, Any]:
+    return {
+        "source_id": data_source_id,
+        "cod_rubro": _to_int(row.get("cod_rubro"), 0),
+        "descripcion": row.get("descripcion") or "",
+    }
