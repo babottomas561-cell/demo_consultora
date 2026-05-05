@@ -1,4 +1,4 @@
-# Fake Infomanager API
+# Infomanager API Simulator
 
 API local para probar el flujo de integración contra un contrato tipo Infomanager sin usar credenciales reales.
 
@@ -9,20 +9,20 @@ Desde la raíz del proyecto:
 ```bash
 python3 -m venv .venv_fake_im
 source .venv_fake_im/bin/activate
-pip install -r fake_infomanager_api/requirements.txt
+pip install -r tools/simulators/infomanager_api/requirements.txt
 ```
 
 ## Correr la API
 
 ```bash
-uvicorn fake_infomanager_api.main:app --reload --port 9000
+uvicorn tools.simulators.infomanager_api.main:app --reload --port 9000
 ```
 
-La API genera datos en `fake_infomanager_api/generated_data/` al iniciar si los JSON no existen.
+La API genera datos en `tools/simulators/infomanager_api/generated_data/` al iniciar si los JSON no existen.
 Para regenerarlos manualmente:
 
 ```bash
-python -c "from fake_infomanager_api.seed_data import load_data; load_data(force=True)"
+python -c "from tools.simulators.infomanager_api.seed_data import load_data; load_data(force=True)"
 ```
 
 ## Credenciales demo
@@ -133,7 +133,7 @@ Respuesta:
 
 ## Uso como IM_BASE_URL
 
-Para probar un cliente externo contra esta fake API:
+Para probar un cliente externo contra este simulador:
 
 ```bash
 IM_BASE_URL=http://localhost:9000

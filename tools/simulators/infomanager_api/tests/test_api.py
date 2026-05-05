@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from fake_infomanager_api.main import app
+from tools.simulators.infomanager_api.main import app
 
 
 client = TestClient(app)

@@ -13,7 +13,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Fake Infomanager API",
+    title="Infomanager API Simulator",
     description="API local compatible con el flujo de integración demo Infomanager.",
     version="0.1.0",
     lifespan=lifespan,
