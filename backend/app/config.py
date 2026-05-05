@@ -1,4 +1,10 @@
+import os
+
 from pydantic_settings import BaseSettings
+
+# Railway inyecta PORT en el arranque. El simulador corre dentro del mismo proceso
+# en /simulator, por lo que la URL interna usa el mismo puerto.
+_port = os.environ.get("PORT", "8000")
 
 
 class Settings(BaseSettings):
@@ -14,7 +20,7 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 30
 
     # Credenciales Infomanager — se configuran en Railway como variables de entorno
-    im_base_url: str = "http://localhost:8000/simulator"
+    im_base_url: str = f"http://localhost:{_port}/simulator"
     im_client_id: str = "demo_client"
     im_client_secret: str = "demo_secret"
     im_sync_interval_seconds: int = 150  # sync cada 2.5 minutos
