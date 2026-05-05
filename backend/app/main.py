@@ -19,6 +19,7 @@ from app.routers.vendedores import router as vendedores_router
 from app.routers.ventas import router as ventas_router
 from app.integrations.infomanager.sync_service import im_client, sync_infomanager
 from app.simulator.main import router as simulator_router
+from app.simulator.data_store import get_data as simulator_get_data
 from app.services.demo_seed import seed_demo_sales_if_empty
 
 logger = logging.getLogger(__name__)
@@ -49,6 +50,13 @@ async def lifespan(app: FastAPI):
 
     async with AsyncSessionLocal() as db:
         await seed_demo_sales_if_empty(db)
+
+    # Pre-generar datos del simulador en thread (es blocking, puede tardar en primer arranque)
+    # Esto asegura que los archivos JSON existen antes de que el sync loop los pida
+    if settings.enable_simulator:
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, simulator_get_data)
+        logger.info("Simulador: datos pre-generados correctamente")
 
     sync_task = asyncio.create_task(_sync_loop())
     yield
