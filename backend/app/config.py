@@ -14,9 +14,9 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 30
 
     # Credenciales Infomanager — se configuran en Railway como variables de entorno
-    im_base_url: str = "https://impedidos.infomanager.com.ar/api"
-    im_client_id: str = ""
-    im_client_secret: str = ""
+    im_base_url: str = "http://localhost:9000"
+    im_client_id: str = "demo_client"
+    im_client_secret: str = "demo_secret"
     im_sync_interval_seconds: int = 150  # sync cada 2.5 minutos
     im_sync_days_initial: int = 90       # cuántos días atrás al primer sync
 
