@@ -21,7 +21,7 @@ if not database_url:
 if not database_url.startswith(("postgresql://", "postgresql+asyncpg://")):
     raise RuntimeError("Integration tests require PostgreSQL. SQLite or other databases are not allowed.")
 
-os.environ.setdefault("IM_BASE_URL", "http://localhost:9000")
+os.environ.setdefault("IM_BASE_URL", "http://localhost:8000/simulator")
 os.environ.setdefault("IM_CLIENT_ID", "demo_client")
 os.environ.setdefault("IM_CLIENT_SECRET", "demo_secret")
 
@@ -90,7 +90,7 @@ async def _sync_and_measure(db) -> tuple[dict, float]:
     return result, elapsed
 
 
-async def test_login_to_fake_infomanager_api_returns_token():
+async def test_login_to_integrated_infomanager_simulator_returns_token():
     client = InfomanagerApiClient(settings.im_base_url, settings.im_client_id, settings.im_client_secret)
     try:
         token = await client.login()

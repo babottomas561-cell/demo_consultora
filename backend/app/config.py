@@ -14,11 +14,12 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 30
 
     # Credenciales Infomanager — se configuran en Railway como variables de entorno
-    im_base_url: str = "http://localhost:9000"
+    im_base_url: str = "http://localhost:8000/simulator"
     im_client_id: str = "demo_client"
     im_client_secret: str = "demo_secret"
     im_sync_interval_seconds: int = 150  # sync cada 2.5 minutos
     im_sync_days_initial: int = 90       # cuántos días atrás al primer sync
+    enable_simulator: bool = True
 
     class Config:
         # Le dice a Pydantic que también busque variables en un archivo .env

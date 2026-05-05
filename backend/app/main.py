@@ -12,6 +12,7 @@ from app.models.im_venta import ImVenta
 from app.models.im_venta_item import ImVentaItem
 from app.routers import auth, bi, demo
 from app.integrations.infomanager.sync_service import im_client, sync_infomanager
+from app.simulator.main import router as simulator_router
 from app.services.demo_seed import seed_demo_sales_if_empty
 
 logger = logging.getLogger(__name__)
@@ -76,6 +77,8 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(demo.router)
 app.include_router(bi.router)
+if settings.enable_simulator:
+    app.include_router(simulator_router, prefix="/simulator")
 
 
 @app.get("/health")
