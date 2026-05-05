@@ -1,0 +1,1 @@
+"""Fake Infomanager API package."""
