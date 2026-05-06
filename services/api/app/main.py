@@ -1,0 +1,10 @@
+from fastapi import FastAPI
+from app.api.v1 import companies
+
+app = FastAPI(title="demo_consultora API")
+
+@app.get("/ping")
+async def ping():
+    return {"status": "ok"}
+
+app.include_router(companies.router, prefix="/api/v1/companies", tags=["companies"])
