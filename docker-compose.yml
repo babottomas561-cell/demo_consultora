@@ -1,5 +1,0 @@
-# Orquesta los 3 servicios para desarrollo local:
-# - db: PostgreSQL con volumen persistente
-# - backend: FastAPI con hot-reload (uvicorn --reload)
-# - frontend: Vite dev server con hot-reload
-# Todos en la misma red Docker para comunicarse por nombre de servicio.

@@ -1,1 +1,0 @@
-"""Infomanager ingestion integration."""
