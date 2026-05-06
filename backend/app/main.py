@@ -2,17 +2,15 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.database import AsyncSessionLocal, Base, engine
-from app.dependencies import get_db
 from app.models import (
     BiCustomer, BiDataSource, BiProduct, BiRubro,
-    BiSale, BiSaleItem, BiVendedor, Company, Sale, User,
+    BiSale, BiSaleItem, BiVendedor, Company, DataSource, Sale, SyncStatus, TenantDatabase, User,
 )
 from app.routers import auth, bi, demo
 from app.routers.admin import router as admin_router
@@ -24,6 +22,7 @@ from app.routers.ventas import router as ventas_router
 from app.integrations.infomanager.company_sync import sync_company
 from app.simulator.main import router as simulator_router
 from app.simulator.data_store import get_data as simulator_get_data
+from app.services.central_migration_service import run_central_migrations
 from app.services.demo_seed import seed_demo_sales_if_empty
 
 logger = logging.getLogger(__name__)
@@ -42,17 +41,21 @@ async def _company_sync_loop() -> None:
         try:
             async with AsyncSessionLocal() as db:
                 result = await db.execute(
-                    select(Company).where(
-                        Company.is_active == True,
-                        Company.db_schema != None,
-                        Company.im_client_id != None,
+                    select(Company)
+                    .join(TenantDatabase, TenantDatabase.company_id == Company.id)
+                    .join(DataSource, DataSource.company_id == Company.id)
+                    .where(
+                        Company.status == "active",
+                        TenantDatabase.status == "active",
+                        DataSource.status == "active",
                     )
                 )
                 companies = result.scalars().all()
 
             for company in companies:
                 try:
-                    result = await sync_company(company)
+                    async with AsyncSessionLocal() as sync_db:
+                        result = await sync_company(company.id, sync_db)
                     logger.info(
                         "Sync '%s' OK — ventas: %d, clientes: %d",
                         company.nombre, result.get("sales", 0), result.get("customers", 0),
@@ -71,6 +74,7 @@ async def lifespan(app: FastAPI):
     # Crea tablas globales (companies, users, etc.)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await run_central_migrations(conn)
 
     # Seed datos demo
     async with AsyncSessionLocal() as db:
@@ -130,7 +134,7 @@ async def sync_status():
             {
                 "id": c.id,
                 "nombre": c.nombre,
-                "schema": c.db_schema,
+                "status": c.status,
                 "last_sync": _last_sync.get(c.id, {}).isoformat() if c.id in _last_sync else None,
             }
             for c in companies
@@ -143,11 +147,11 @@ async def trigger_sync(company_id: int):
     """Dispara sync manual para una empresa — útil para testing."""
     async with AsyncSessionLocal() as db:
         company = await db.get(Company, company_id)
-    if not company:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=404, detail="Empresa no encontrada")
-    try:
-        result = await sync_company(company)
-        return {"ok": True, "result": result}
-    except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        if not company:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail="Empresa no encontrada")
+        try:
+            result = await sync_company(company_id, db)
+            return {"ok": True, "result": result}
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}

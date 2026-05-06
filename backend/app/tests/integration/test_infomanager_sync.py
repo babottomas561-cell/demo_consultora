@@ -60,7 +60,7 @@ async def integration_environment():
             response = await client.get(f"{settings.im_base_url}/health")
             response.raise_for_status()
     except Exception as exc:
-        raise RuntimeError(f"Fake Infomanager API is required at {settings.im_base_url}") from exc
+        raise RuntimeError(f"Infomanager simulator is required at {settings.im_base_url}") from exc
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

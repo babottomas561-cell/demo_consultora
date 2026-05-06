@@ -1,7 +1,7 @@
 from datetime import date, timedelta
 
-from fastapi import APIRouter, Depends, Query
-from sqlalchemy import and_, desc, func, select
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import and_, desc, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_db
@@ -10,6 +10,7 @@ from app.models.bi_customer import BiCustomer
 from app.models.bi_product import BiProduct
 from app.models.bi_sale import BiSale
 from app.models.bi_sale_item import BiSaleItem
+from app.services.tenant_resolver import get_tenant_sessionmaker_for_company
 
 router = APIRouter(prefix="/bi", tags=["bi"])
 
@@ -26,6 +27,63 @@ def _venta_filters(fecha_desde: date, fecha_hasta: date):
     ]
 
 
+async def _tenant_sessionmaker(db: AsyncSession, company_id: int | None):
+    if company_id is None:
+        return None
+    sessionmaker = await get_tenant_sessionmaker_for_company(db, company_id)
+    if sessionmaker is None:
+        raise HTTPException(status_code=404, detail="Tenant database not found for company")
+    return sessionmaker
+
+
+async def _tenant_kpis(sessionmaker):
+    today = date.today()
+    month_start = today.replace(day=1)
+    async with sessionmaker() as tenant_db:
+        today_sales = (
+            await tenant_db.execute(
+                text("SELECT COALESCE(SUM(gross_total), 0) FROM bi_sales WHERE cancelled = false AND date = :today"),
+                {"today": today},
+            )
+        ).scalar_one()
+        month = (
+            await tenant_db.execute(
+                text("""
+                    SELECT COALESCE(SUM(gross_total), 0), COALESCE(SUM(net_total), 0), COUNT(DISTINCT customer_external_id)
+                    FROM bi_sales
+                    WHERE cancelled = false AND date >= :start AND date <= :end
+                """),
+                {"start": month_start, "end": today},
+            )
+        ).one()
+        margin_units = (
+            await tenant_db.execute(
+                text("""
+                    SELECT COALESCE(SUM(estimated_margin), 0), COALESCE(SUM(quantity), 0)
+                    FROM bi_sale_items i
+                    JOIN bi_sales s ON s.source = i.source AND s.external_id = i.sale_external_id
+                    WHERE s.cancelled = false AND s.date >= :start AND s.date <= :end
+                """),
+                {"start": month_start, "end": today},
+            )
+        ).one()
+    month_sales = float(month[0] or 0)
+    month_margin = float(margin_units[0] or 0)
+    return {
+        "client_name": "Mi Empresa",
+        "today_sales": round(float(today_sales or 0), 2),
+        "month_sales": round(month_sales, 2),
+        "month_margin": round(month_margin, 2),
+        "month_units": int(margin_units[1] or 0),
+        "month_neto": round(float(month[1] or 0), 2),
+        "gross_margin_rate": round((month_margin / month_sales) if month_sales else 0, 4),
+        "active_customers": int(month[2] or 0),
+        "fixed_costs": 0.0,
+        "break_even_progress": 0.0,
+        "data_source": "infomanager",
+    }
+
+
 # ─────────────────────────────────────── status
 
 @router.get("/status")
@@ -36,7 +94,10 @@ async def bi_status(db: AsyncSession = Depends(get_db)):
 # ─────────────────────────────────────── kpis
 
 @router.get("/kpis")
-async def get_kpis(db: AsyncSession = Depends(get_db)):
+async def get_kpis(company_id: int | None = None, db: AsyncSession = Depends(get_db)):
+    tenant = await _tenant_sessionmaker(db, company_id)
+    if tenant:
+        return await _tenant_kpis(tenant)
     today = date.today()
     month_start = today.replace(day=1)
 
@@ -121,8 +182,26 @@ async def get_kpis(db: AsyncSession = Depends(get_db)):
 @router.get("/ventas/serie")
 async def get_ventas_serie(
     days: int = Query(default=30, ge=7, le=365),
+    company_id: int | None = None,
     db: AsyncSession = Depends(get_db),
 ):
+    tenant = await _tenant_sessionmaker(db, company_id)
+    if tenant:
+        start = date.today() - timedelta(days=days - 1)
+        async with tenant() as tenant_db:
+            rows = (
+                await tenant_db.execute(
+                    text("""
+                        SELECT date, COALESCE(SUM(gross_total), 0) AS sales, COALESCE(SUM(net_total), 0) AS neto
+                        FROM bi_sales
+                        WHERE cancelled = false AND date >= :start
+                        GROUP BY date
+                        ORDER BY date
+                    """),
+                    {"start": start},
+                )
+            ).all()
+        return [{"date": row.date.isoformat(), "sales": round(float(row.sales or 0), 2), "neto": round(float(row.neto or 0), 2)} for row in rows]
     start = date.today() - timedelta(days=days - 1)
     r = await db.execute(
         select(
@@ -150,8 +229,40 @@ async def get_ventas_serie(
 async def get_top_productos(
     limit: int = Query(default=5, ge=1, le=20),
     days: int = Query(default=30, ge=1, le=365),
+    company_id: int | None = None,
     db: AsyncSession = Depends(get_db),
 ):
+    tenant = await _tenant_sessionmaker(db, company_id)
+    if tenant:
+        start = date.today() - timedelta(days=days - 1)
+        async with tenant() as tenant_db:
+            rows = (
+                await tenant_db.execute(
+                    text("""
+                        SELECT product_external_id, COALESCE(product_name, product_external_id) AS product,
+                               COALESCE(SUM(gross_total), 0) AS sales,
+                               COALESCE(SUM(estimated_margin), 0) AS margin,
+                               COALESCE(SUM(quantity), 0) AS units
+                        FROM bi_sale_items i
+                        JOIN bi_sales s ON s.source = i.source AND s.external_id = i.sale_external_id
+                        WHERE s.cancelled = false AND s.date >= :start
+                        GROUP BY product_external_id, product_name
+                        ORDER BY sales DESC
+                        LIMIT :limit
+                    """),
+                    {"start": start, "limit": limit},
+                )
+            ).all()
+        return [
+            {
+                "product": row.product or "Sin descripción",
+                "category": "",
+                "sales": round(float(row.sales or 0), 2),
+                "margin": round(float(row.margin or 0), 2),
+                "units": round(float(row.units or 0), 1),
+            }
+            for row in rows
+        ]
     start = date.today() - timedelta(days=days - 1)
 
     r = await db.execute(
@@ -204,8 +315,38 @@ async def get_top_productos(
 async def get_top_clientes(
     limit: int = Query(default=5, ge=1, le=20),
     days: int = Query(default=30, ge=1, le=365),
+    company_id: int | None = None,
     db: AsyncSession = Depends(get_db),
 ):
+    tenant = await _tenant_sessionmaker(db, company_id)
+    if tenant:
+        start = date.today() - timedelta(days=days - 1)
+        async with tenant() as tenant_db:
+            rows = (
+                await tenant_db.execute(
+                    text("""
+                        SELECT customer_external_id, COALESCE(customer_name, customer_external_id) AS customer_name,
+                               COALESCE(SUM(gross_total), 0) AS sales,
+                               COUNT(external_id) AS orders,
+                               MAX(date) AS last_purchase
+                        FROM bi_sales
+                        WHERE cancelled = false AND date >= :start
+                        GROUP BY customer_external_id, customer_name
+                        ORDER BY sales DESC
+                        LIMIT :limit
+                    """),
+                    {"start": start, "limit": limit},
+                )
+            ).all()
+        return [
+            {
+                "customer_name": row.customer_name or f"Cliente {row.customer_external_id}",
+                "sales": round(float(row.sales or 0), 2),
+                "orders": int(row.orders or 0),
+                "last_purchase": row.last_purchase.isoformat() if row.last_purchase else None,
+            }
+            for row in rows
+        ]
     start = date.today() - timedelta(days=days - 1)
 
     r = await db.execute(
@@ -250,8 +391,51 @@ async def get_ventas(
     limit: int = Query(default=20, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     days: int = Query(default=30, ge=1, le=365),
+    company_id: int | None = None,
     db: AsyncSession = Depends(get_db),
 ):
+    tenant = await _tenant_sessionmaker(db, company_id)
+    if tenant:
+        start = date.today() - timedelta(days=days - 1)
+        async with tenant() as tenant_db:
+            total = (
+                await tenant_db.execute(
+                    text("SELECT COUNT(*) FROM bi_sales WHERE cancelled = false AND date >= :start"),
+                    {"start": start},
+                )
+            ).scalar_one()
+            rows = (
+                await tenant_db.execute(
+                    text("""
+                        SELECT external_id, date, gross_total, net_total, customer_name, seller_external_id, cancelled
+                        FROM bi_sales
+                        WHERE cancelled = false AND date >= :start
+                        ORDER BY date DESC, external_id DESC
+                        LIMIT :limit OFFSET :offset
+                    """),
+                    {"start": start, "limit": limit, "offset": offset},
+                )
+            ).all()
+        return {
+            "total": int(total),
+            "limit": limit,
+            "offset": offset,
+            "items": [
+                {
+                    "id": row.external_id,
+                    "date": row.date.isoformat(),
+                    "tipo_comprobante": "FA",
+                    "tipo_factura": None,
+                    "numero": None,
+                    "total": round(float(row.gross_total or 0), 2),
+                    "neto": round(float(row.net_total or 0), 2),
+                    "customer_name": row.customer_name,
+                    "cod_vendedor": row.seller_external_id,
+                    "anulada": "S" if row.cancelled else "N",
+                }
+                for row in rows
+            ],
+        }
     start = date.today() - timedelta(days=days - 1)
     filters = _venta_filters(start, date.today())
 

@@ -93,5 +93,5 @@ class InfomanagerApiClient:
         return await self.get_paginated("/api/v1/vendedores")
 
     async def get_rubros(self) -> list[dict]:
-        payload = await self.request("GET", "/api/v1/rubros/All")
+        payload = await self.request("GET", "/api/v1/rubros")
         return payload if isinstance(payload, list) else payload.get("data", [])
