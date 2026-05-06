@@ -17,7 +17,9 @@ from app.routers.clientes import router as clientes_router
 from app.routers.eerr import router as eerr_router
 from app.routers.vendedores import router as vendedores_router
 from app.routers.ventas import router as ventas_router
+from app.dependencies import get_db
 from app.integrations.infomanager.sync_service import im_client, sync_infomanager
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.simulator.main import router as simulator_router
 from app.simulator.data_store import get_data as simulator_get_data
 from app.services.demo_seed import seed_demo_sales_if_empty
@@ -30,6 +32,8 @@ async def _sync_loop() -> None:
         logger.info("Infomanager: credenciales no configuradas, sync deshabilitado")
         return
 
+    # Espera a que uvicorn esté completamente listo antes del primer sync
+    await asyncio.sleep(15)
     logger.info("Infomanager sync loop iniciado (intervalo: %ds)", settings.im_sync_interval_seconds)
     while True:
         try:
@@ -38,7 +42,7 @@ async def _sync_loop() -> None:
                 logger.info("Sync OK — ventas: %d, clientes: %d, artículos: %d",
                             result.get("sales", 0), result.get("customers", 0), result.get("products", 0))
         except Exception as exc:
-            logger.error("Sync loop error: %s", exc)
+            logger.error("Sync loop error: %s", exc, exc_info=True)
 
         await asyncio.sleep(settings.im_sync_interval_seconds)
 
@@ -102,3 +106,13 @@ async def sync_status():
         "last_sync_at": _last_sync_at.isoformat() if _last_sync_at else None,
         "sync_interval_seconds": settings.im_sync_interval_seconds,
     }
+
+
+@app.post("/sync/trigger")
+async def trigger_sync(db: AsyncSession = Depends(get_db)):
+    """Endpoint de debug — dispara el sync manualmente y devuelve el resultado."""
+    try:
+        result = await sync_infomanager(db)
+        return {"ok": True, "result": result}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
