@@ -1,9 +1,11 @@
 """
-Sync por empresa — usa el schema PostgreSQL exclusivo de cada Company.
+Sync por empresa — cada empresa tiene su propia BD PostgreSQL.
 
-A diferencia del sync global (sync_service.py que usa los modelos SQLAlchemy normales),
-este módulo usa SQL raw con el schema de la empresa en los INSERT ... ON CONFLICT.
-Esto evita tener que redefinir los modelos SQLAlchemy por schema.
+Flujo:
+1. Conecta a la BD exclusiva de la empresa (company.db_url)
+2. Se autentica con Infomanager usando las credenciales de la empresa
+3. Trae los datos y los guarda con upsert en la BD de la empresa
+4. Ningún dato de una empresa toca la BD de otra
 """
 
 import logging
@@ -21,9 +23,7 @@ from app.models.company import Company
 
 logger = logging.getLogger(__name__)
 
-# Cache de clientes HTTP por empresa
 _im_clients: dict[int, InfomanagerApiClient] = {}
-# Último sync por empresa
 _last_sync: dict[int, datetime] = {}
 
 
@@ -48,42 +48,37 @@ def _yyyymmdd(d: date) -> str:
     return d.strftime("%Y%m%d")
 
 
-async def _ensure_source(db: AsyncSession, schema: str, company: Company) -> int:
-    """Obtiene o crea el registro bi_data_sources en el schema de la empresa."""
+async def _ensure_source(db: AsyncSession, company: Company) -> int:
     result = await db.execute(
-        text(f'SELECT id FROM "{schema}".bi_data_sources WHERE name = :name'),
+        text("SELECT id FROM bi_data_sources WHERE name = :name"),
         {"name": "infomanager"},
     )
     row = result.fetchone()
     if row:
         await db.execute(
-            text(f'UPDATE "{schema}".bi_data_sources SET base_url = :url, status = :s WHERE id = :id'),
-            {"url": company.im_base_url, "s": "active", "id": row[0]},
+            text("UPDATE bi_data_sources SET base_url = :url, status = 'active' WHERE id = :id"),
+            {"url": company.im_base_url, "id": row[0]},
         )
         return row[0]
 
     result = await db.execute(
-        text(f"""
-            INSERT INTO "{schema}".bi_data_sources (name, source_type, base_url, status)
-            VALUES (:name, :t, :url, :s)
+        text("""
+            INSERT INTO bi_data_sources (name, source_type, base_url, status)
+            VALUES (:name, 'erp', :url, 'active')
             RETURNING id
         """),
-        {"name": "infomanager", "t": "erp", "url": company.im_base_url, "s": "active"},
+        {"name": "infomanager", "url": company.im_base_url},
     )
     return result.fetchone()[0]
 
 
 async def sync_company(company: Company) -> dict:
-    """
-    Sincroniza todos los datos de Infomanager al schema exclusivo de la empresa.
-    """
-    schema = company.db_schema
+    """Sincroniza Infomanager → BD exclusiva de la empresa."""
     client = _get_client(company)
     fecha_desde, fecha_hasta = _date_range(company.id)
     desde = _yyyymmdd(fecha_desde)
     hasta = _yyyymmdd(fecha_hasta)
 
-    # Traer datos de Infomanager
     clientes_raw = await client.get_clientes()
     articulos_raw = await client.get_articulos()
     vendedores_raw = await client.get_vendedores()
@@ -92,12 +87,11 @@ async def sync_company(company: Company) -> dict:
     items_raw = await client.get_venta_items(desde, hasta)
 
     from app.services.company_db import get_company_sessionmaker
-    session_factory = get_company_sessionmaker(schema)
+    session_factory = get_company_sessionmaker(company.db_url)
 
     async with session_factory() as db:
-        source_id = await _ensure_source(db, schema, company)
+        source_id = await _ensure_source(db, company)
 
-        # Adaptar
         customers = [adapt_customer(r, source_id) for r in clientes_raw]
         products = [adapt_product(r, source_id) for r in articulos_raw]
         vendedores = [adapt_vendedor(r, source_id) for r in vendedores_raw]
@@ -105,94 +99,84 @@ async def sync_company(company: Company) -> dict:
         sales = [adapt_sale(r, source_id) for r in ventas_raw]
         sale_items = [adapt_sale_item(r, source_id) for r in items_raw]
 
-        # Upserts con SQL raw en el schema correcto
         if vendedores:
-            await db.execute(
-                text(f"""
-                    INSERT INTO "{schema}".bi_vendedores (source_id, cod_vendedor, nombre, habilitado)
-                    VALUES (:source_id, :cod_vendedor, :nombre, :habilitado)
-                    ON CONFLICT (source_id, cod_vendedor) DO UPDATE
-                    SET nombre = EXCLUDED.nombre, synced_at = now()
-                """), vendedores,
-            )
+            await db.execute(text("""
+                INSERT INTO bi_vendedores (source_id, cod_vendedor, nombre, habilitado)
+                VALUES (:source_id, :cod_vendedor, :nombre, :habilitado)
+                ON CONFLICT (source_id, cod_vendedor) DO UPDATE
+                SET nombre = EXCLUDED.nombre, synced_at = now()
+            """), vendedores)
 
         if rubros:
-            await db.execute(
-                text(f"""
-                    INSERT INTO "{schema}".bi_rubros (source_id, cod_rubro, descripcion)
-                    VALUES (:source_id, :cod_rubro, :descripcion)
-                    ON CONFLICT (source_id, cod_rubro) DO UPDATE
-                    SET descripcion = EXCLUDED.descripcion, synced_at = now()
-                """), rubros,
-            )
+            await db.execute(text("""
+                INSERT INTO bi_rubros (source_id, cod_rubro, descripcion)
+                VALUES (:source_id, :cod_rubro, :descripcion)
+                ON CONFLICT (source_id, cod_rubro) DO UPDATE
+                SET descripcion = EXCLUDED.descripcion, synced_at = now()
+            """), rubros)
 
         if customers:
-            await db.execute(
-                text(f"""
-                    INSERT INTO "{schema}".bi_customers
-                        (source_id, cod_cliente, nombre, razon_social, categoria_iva,
-                         cuit, email, cod_vendedor, lista_precio, domicilio, telefonos,
-                         condicion_venta, fecha_alta, raw)
-                    VALUES
-                        (:source_id, :cod_cliente, :nombre, :razon_social, :categoria_iva,
-                         :cuit, :email, :cod_vendedor, :lista_precio, :domicilio, :telefonos,
-                         :condicion_venta, :fecha_alta, :raw::jsonb)
-                    ON CONFLICT (source_id, cod_cliente) DO UPDATE
-                    SET nombre = EXCLUDED.nombre, synced_at = now()
-                """), customers,
-            )
+            await db.execute(text("""
+                INSERT INTO bi_customers
+                    (source_id, cod_cliente, nombre, razon_social, categoria_iva,
+                     cuit, email, cod_vendedor, lista_precio, domicilio, telefonos,
+                     condicion_venta, fecha_alta, raw)
+                VALUES
+                    (:source_id, :cod_cliente, :nombre, :razon_social, :categoria_iva,
+                     :cuit, :email, :cod_vendedor, :lista_precio, :domicilio, :telefonos,
+                     :condicion_venta, :fecha_alta, :raw::jsonb)
+                ON CONFLICT (source_id, cod_cliente) DO UPDATE
+                SET nombre = EXCLUDED.nombre, synced_at = now()
+            """), customers)
 
         if products:
-            await db.execute(
-                text(f"""
-                    INSERT INTO "{schema}".bi_products
-                        (source_id, cod_articulo, descripcion, descripcion_corta,
-                         cod_rubro, cod_subrubro, cod_barra, iva, moneda,
-                         precio_compra, precio_venta, habilitado, raw)
-                    VALUES
-                        (:source_id, :cod_articulo, :descripcion, :descripcion_corta,
-                         :cod_rubro, :cod_subrubro, :cod_barra, :iva, :moneda,
-                         :precio_compra, :precio_venta, :habilitado, :raw::jsonb)
-                    ON CONFLICT (source_id, cod_articulo) DO UPDATE
-                    SET descripcion = EXCLUDED.descripcion, precio_venta = EXCLUDED.precio_venta,
-                        precio_compra = EXCLUDED.precio_compra, synced_at = now()
-                """), products,
-            )
+            await db.execute(text("""
+                INSERT INTO bi_products
+                    (source_id, cod_articulo, descripcion, descripcion_corta,
+                     cod_rubro, cod_subrubro, cod_barra, iva, moneda,
+                     precio_compra, precio_venta, habilitado, raw)
+                VALUES
+                    (:source_id, :cod_articulo, :descripcion, :descripcion_corta,
+                     :cod_rubro, :cod_subrubro, :cod_barra, :iva, :moneda,
+                     :precio_compra, :precio_venta, :habilitado, :raw::jsonb)
+                ON CONFLICT (source_id, cod_articulo) DO UPDATE
+                SET descripcion = EXCLUDED.descripcion,
+                    precio_venta = EXCLUDED.precio_venta,
+                    precio_compra = EXCLUDED.precio_compra,
+                    synced_at = now()
+            """), products)
 
         if sales:
-            await db.execute(
-                text(f"""
-                    INSERT INTO "{schema}".bi_sales
-                        (source_id, source_sale_id, fecha, tipo_comprobante, tipo_factura,
-                         numero, punto_de_venta, total, neto, iva_importe, cod_cliente,
-                         cod_vendedor, cod_empresa, moneda, cotizacion, anulada, raw)
-                    VALUES
-                        (:source_id, :source_sale_id, :fecha, :tipo_comprobante, :tipo_factura,
-                         :numero, :punto_de_venta, :total, :neto, :iva_importe, :cod_cliente,
-                         :cod_vendedor, :cod_empresa, :moneda, :cotizacion, :anulada, :raw::jsonb)
-                    ON CONFLICT (source_id, source_sale_id) DO UPDATE
-                    SET total = EXCLUDED.total, anulada = EXCLUDED.anulada, synced_at = now()
-                """), sales,
-            )
+            await db.execute(text("""
+                INSERT INTO bi_sales
+                    (source_id, source_sale_id, fecha, tipo_comprobante, tipo_factura,
+                     numero, punto_de_venta, total, neto, iva_importe, cod_cliente,
+                     cod_vendedor, cod_empresa, moneda, cotizacion, anulada, raw)
+                VALUES
+                    (:source_id, :source_sale_id, :fecha, :tipo_comprobante, :tipo_factura,
+                     :numero, :punto_de_venta, :total, :neto, :iva_importe, :cod_cliente,
+                     :cod_vendedor, :cod_empresa, :moneda, :cotizacion, :anulada, :raw::jsonb)
+                ON CONFLICT (source_id, source_sale_id) DO UPDATE
+                SET total = EXCLUDED.total, anulada = EXCLUDED.anulada, synced_at = now()
+            """), sales)
 
         if sale_items:
-            await db.execute(
-                text(f"""
-                    INSERT INTO "{schema}".bi_sale_items
-                        (source_id, source_item_id, source_sale_id, fecha, cod_cliente,
-                         cod_vendedor, cod_empresa, cod_articulo, detalle, cantidad, precio,
-                         precio_con_iva, precio_compra_actual, iva_por, importe, cod_barra, raw)
-                    VALUES
-                        (:source_id, :source_item_id, :source_sale_id, :fecha, :cod_cliente,
-                         :cod_vendedor, :cod_empresa, :cod_articulo, :detalle, :cantidad, :precio,
-                         :precio_con_iva, :precio_compra_actual, :iva_por, :importe, :cod_barra, :raw::jsonb)
-                    ON CONFLICT (source_id, source_item_id) DO UPDATE
-                    SET importe = EXCLUDED.importe, synced_at = now()
-                """), sale_items,
-            )
+            await db.execute(text("""
+                INSERT INTO bi_sale_items
+                    (source_id, source_item_id, source_sale_id, fecha, cod_cliente,
+                     cod_vendedor, cod_empresa, cod_articulo, detalle, cantidad, precio,
+                     precio_con_iva, precio_compra_actual, iva_por, importe, cod_barra, raw)
+                VALUES
+                    (:source_id, :source_item_id, :source_sale_id, :fecha, :cod_cliente,
+                     :cod_vendedor, :cod_empresa, :cod_articulo, :detalle, :cantidad, :precio,
+                     :precio_con_iva, :precio_compra_actual, :iva_por, :importe, :cod_barra,
+                     :raw::jsonb)
+                ON CONFLICT (source_id, source_item_id) DO UPDATE
+                SET importe = EXCLUDED.importe, synced_at = now()
+            """), sale_items)
 
         await db.execute(
-            text(f'UPDATE "{schema}".bi_data_sources SET last_sync_at = now() WHERE id = :id'),
+            text("UPDATE bi_data_sources SET last_sync_at = now() WHERE id = :id"),
             {"id": source_id},
         )
         await db.commit()
@@ -201,14 +185,12 @@ async def sync_company(company: Company) -> dict:
     _last_sync[company.id] = now
     result = {
         "company": company.nombre,
-        "schema": schema,
+        "db": company.db_url.rsplit("/", 1)[-1],
         "customers": len(customers),
         "products": len(products),
-        "vendedores": len(vendedores),
-        "rubros": len(rubros),
         "sales": len(sales),
         "sale_items": len(sale_items),
         "synced_at": now.isoformat(),
     }
-    logger.info("Sync empresa '%s' OK: %s", company.nombre, result)
+    logger.info("Sync '%s' OK: %s", company.nombre, result)
     return result
