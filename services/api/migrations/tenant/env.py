@@ -33,7 +33,7 @@ def get_tenant():
     return tenant
 
 def run_migrations_offline() -> None:
-    url = settings.DATABASE_URL
+    url = settings.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
     tenant = get_tenant()
     if not tenant:
         raise Exception("You must pass the tenant schema dynamically. Example: alembic -x tenant=my_schema upgrade head")
@@ -70,7 +70,7 @@ async def run_async_migrations() -> None:
         raise Exception("You must pass the tenant schema dynamically. Example: alembic -x tenant=my_schema upgrade head")
 
     configuration = config.get_section(config.config_ini_section, {})
-    configuration["sqlalchemy.url"] = settings.DATABASE_URL
+    configuration["sqlalchemy.url"] = settings.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
     
     connectable = async_engine_from_config(
         configuration,
