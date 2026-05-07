@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, UniqueConstraint, func
 from sqlalchemy.ext.declarative import declared_attr
 from app.core.database import Base
 
@@ -29,6 +29,7 @@ class Venta(TenantBase):
     precio_unitario = Column(Float, nullable=False)
     total = Column(Float, nullable=False)
     total_real = Column(Float, nullable=True) # Deflactado
+    created_at = Column(DateTime, default=func.now(), server_default=func.now(), nullable=False)
 
 class SimulationResult(TenantBase):
     __tablename__ = "simulation_results"

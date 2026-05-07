@@ -1,0 +1,15 @@
+INFO:     Started server process [22349]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:59532 - "POST /api/v1/auth/login HTTP/1.1" 200 OK
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 56653d8fc003, init tenant
+INFO  [alembic.runtime.migration] Running upgrade 56653d8fc003 -> d8f1ce55d328, unique_venta
+INFO  [alembic.runtime.migration] Running upgrade d8f1ce55d328 -> 3c23b5c577e6, add created_at to ventas
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 56653d8fc003, init tenant
+INFO  [alembic.runtime.migration] Running upgrade 56653d8fc003 -> d8f1ce55d328, unique_venta
+INFO  [alembic.runtime.migration] Running upgrade d8f1ce55d328 -> 3c23b5c577e6, add created_at to ventas
