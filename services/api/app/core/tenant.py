@@ -46,13 +46,13 @@ def run_tenant_migrations(schema_name: str):
     if called from an async context like a FastAPI endpoint.
     """
     # Path to the tenant alembic.ini
-    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))))
-    alembic_cfg_path = os.path.join(base_dir, "infra", "migrations", "tenant", "alembic.ini")
+    api_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+    alembic_cfg_path = os.path.join(api_dir, "migrations", "tenant", "alembic.ini")
     
     alembic_cfg = Config(alembic_cfg_path)
     
     # Alembic needs to know the script_location explicitly sometimes if run from different cwd
-    script_location = os.path.join(base_dir, "infra", "migrations", "tenant")
+    script_location = os.path.join(api_dir, "migrations", "tenant")
     alembic_cfg.set_main_option("script_location", script_location)
     
     # Pass the tenant name dynamically via x argument
