@@ -1,21 +1,35 @@
-import React, { useEffect, useState } from 'react'
+import { Routes, Route, Navigate } from 'react-router-dom';
+import { ProtectedRoute, AdminRoute } from './components/Auth';
+import MainLayout from './components/MainLayout';
+import LoginView from './views/LoginView';
+import DashboardView from './views/DashboardView';
+import CompanyListView from './views/CompanyListView';
+import CompanyCreateView from './views/CompanyCreateView';
+import SyncExcelView from './views/SyncExcelView';
 
 function App() {
-  const [status, setStatus] = useState("Loading...")
-
-  useEffect(() => {
-    fetch('/api/v1/companies/ping')
-      .then(res => res.json())
-      .then(data => setStatus("API Status: " + data.status))
-      .catch(err => setStatus("API Error: " + err.message))
-  }, [])
-
   return (
-    <div>
-      <h1>Demo Consultora SaaS</h1>
-      <p>{status}</p>
-    </div>
-  )
+    <Routes>
+      <Route path="/login" element={<LoginView />} />
+      
+      {/* Protected Routes */}
+      <Route element={<ProtectedRoute />}>
+        <Route element={<MainLayout />}>
+          <Route path="/dashboard" element={<DashboardView />} />
+          <Route path="/dashboard/sync" element={<SyncExcelView />} />
+          
+          {/* Admin Routes */}
+          <Route element={<AdminRoute />}>
+            <Route path="/admin/companies" element={<CompanyListView />} />
+            <Route path="/admin/companies/new" element={<CompanyCreateView />} />
+          </Route>
+        </Route>
+      </Route>
+
+      {/* Redirect all unknown routes to dashboard (which handles unauth automatically) */}
+      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+    </Routes>
+  );
 }
 
-export default App
+export default App;
