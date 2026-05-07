@@ -8,6 +8,7 @@ env/
 venv/
 *.sqlite3
 test_flow.py
+*.log
 
 # Node / Frontend
 node_modules/
