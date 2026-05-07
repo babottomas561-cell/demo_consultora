@@ -7,6 +7,8 @@ import CompanyListView from './views/CompanyListView';
 import CompanyCreateView from './views/CompanyCreateView';
 import SyncExcelView from './views/SyncExcelView';
 
+// Trigger rebuild to inject VITE_API_URL properly in production
+
 function App() {
   return (
     <Routes>
