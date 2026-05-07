@@ -52,6 +52,23 @@ async def create_company(
     new_company.is_provisioned = True
     await db.commit()
     await db.refresh(new_company)
+    
+    if company_in.erp_type == "infomanager_demo":
+        from celery import Celery
+        from app.core.config import settings
+        celery_client = Celery(
+            "api_client",
+            broker=settings.REDIS_URL,
+            backend=settings.REDIS_URL,
+        )
+        # Parse months from config or default to 12
+        meses = 12
+        if company_in.erp_config and "meses" in company_in.erp_config:
+            meses = int(company_in.erp_config["meses"])
+        celery_client.send_task(
+            "tasks.demo_seed.seed_tenant_demo",
+            args=[tenant_schema, meses]
+        )
 
     return new_company
 

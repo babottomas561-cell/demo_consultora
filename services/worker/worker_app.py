@@ -13,7 +13,8 @@ celery_app = Celery(
         "tasks.monte_carlo",
         "tasks.forecasting",
         "tasks.clustering",
-        "tasks.econometria"
+        "tasks.econometria",
+        "tasks.demo_seed"
     ]
 )
 

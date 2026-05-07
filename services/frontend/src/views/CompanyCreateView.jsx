@@ -6,6 +6,7 @@ import apiClient from '../api/client';
 const CompanyCreateView = () => {
   const [name, setName] = useState('');
   const [erpType, setErpType] = useState('excel');
+  const [meses, setMeses] = useState('12');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
@@ -21,7 +22,8 @@ const CompanyCreateView = () => {
     try {
       await apiClient.post('/companies/', {
         name,
-        erp_type: erpType
+        erp_type: erpType,
+        erp_config: erpType === 'infomanager_demo' ? { meses: parseInt(meses) } : {}
       });
       setSuccess(true);
       setTimeout(() => {
@@ -79,12 +81,35 @@ const CompanyCreateView = () => {
                 onChange={e => setErpType(e.target.value)}
                 className="mt-1 block w-full pl-3 pr-10 py-2 text-base border border-slate-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-lg"
               >
+                <option value="infomanager_demo">🎯 Infomanager Demo (datos simulados)</option>
                 <option value="excel">Excel (Manual)</option>
                 <option value="infomanager">Infomanager</option>
                 <option value="tango">Tango Gestión</option>
                 <option value="sql">SQL Server Directo</option>
               </select>
             </div>
+
+            {erpType === 'infomanager_demo' && (
+              <div className="bg-indigo-50 rounded-lg p-4 mt-3">
+                <p className="text-indigo-700 font-medium">Modo Demo activado</p>
+                <p className="text-indigo-600 text-sm mt-1">
+                  Se generarán datos simulados de un comercio de 
+                  indumentaria. Los datos se actualizan cada 2 minutos 
+                  automáticamente.
+                </p>
+                <select 
+                  name="meses" 
+                  id="meses_demo"
+                  className="mt-3 block w-full pl-3 pr-10 py-2 text-base border border-indigo-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-lg bg-white"
+                  value={meses}
+                  onChange={e => setMeses(e.target.value)}
+                >
+                  <option value="6">Últimos 6 meses de historial</option>
+                  <option value="12">Últimos 12 meses de historial</option>
+                  <option value="24">Últimos 24 meses de historial</option>
+                </select>
+              </div>
+            )}
 
             {error && (
               <div className="p-4 bg-red-50 text-red-800 rounded-lg border border-red-100 text-sm">
