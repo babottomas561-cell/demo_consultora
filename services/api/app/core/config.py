@@ -1,7 +1,7 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
-    DATABASE_URL: str = "postgresql+asyncpg://postgres:postgrespassword@localhost:5432/demo_consultora"
+    DATABASE_URL: str = "postgresql+asyncpg://postgres:postgrespassword@localhost:5433/demo_consultora"
     REDIS_URL: str = "redis://localhost:6379"
     SECRET_KEY: str = "cambia-esto-por-una-clave-segura"
     ALGORITHM: str = "HS256"

@@ -1,9 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import text
+from sqlalchemy import text, select
 from app.core.database import get_db
+from app.core.tenant import run_tenant_migrations
 from app.models.central import Company
 from app.schemas.company import CompanyCreate, CompanyResponse
+from app.api.deps import get_current_admin
+from typing import List
 import re
 
 router = APIRouter()
@@ -13,7 +17,11 @@ def sanitize_tenant_name(name: str) -> str:
     return f"tenant_{slug}"
 
 @router.post("/", response_model=CompanyResponse)
-async def create_company(company_in: CompanyCreate, db: AsyncSession = Depends(get_db)):
+async def create_company(
+    company_in: CompanyCreate, 
+    db: AsyncSession = Depends(get_db),
+    admin = Depends(get_current_admin)
+):
     tenant_schema = sanitize_tenant_name(company_in.name)
     
     # Placeholder: In a real app we'd also check if the schema exists
@@ -31,11 +39,44 @@ async def create_company(company_in: CompanyCreate, db: AsyncSession = Depends(g
     
     # Create the schema dynamically
     await db.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{tenant_schema}"'))
+    await db.commit()  # Must commit so the other connection (Alembic) sees it
     
-    # Later: Run alembic migrations specifically on this schema using a worker task
+    # Run alembic migrations specifically on this schema using a worker task / threadpool
+    try:
+        await run_in_threadpool(run_tenant_migrations, tenant_schema)
+    except Exception as e:
+        # We might want to handle this gracefully or delete the schema
+        print(f"Failed to run migrations for {tenant_schema}: {e}")
+        raise HTTPException(status_code=500, detail="Error provisioning tenant database schema")
     
     new_company.is_provisioned = True
     await db.commit()
     await db.refresh(new_company)
 
     return new_company
+
+@router.get("/", response_model=List[CompanyResponse])
+async def list_companies(
+    db: AsyncSession = Depends(get_db),
+    admin = Depends(get_current_admin)
+):
+    result = await db.execute(select(Company))
+    return result.scalars().all()
+
+@router.delete("/{company_id}")
+async def delete_company(
+    company_id: int,
+    db: AsyncSession = Depends(get_db),
+    admin = Depends(get_current_admin)
+):
+    result = await db.execute(select(Company).filter(Company.id == company_id))
+    company = result.scalar_one_or_none()
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+    
+    # Drop schema
+    await db.execute(text(f'DROP SCHEMA IF EXISTS "{company.tenant_schema}" CASCADE'))
+    
+    await db.delete(company)
+    await db.commit()
+    return {"message": "Company deleted"}
