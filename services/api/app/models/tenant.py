@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean
+from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, UniqueConstraint
 from sqlalchemy.ext.declarative import declared_attr
 from app.core.database import Base
 
@@ -17,6 +17,9 @@ class Cliente(TenantBase):
 
 class Venta(TenantBase):
     __tablename__ = "ventas"
+    __table_args__ = (
+        UniqueConstraint('fecha', 'cliente_id', 'producto_id', name='idx_venta_unica'),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     fecha = Column(DateTime, nullable=False)

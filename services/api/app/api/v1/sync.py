@@ -1,0 +1,80 @@
+import os
+import uuid
+import shutil
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
+from app.api.deps import get_current_user
+from celery.result import AsyncResult
+from celery import Celery
+from app.core.config import settings
+
+router = APIRouter()
+
+# Instantiate celery client for triggering tasks and polling status
+celery_client = Celery(
+    "api_client",
+    broker=settings.REDIS_URL,
+    backend=settings.REDIS_URL,
+)
+
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.database import get_db
+from app.models.central import Company
+from sqlalchemy import select
+from fastapi import Depends, Form
+    
+@router.post("/excel")
+async def upload_excel(
+    file: UploadFile = File(...),
+    company_id: int = Form(None),
+    current_user = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    target_company_id = company_id if (company_id and current_user.is_admin) else current_user.company_id
+    if not target_company_id:
+        raise HTTPException(status_code=400, detail="User not associated with a company and no company_id provided")
+        
+    result = await db.execute(select(Company).filter(Company.id == target_company_id))
+    company = result.scalar_one_or_none()
+    
+    if not company:
+        raise HTTPException(status_code=400, detail="Company not found")
+        
+    tenant_schema = company.tenant_schema
+    
+    # Save file to /tmp
+    os.makedirs("/tmp/demo_consultora", exist_ok=True)
+    filename = f"/tmp/demo_consultora/{tenant_schema}_{uuid.uuid4()}_{file.filename}"
+    
+    with open(filename, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+        
+    # Trigger Celery task
+    task = celery_client.send_task(
+        "tasks.excel.process_excel",
+        args=[tenant_schema, filename, ""]
+    )
+    
+    return {"job_id": task.id, "status": "processing"}
+
+@router.get("/jobs/{job_id}")
+async def get_job_status(
+    job_id: str,
+    current_user = Depends(get_current_user)
+):
+    task_result = AsyncResult(job_id, app=celery_client)
+    
+    response = {
+        "job_id": job_id,
+        "status": task_result.status.lower() # processing, done, failed (from pending, success, failure)
+    }
+    
+    if task_result.status == "SUCCESS":
+        response["status"] = "done"
+        response["result"] = task_result.result
+    elif task_result.status == "FAILURE":
+        response["status"] = "failed"
+        response["error"] = str(task_result.result)
+    elif task_result.status in ["PENDING", "STARTED"]:
+        response["status"] = "processing"
+        
+    return response
