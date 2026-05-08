@@ -1,9 +1,14 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { Building2, Plus, Loader2, Database } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Building2, Plus, Loader2, Database, ChevronRight } from 'lucide-react';
 import apiClient from '../api/client';
+import useAuthStore from '../store/authStore';
 
 const CompanyListView = () => {
+  const navigate = useNavigate();
+  const setActiveCompany = useAuthStore(state => state.setActiveCompany);
+  const activeCompany = useAuthStore(state => state.activeCompany);
+
   const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -58,13 +63,20 @@ const CompanyListView = () => {
               </li>
             ) : (
               companies.map(company => (
-                <li key={company.id} className="p-6 hover:bg-slate-50 transition-colors flex items-center justify-between">
+                <li 
+                  key={company.id} 
+                  onClick={() => {
+                    setActiveCompany(company);
+                    navigate('/dashboard');
+                  }}
+                  className="p-6 hover:bg-slate-50 transition-colors flex items-center justify-between cursor-pointer group"
+                >
                   <div className="flex items-center gap-4">
-                    <div className="h-12 w-12 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600">
+                    <div className="h-12 w-12 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 group-hover:bg-indigo-100 transition-colors">
                       <Building2 size={24} />
                     </div>
                     <div>
-                      <h3 className="text-lg font-semibold text-slate-900">{company.name}</h3>
+                      <h3 className="text-lg font-semibold text-slate-900 group-hover:text-indigo-600 transition-colors">{company.name}</h3>
                       <div className="flex items-center gap-2 mt-1 text-sm text-slate-500">
                         <Database size={14} />
                         <span className="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-xs">
@@ -75,10 +87,16 @@ const CompanyListView = () => {
                       </div>
                     </div>
                   </div>
-                  <div>
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                      Activa
+                  <div className="flex items-center gap-4">
+                    {activeCompany?.id === company.id && (
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                        Viendo
+                      </span>
+                    )}
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700">
+                      Entrar
                     </span>
+                    <ChevronRight size={20} className="text-slate-400 group-hover:text-indigo-600 transition-colors" />
                   </div>
                 </li>
               ))

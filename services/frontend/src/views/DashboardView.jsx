@@ -41,6 +41,7 @@ const StatCard = ({ title, metric, icon: Icon, loading }) => (
 
 const DashboardView = () => {
   const user = useAuthStore(state => state.user);
+  const activeCompany = useAuthStore(state => state.activeCompany);
   
   const [kpis, setKpis] = useState(null);
   const [topClientes, setTopClientes] = useState([]);
@@ -51,9 +52,10 @@ const DashboardView = () => {
     setLoading(true);
     setError(null);
     try {
+      const queryParam = (user?.is_admin && activeCompany) ? `?company_id=${activeCompany.id}` : '';
       const [kpiRes, topRes] = await Promise.all([
-        apiClient.get('/dashboard/kpis'),
-        apiClient.get('/dashboard/top-clientes')
+        apiClient.get(`/dashboard/kpis${queryParam}`),
+        apiClient.get(`/dashboard/top-clientes${queryParam}`)
       ]);
       setKpis(kpiRes.data);
       setTopClientes(topRes.data);
@@ -66,12 +68,12 @@ const DashboardView = () => {
   };
 
   useEffect(() => {
-    if (user && user.company_id) {
+    if ((user && user.company_id) || (user?.is_admin && activeCompany)) {
       fetchData();
     } else {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, activeCompany]);
 
   // If user has no company yet
   if (!user?.company_id && !user?.is_admin) {
@@ -83,8 +85,8 @@ const DashboardView = () => {
     );
   }
 
-  // Admin without company warning
-  if (!user?.company_id && user?.is_admin) {
+  // Admin without active company warning
+  if (user?.is_admin && !activeCompany) {
     return (
       <div className="text-center py-20 space-y-4">
         <div className="mx-auto w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center">
@@ -144,7 +146,9 @@ const DashboardView = () => {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Hola, {user?.email}</h1>
-          <p className="text-slate-500 mt-1">Aquí tienes el resumen financiero de tu empresa.</p>
+          <p className="text-slate-500 mt-1">
+            Aquí tienes el resumen financiero de {activeCompany ? activeCompany.name : 'tu empresa'}.
+          </p>
         </div>
       </div>
 

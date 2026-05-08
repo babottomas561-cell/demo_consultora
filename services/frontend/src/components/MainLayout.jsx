@@ -1,9 +1,9 @@
-import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, UploadCloud, Building2, LogOut, FileSpreadsheet } from 'lucide-react';
+import { Outlet, NavLink, useNavigate, Link } from 'react-router-dom';
+import { LayoutDashboard, UploadCloud, Building2, LogOut, FileSpreadsheet, RefreshCw } from 'lucide-react';
 import useAuthStore from '../store/authStore';
 
 const MainLayout = () => {
-  const { user, logout } = useAuthStore();
+  const { user, logout, activeCompany } = useAuthStore();
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -20,6 +20,21 @@ const MainLayout = () => {
             <FileSpreadsheet className="text-indigo-500" size={24} />
             BI Engine
           </h1>
+          
+          {user?.is_admin && activeCompany && (
+            <div className="mt-6 bg-slate-800 rounded-lg p-3 border border-slate-700">
+              <p className="text-xs text-slate-400 font-medium uppercase tracking-wider mb-1">Viendo Empresa</p>
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-semibold text-white truncate max-w-[120px]" title={activeCompany.name}>
+                  {activeCompany.name}
+                </span>
+                <Link to="/admin/companies" className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1">
+                  <RefreshCw size={12} />
+                  Cambiar
+                </Link>
+              </div>
+            </div>
+          )}
         </div>
 
         <nav className="flex-1 px-4 space-y-2 mt-4">
