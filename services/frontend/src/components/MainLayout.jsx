@@ -1,5 +1,5 @@
 import { Outlet, NavLink, useNavigate, Link } from 'react-router-dom';
-import { LayoutDashboard, UploadCloud, Building2, LogOut, FileSpreadsheet, RefreshCw } from 'lucide-react';
+import { LayoutDashboard, UploadCloud, Building2, LogOut, FileSpreadsheet, RefreshCw, TrendingUp, PackageSearch, Landmark, Users, Truck, Wallet } from 'lucide-react';
 import useAuthStore from '../store/authStore';
 
 const MainLayout = () => {
@@ -10,6 +10,15 @@ const MainLayout = () => {
     logout();
     navigate('/login');
   };
+
+  const analyticsLinks = [
+    { to: '/analytics/ventas', label: 'Ventas', icon: TrendingUp },
+    { to: '/analytics/compras', label: 'Compras', icon: PackageSearch },
+    { to: '/analytics/resultado', label: 'Resultado', icon: Landmark },
+    { to: '/analytics/clientes', label: 'Clientes / Cta Cte', icon: Users },
+    { to: '/analytics/proveedores', label: 'Proveedores', icon: Truck },
+    { to: '/analytics/caja', label: 'Caja', icon: Wallet },
+  ];
 
   return (
     <div className="flex h-screen bg-slate-50 font-sans">
@@ -58,6 +67,23 @@ const MainLayout = () => {
             <UploadCloud size={20} />
             <span>Sincronizar Excel</span>
           </NavLink>
+
+          <div className="pt-6 pb-2">
+            <p className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Analítica</p>
+          </div>
+
+          {analyticsLinks.map(({ to, label, icon: Icon }) => (
+            <NavLink
+              key={to}
+              to={to}
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-3 py-2 rounded-md transition-colors ${isActive ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800 hover:text-slate-100'}`
+              }
+            >
+              <Icon size={18} />
+              <span className="text-sm">{label}</span>
+            </NavLink>
+          ))}
 
           {user?.is_admin && (
             <>

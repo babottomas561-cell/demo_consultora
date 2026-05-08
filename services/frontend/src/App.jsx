@@ -6,6 +6,12 @@ import DashboardView from './views/DashboardView';
 import CompanyListView from './views/CompanyListView';
 import CompanyCreateView from './views/CompanyCreateView';
 import SyncExcelView from './views/SyncExcelView';
+import VentasAnalyticsView from './features/analytics/VentasAnalyticsView';
+import ComprasAnalyticsView from './features/analytics/ComprasAnalyticsView';
+import ResultadoAnalyticsView from './features/analytics/ResultadoAnalyticsView';
+import ClientesAnalyticsView from './features/analytics/ClientesAnalyticsView';
+import ProveedoresAnalyticsView from './features/analytics/ProveedoresAnalyticsView';
+import CajaAnalyticsView from './features/analytics/CajaAnalyticsView';
 
 // Trigger rebuild to inject VITE_API_URL properly in production
 
@@ -19,6 +25,12 @@ function App() {
         <Route element={<MainLayout />}>
           <Route path="/dashboard" element={<DashboardView />} />
           <Route path="/dashboard/sync" element={<SyncExcelView />} />
+          <Route path="/analytics/ventas" element={<VentasAnalyticsView />} />
+          <Route path="/analytics/compras" element={<ComprasAnalyticsView />} />
+          <Route path="/analytics/resultado" element={<ResultadoAnalyticsView />} />
+          <Route path="/analytics/clientes" element={<ClientesAnalyticsView />} />
+          <Route path="/analytics/proveedores" element={<ProveedoresAnalyticsView />} />
+          <Route path="/analytics/caja" element={<CajaAnalyticsView />} />
           
           {/* Admin Routes */}
           <Route element={<AdminRoute />}>
