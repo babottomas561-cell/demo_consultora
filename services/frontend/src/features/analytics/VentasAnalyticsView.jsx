@@ -489,8 +489,8 @@ const ClientesTab = ({ clientes: data, loading }) => {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <ChartCard title="Segmentación ABC" subtitle="A=top 80% facturación · B=siguiente 15% · C=resto" loading={loading} empty={!loading && !donutData.length} className="h-[280px]" contentClassName="h-[210px]">
-          <ResponsiveContainer width="100%" height="100%">
+        <ChartCard title="Segmentación ABC" subtitle="A=top 80% facturación · B=siguiente 15% · C=resto" loading={loading} empty={!loading && !donutData.length} className="h-[280px]">
+          <ResponsiveContainer width="100%" height={210}>
             <PieChart>
               <Pie data={donutData} cx="50%" cy="50%" innerRadius={55} outerRadius={90} paddingAngle={3} dataKey="value"
                 onClick={(d) => applyFilter('segmento', [d.name.replace('Segmento ', '')])}>
@@ -529,10 +529,10 @@ const COND_PALETTE = ['#4f46e5', '#16a34a', '#eab308', '#94a3b8'];
 const FACT_PALETTE = ['#4f46e5', '#818cf8', '#c7d2fe'];
 
 const DonutSimple = ({ chartData, title, loading, onClick }) => (
-  <ChartCard title={title} loading={loading} empty={!loading && !chartData.length} className="h-[260px]" contentClassName="h-[190px]">
-    <ResponsiveContainer width="100%" height="100%">
+  <ChartCard title={title} loading={loading} empty={!loading && !chartData.length} className="h-[260px]">
+    <ResponsiveContainer width="100%" height={170}>
       <PieChart>
-        <Pie data={chartData} cx="50%" cy="50%" innerRadius={45} outerRadius={80} paddingAngle={3} dataKey="value"
+        <Pie data={chartData} cx="50%" cy="50%" innerRadius={45} outerRadius={75} paddingAngle={3} dataKey="value"
           onClick={(d) => onClick && onClick(d)}>
           {chartData.map((d, i) => <Cell key={i} fill={d.color} cursor={onClick ? 'pointer' : 'default'} />)}
         </Pie>
