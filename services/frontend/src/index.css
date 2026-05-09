@@ -3,7 +3,43 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    --color-bg: 248 250 252;
+    --color-surface: 255 255 255;
+    --color-border: 226 232 240;
+    --color-text: 15 23 42;
+    --color-muted: 100 116 139;
+    --color-brand: 79 70 229;
+    --radius-ui: 8px;
+    --space-page: 2rem;
+  }
+
+  html {
+    text-rendering: optimizeLegibility;
+  }
+
   body {
     @apply bg-slate-50 text-slate-900 font-sans antialiased;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+}
+
+@layer components {
+  .ui-focus {
+    @apply focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2;
+  }
+
+  .ui-card {
+    @apply rounded-ui border border-slate-200 bg-white shadow-ui;
+  }
+
+  .ui-muted {
+    @apply text-slate-500;
   }
 }
