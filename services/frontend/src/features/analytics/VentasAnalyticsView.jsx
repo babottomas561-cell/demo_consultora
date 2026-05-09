@@ -492,7 +492,7 @@ const ClientesTab = ({ clientes: data, loading }) => {
           <ResponsiveContainer width="100%" height={210}>
             <PieChart>
               <Pie data={donutData} cx="50%" cy="50%" innerRadius={55} outerRadius={90} paddingAngle={3} dataKey="value"
-                onClick={(d) => applyFilter('segmento', [d.name.replace('Segmento ', '')])}>
+                isAnimationActive={false} onClick={(d) => applyFilter('segmento', [d.name.replace('Segmento ', '')])}>
                 {donutData.map((d, i) => <Cell key={i} fill={d.color} cursor="pointer" />)}
               </Pie>
               <Tooltip formatter={(v) => formatCurrency(v)} contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12 }} />
@@ -532,7 +532,7 @@ const DonutSimple = ({ chartData, title, loading, onClick }) => (
     <ResponsiveContainer width="100%" height={170}>
       <PieChart>
         <Pie data={chartData} cx="50%" cy="50%" innerRadius={45} outerRadius={75} paddingAngle={3} dataKey="value"
-          onClick={(d) => onClick && onClick(d)}>
+          isAnimationActive={false} onClick={(d) => onClick && onClick(d)}>
           {chartData.map((d, i) => <Cell key={i} fill={d.color} cursor={onClick ? 'pointer' : 'default'} />)}
         </Pie>
         <Tooltip formatter={(v) => formatCurrency(v)} contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12 }} />
