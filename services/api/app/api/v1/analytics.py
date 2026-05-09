@@ -26,17 +26,23 @@ def money(value) -> float:
 
 
 def resolve_dates(desde: Optional[str], hasta: Optional[str]):
-    """Return (desde, hasta) as ISO strings, defaulting to last 30 days."""
-    if not hasta:
-        hasta = date.today().isoformat()
-    if not desde:
-        desde = (date.today() - timedelta(days=365)).isoformat()
-    return desde, hasta
+    """Return (desde, hasta_exclusive) as date objects, defaulting to last year."""
+    if hasta:
+        hasta_d = date.fromisoformat(hasta)
+    else:
+        hasta_d = date.today()
+    if desde:
+        desde_d = date.fromisoformat(desde)
+    else:
+        desde_d = date.today() - timedelta(days=365)
+    # hasta_exclusive = day after hasta, for < comparison
+    hasta_exc = hasta_d + timedelta(days=1)
+    return desde_d, hasta_exc
 
 
 def date_filter(col: str = "fecha") -> str:
     """Return a WHERE clause fragment for date filtering using :desde/:hasta params."""
-    return f"{col} >= :desde::timestamp AND {col} <= (:hasta::date + interval '1 day')"
+    return f"{col} >= :desde AND {col} < :hasta"
 
 
 @router.get("/ventas/resumen")
