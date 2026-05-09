@@ -1,7 +1,9 @@
 from datetime import date, timedelta
-from typing import Optional
+from typing import Optional, Literal
+import io
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,6 +14,58 @@ from app.core.filters import GlobalFilters, get_global_filters, text_filter_clau
 
 
 router = APIRouter()
+
+
+# ──────────────────────────────────────────────
+# Helpers
+# ──────────────────────────────────────────────
+
+def _prev_period(filters: GlobalFilters):
+    length = (filters.hasta - filters.desde).days
+    prev_hasta = filters.desde - timedelta(days=1)
+    prev_desde = prev_hasta - timedelta(days=length)
+    return prev_desde, prev_hasta + timedelta(days=1)
+
+
+def _ventas_base_where(filters: GlobalFilters) -> str:
+    """Base WHERE for ventas (dates + all array filters + anulada)."""
+    return text_filter_clause("ventas", filters)
+
+
+def _var_pct(actual: float, anterior: float) -> Optional[float]:
+    if anterior and anterior != 0:
+        return round((actual - anterior) / abs(anterior) * 100, 2)
+    return None
+
+
+def _kpi_obj(actual: float, anterior: Optional[float] = None):
+    return {
+        "actual": round(actual, 2),
+        "anterior": round(anterior, 2) if anterior is not None else None,
+        "variacion_pct": _var_pct(actual, anterior) if anterior is not None else None,
+    }
+
+
+async def _fetch_kpi_row(db: AsyncSession, where: str, params: dict) -> dict:
+    row = (await db.execute(text(f"""
+        SELECT
+            COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN total ELSE 0 END),0)            AS fa_bruto,
+            COALESCE(SUM(CASE WHEN tipo_comprobante IN ('NC','ND') THEN ABS(total) ELSE 0 END),0) AS nc_total,
+            COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN COALESCE(neto::float, total/1.21) ELSE 0 END),0) AS neto_fa,
+            COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN COALESCE(iva_importe::float,0) ELSE 0 END),0) AS iva_debito,
+            COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END)                                 AS tickets,
+            COUNT(DISTINCT CASE WHEN tipo_comprobante='FA' THEN cliente_id END)               AS clientes_unicos,
+            COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN cantidad ELSE 0 END),0)         AS unidades,
+            COALESCE(SUM(
+              CASE WHEN precio_compra_actual IS NOT NULL
+                   THEN (precio_unitario - precio_compra_actual::float) * cantidad
+              ELSE 0 END),0)                                                                   AS margen_dolares,
+            COALESCE(SUM(
+              CASE WHEN precio_compra_actual IS NOT NULL THEN total ELSE 0 END),0)             AS total_con_costo
+        FROM ventas
+        WHERE {where}
+    """), params)).mappings().one()
+    return dict(row)
 
 
 def quote_schema(schema_name: str) -> str:
@@ -602,3 +656,626 @@ async def vendedores_resumen(
         result.append(v)
 
     return {"vendedores": result}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# FASE 3: Panel Ventas — endpoints dedicados
+# ══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/ventas/kpis")
+async def ventas_kpis(
+    company_id: int = None,
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+
+    params = filters.sql_params()
+    where = _ventas_base_where(filters)
+
+    row = await _fetch_kpi_row(db, where, params)
+
+    fa = money(row["fa_bruto"])
+    nc = money(row["nc_total"])
+    neto_fa = money(row["neto_fa"])
+    iva = money(row["iva_debito"])
+    tickets = int(row["tickets"] or 0)
+    clientes = int(row["clientes_unicos"] or 0)
+    unidades = money(row["unidades"])
+    margen_d = money(row["margen_dolares"])
+    total_con_costo = money(row["total_con_costo"])
+    facturado_neto = fa - nc
+    ticket_prom = facturado_neto / tickets if tickets else 0
+    tasa_dev = (nc / fa * 100) if fa else 0
+    margen_pct = (margen_d / total_con_costo * 100) if total_con_costo else 0
+
+    # previous period
+    ant: dict[str, Optional[float]] = {}
+    if filters.comparar_anterior:
+        prev_desde, prev_hasta = _prev_period(filters)
+        prev_params = dict(params)
+        prev_params["desde"] = prev_desde
+        prev_params["hasta"] = prev_hasta
+        prev_row = await _fetch_kpi_row(db, where, prev_params)
+        ant_fa = money(prev_row["fa_bruto"])
+        ant_nc = money(prev_row["nc_total"])
+        ant_neto_fa = money(prev_row["neto_fa"])
+        ant["facturado_neto"] = ant_fa - ant_nc
+        ant["facturado_bruto"] = ant_fa
+        ant["iva_debito"] = money(prev_row["iva_debito"])
+        ant["tickets"] = int(prev_row["tickets"] or 0)
+        ant["ticket_promedio"] = ant["facturado_neto"] / ant["tickets"] if ant["tickets"] else 0
+        ant["unidades"] = money(prev_row["unidades"])
+        ant["tasa_devolucion"] = (ant_nc / ant_fa * 100) if ant_fa else 0
+        ant["clientes_unicos"] = int(prev_row["clientes_unicos"] or 0)
+        ant_margen_d = money(prev_row["margen_dolares"])
+        ant_total_con_costo = money(prev_row["total_con_costo"])
+        ant["margen_bruto_pct"] = (ant_margen_d / ant_total_con_costo * 100) if ant_total_con_costo else 0
+
+    return {
+        "facturado_neto": _kpi_obj(facturado_neto, ant.get("facturado_neto")),
+        "facturado_bruto": _kpi_obj(fa, ant.get("facturado_bruto")),
+        "iva_debito": _kpi_obj(iva, ant.get("iva_debito")),
+        "tickets": _kpi_obj(tickets, ant.get("tickets")),
+        "ticket_promedio": _kpi_obj(ticket_prom, ant.get("ticket_promedio")),
+        "unidades": _kpi_obj(unidades, ant.get("unidades")),
+        "tasa_devolucion": _kpi_obj(round(tasa_dev, 2), ant.get("tasa_devolucion")),
+        "clientes_unicos": _kpi_obj(clientes, ant.get("clientes_unicos")),
+        "margen_bruto_pct": _kpi_obj(round(margen_pct, 2), ant.get("margen_bruto_pct")),
+    }
+
+
+@router.get("/ventas/temporal")
+async def ventas_temporal(
+    company_id: int = None,
+    granularidad: Literal["dia", "semana", "mes", "trimestre"] = "mes",
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+
+    trunc_map = {
+        "dia": "day", "semana": "week", "mes": "month", "trimestre": "quarter"
+    }
+    trunc = trunc_map.get(granularidad, "month")
+    params = filters.sql_params()
+    where = _ventas_base_where(filters)
+
+    series = (await db.execute(text(f"""
+        SELECT
+            to_char(date_trunc('{trunc}', fecha), 'YYYY-MM-DD') AS periodo,
+            COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN total ELSE 0 END),0)
+              - COALESCE(SUM(CASE WHEN tipo_comprobante IN ('NC','ND') THEN ABS(total) ELSE 0 END),0) AS facturado,
+            COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END)                                         AS tickets,
+            COALESCE(SUM(CASE WHEN tipo_comprobante IN ('NC','ND') THEN ABS(total) ELSE 0 END),0)    AS devoluciones
+        FROM ventas
+        WHERE {where}
+        GROUP BY 1
+        ORDER BY 1
+    """), params)).mappings().all()
+
+    result = [dict(r) for r in series]
+
+    if filters.comparar_anterior:
+        prev_desde, prev_hasta = _prev_period(filters)
+        prev_params = dict(params)
+        prev_params["desde"] = prev_desde
+        prev_params["hasta"] = prev_hasta
+        prev_series = (await db.execute(text(f"""
+            SELECT
+                to_char(date_trunc('{trunc}', fecha), 'YYYY-MM-DD') AS periodo,
+                COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN total ELSE 0 END),0)
+                  - COALESCE(SUM(CASE WHEN tipo_comprobante IN ('NC','ND') THEN ABS(total) ELSE 0 END),0) AS facturado,
+                COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END) AS tickets
+            FROM ventas
+            WHERE {where}
+            GROUP BY 1
+            ORDER BY 1
+        """), prev_params)).mappings().all()
+        prev_map = {r["periodo"]: dict(r) for r in prev_series}
+        for i, row in enumerate(result):
+            # Align by index (same position in period)
+            prev_vals = list(prev_map.values())
+            if i < len(prev_vals):
+                row["facturado_anterior"] = prev_vals[i]["facturado"]
+                row["tickets_anterior"] = prev_vals[i]["tickets"]
+
+    return {"series": result}
+
+
+@router.get("/ventas/productos")
+async def ventas_productos(
+    company_id: int = None,
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+
+    params = filters.sql_params()
+    where = _ventas_base_where(filters)
+
+    total_row = (await db.execute(text(f"""
+        SELECT COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN total ELSE 0 END),0) AS total_fa
+        FROM ventas WHERE {where}
+    """), params)).mappings().one()
+    total_fa = money(total_row["total_fa"]) or 1
+
+    ranking_rows = (await db.execute(text(f"""
+        SELECT
+            producto_id,
+            COALESCE(MAX(producto_nombre), producto_id)                                    AS nombre,
+            COALESCE(MAX(cod_rubro), 0)                                                    AS cod_rubro,
+            COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN cantidad ELSE 0 END), 0)    AS unidades,
+            COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN total ELSE 0 END), 0)       AS facturado,
+            COUNT(DISTINCT CASE WHEN tipo_comprobante='FA' THEN cliente_id END)           AS clientes_unicos,
+            COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END)                             AS tickets,
+            COALESCE(SUM(
+              CASE WHEN precio_compra_actual IS NOT NULL
+                   THEN (precio_unitario - precio_compra_actual::float) * cantidad
+              ELSE 0 END), 0)                                                              AS margen_dolares,
+            COALESCE(SUM(CASE WHEN precio_compra_actual IS NOT NULL THEN total ELSE 0 END), 0) AS total_con_costo
+        FROM ventas
+        WHERE {where}
+        GROUP BY producto_id
+        ORDER BY facturado DESC
+        LIMIT 100
+    """), params)).mappings().all()
+
+    ranking = []
+    acumulado = 0.0
+    for r in ranking_rows:
+        d = dict(r)
+        d["facturado"] = money(d["facturado"])
+        d["margen_dolares"] = money(d["margen_dolares"])
+        tc = money(d["total_con_costo"])
+        d["margen_pct"] = round(d["margen_dolares"] / tc * 100, 1) if tc else 0
+        d["ticket_promedio"] = d["facturado"] / d["tickets"] if d["tickets"] else 0
+        d["pct_total"] = round(d["facturado"] / total_fa * 100, 2)
+        acumulado += d["pct_total"]
+        d["acumulado_pct"] = round(acumulado, 2)
+        del d["total_con_costo"]
+        ranking.append(d)
+
+    rubros_rows = (await db.execute(text(f"""
+        SELECT
+            cod_rubro,
+            COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN total ELSE 0 END), 0) AS facturado,
+            COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END)                        AS tickets
+        FROM ventas
+        WHERE {where} AND cod_rubro IS NOT NULL
+        GROUP BY cod_rubro
+        ORDER BY facturado DESC
+    """), params)).mappings().all()
+
+    rubro_names = {}
+    try:
+        rn_rows = (await db.execute(text("SELECT cod_rubro, nombre FROM rubros"))).mappings().all()
+        rubro_names = {r["cod_rubro"]: r["nombre"] for r in rn_rows}
+    except Exception:
+        pass
+
+    rubros = []
+    for r in rubros_rows:
+        d = dict(r)
+        d["facturado"] = money(d["facturado"])
+        d["pct_total"] = round(d["facturado"] / total_fa * 100, 2)
+        d["nombre"] = rubro_names.get(d["cod_rubro"], f"Rubro {d['cod_rubro']}")
+        rubros.append(d)
+
+    pareto = [
+        {"producto": r["nombre"], "facturado": r["facturado"], "acumulado_pct": r["acumulado_pct"]}
+        for r in ranking[:20]
+    ]
+
+    return {"ranking": ranking, "por_rubro": rubros, "pareto": pareto}
+
+
+@router.get("/ventas/por-vendedor")
+async def ventas_por_vendedor(
+    company_id: int = None,
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+
+    params = filters.sql_params()
+    where = _ventas_base_where(filters)
+
+    vendedor_names = {}
+    cuotas = {}
+    try:
+        vd_rows = (await db.execute(text(
+            "SELECT cod_vendedor, nombre, cuota_mensual FROM vendedores"
+        ))).mappings().all()
+        for r in vd_rows:
+            vendedor_names[r["cod_vendedor"]] = r["nombre"]
+            cuotas[r["cod_vendedor"]] = float(r["cuota_mensual"] or 0)
+    except Exception:
+        pass
+
+    ventas_rows = (await db.execute(text(f"""
+        SELECT
+            cod_vendedor,
+            COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN total ELSE 0 END)
+              - SUM(CASE WHEN tipo_comprobante IN ('NC','ND') THEN ABS(total) ELSE 0 END), 0) AS facturado_neto,
+            COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END)                                  AS tickets,
+            COUNT(DISTINCT CASE WHEN tipo_comprobante='FA' THEN cliente_id END)               AS clientes_unicos,
+            COALESCE(SUM(
+              CASE WHEN precio_compra_actual IS NOT NULL
+                   THEN (precio_unitario - precio_compra_actual::float) * cantidad
+              ELSE 0 END), 0)                                                                  AS margen_dolares,
+            COALESCE(SUM(CASE WHEN precio_compra_actual IS NOT NULL THEN total ELSE 0 END), 0) AS total_con_costo
+        FROM ventas
+        WHERE {where} AND cod_vendedor IS NOT NULL
+        GROUP BY cod_vendedor
+        ORDER BY facturado_neto DESC
+    """), params)).mappings().all()
+
+    presupuestos_rows = []
+    try:
+        pres_where = "fecha >= :desde AND fecha < :hasta AND cod_vendedor IS NOT NULL"
+        if not filters.incluir_anuladas:
+            pres_where += " AND (anulada IS NULL OR anulada <> 'S')"
+        presupuestos_rows = (await db.execute(text(f"""
+            SELECT cod_vendedor,
+                   COUNT(*) AS emitidos,
+                   COUNT(CASE WHEN confirmado THEN 1 END) AS confirmados
+            FROM presupuestos
+            WHERE {pres_where}
+            GROUP BY cod_vendedor
+        """), {"desde": params["desde"], "hasta": params["hasta"]})).mappings().all()
+    except Exception:
+        pass
+
+    pres_map = {r["cod_vendedor"]: dict(r) for r in presupuestos_rows}
+    total_facturado = sum(money(r["facturado_neto"]) for r in ventas_rows) or 1
+
+    result = []
+    for r in ventas_rows:
+        d = dict(r)
+        fn = money(d["facturado_neto"])
+        tk = int(d["tickets"] or 0)
+        tc = money(d["total_con_costo"])
+        md = money(d["margen_dolares"])
+        pres = pres_map.get(d["cod_vendedor"], {})
+        emitidos = int(pres.get("emitidos", 0))
+        confirmados = int(pres.get("confirmados", 0))
+
+        result.append({
+            "cod_vendedor": d["cod_vendedor"],
+            "nombre_vendedor": vendedor_names.get(d["cod_vendedor"], f"Vendedor {d['cod_vendedor']}"),
+            "facturado_neto": fn,
+            "tickets": tk,
+            "ticket_promedio": fn / tk if tk else 0,
+            "clientes_unicos": int(d["clientes_unicos"] or 0),
+            "margen_dolares": md,
+            "margen_pct": round(md / tc * 100, 1) if tc else 0,
+            "pct_del_total": round(fn / total_facturado * 100, 2),
+            "presupuestos_emitidos": emitidos,
+            "presupuestos_confirmados": confirmados,
+            "tasa_conversion": round(confirmados / emitidos * 100, 1) if emitidos else 0,
+            "cuota_mensual": cuotas.get(d["cod_vendedor"], 0),
+        })
+
+    return {"vendedores": result}
+
+
+@router.get("/ventas/por-cliente")
+async def ventas_por_cliente(
+    company_id: int = None,
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+
+    params = filters.sql_params()
+    where = _ventas_base_where(filters)
+
+    rows = (await db.execute(text(f"""
+        SELECT
+            cliente_id,
+            COALESCE(MAX(cliente_nombre), cliente_id)                                        AS cliente_nombre,
+            COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN total ELSE 0 END)
+              - SUM(CASE WHEN tipo_comprobante IN ('NC','ND') THEN ABS(total) ELSE 0 END),0) AS facturado_neto,
+            COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END)                                AS tickets,
+            MAX(fecha)                                                                        AS ultima_compra,
+            MIN(fecha)                                                                        AS primera_compra_periodo,
+            COALESCE(SUM(
+              CASE WHEN precio_compra_actual IS NOT NULL
+                   THEN (precio_unitario - precio_compra_actual::float) * cantidad
+              ELSE 0 END),0)                                                                 AS margen_dolares,
+            COALESCE(SUM(CASE WHEN precio_compra_actual IS NOT NULL THEN total ELSE 0 END),0) AS total_con_costo,
+            MODE() WITHIN GROUP (ORDER BY condicion_venta_tipo)                               AS condicion_predominante
+        FROM ventas
+        WHERE {where} AND tipo_comprobante='FA'
+        GROUP BY cliente_id
+        ORDER BY facturado_neto DESC
+        LIMIT 200
+    """), params)).mappings().all()
+
+    # primera compra histórica para detectar clientes nuevos
+    nuevos_set: set = set()
+    try:
+        hist_rows = (await db.execute(text(f"""
+            SELECT DISTINCT cliente_id
+            FROM ventas
+            WHERE fecha < :desde AND tipo_comprobante='FA'
+        """), {"desde": params["desde"]})).all()
+        historicos = {r[0] for r in hist_rows}
+        nuevos_set = {r["cliente_id"] for r in rows if r["cliente_id"] not in historicos}
+    except Exception:
+        pass
+
+    today = date.today()
+    total_facturado = sum(money(r["facturado_neto"]) for r in rows) or 1
+
+    # ABC classification
+    total_ordenado = sorted(rows, key=lambda r: money(r["facturado_neto"]), reverse=True)
+    acumulado = 0.0
+    abc_map = {}
+    for r in total_ordenado:
+        acumulado += money(r["facturado_neto"]) / total_facturado * 100
+        if acumulado <= 80:
+            abc_map[r["cliente_id"]] = "A"
+        elif acumulado <= 95:
+            abc_map[r["cliente_id"]] = "B"
+        else:
+            abc_map[r["cliente_id"]] = "C"
+
+    result = []
+    for r in rows:
+        d = dict(r)
+        fn = money(d["facturado_neto"])
+        tk = int(d["tickets"] or 0)
+        tc = money(d["total_con_costo"])
+        md = money(d["margen_dolares"])
+        ultima = d["ultima_compra"]
+        dias_sin_comprar = (today - ultima.date()).days if ultima else None
+
+        result.append({
+            "cod_cliente": d["cliente_id"],
+            "cliente_nombre": d["cliente_nombre"],
+            "facturado_neto": fn,
+            "tickets": tk,
+            "ticket_promedio": fn / tk if tk else 0,
+            "pct_total": round(fn / total_facturado * 100, 2),
+            "margen_dolares": md,
+            "margen_pct": round(md / tc * 100, 1) if tc else 0,
+            "condicion_venta_predominante": d.get("condicion_predominante"),
+            "ultima_compra": ultima.isoformat() if ultima else None,
+            "dias_sin_comprar": dias_sin_comprar,
+            "es_nuevo": d["cliente_id"] in nuevos_set,
+            "segmento": abc_map.get(d["cliente_id"], "C"),
+        })
+
+    # ABC summary
+    abc_summary = {"A": {"clientes": 0, "facturado": 0.0}, "B": {"clientes": 0, "facturado": 0.0}, "C": {"clientes": 0, "facturado": 0.0}}
+    for r in result:
+        seg = r["segmento"]
+        abc_summary[seg]["clientes"] += 1
+        abc_summary[seg]["facturado"] += r["facturado_neto"]
+
+    return {"clientes": result, "abc_summary": abc_summary}
+
+
+@router.get("/ventas/por-comprobante")
+async def ventas_por_comprobante(
+    company_id: int = None,
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+
+    params = filters.sql_params()
+    where = _ventas_base_where(filters)
+
+    tipo_rows = (await db.execute(text(f"""
+        SELECT tipo_comprobante,
+               COUNT(*)                           AS cantidad,
+               COALESCE(SUM(ABS(total)), 0)       AS importe
+        FROM ventas WHERE {where}
+        GROUP BY tipo_comprobante ORDER BY importe DESC
+    """), params)).mappings().all()
+
+    factura_rows = (await db.execute(text(f"""
+        SELECT COALESCE(tipo_factura,'?') AS tipo_factura,
+               COUNT(*)                  AS cantidad,
+               COALESCE(SUM(total), 0)  AS importe
+        FROM ventas WHERE {where} AND tipo_comprobante='FA'
+        GROUP BY tipo_factura ORDER BY importe DESC
+    """), params)).mappings().all()
+
+    condicion_rows = (await db.execute(text(f"""
+        SELECT COALESCE(condicion_venta_tipo::text,'?') AS condicion,
+               COUNT(*)                               AS cantidad,
+               COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN total ELSE 0 END),0) AS importe
+        FROM ventas WHERE {where}
+        GROUP BY condicion ORDER BY importe DESC
+    """), params)).mappings().all()
+
+    pdv_rows = (await db.execute(text(f"""
+        SELECT COALESCE(punto_de_venta::text,'?') AS punto_de_venta,
+               COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END) AS tickets,
+               COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN total ELSE 0 END),0) AS facturado
+        FROM ventas WHERE {where}
+        GROUP BY punto_de_venta ORDER BY facturado DESC
+    """), params)).mappings().all()
+
+    total_fa = sum(money(r["importe"]) for r in tipo_rows if r["tipo_comprobante"] == "FA") or 1
+
+    return {
+        "por_tipo": [{"tipo": r["tipo_comprobante"], "cantidad": int(r["cantidad"]), "importe": money(r["importe"])} for r in tipo_rows],
+        "por_tipo_factura": [{"tipo": r["tipo_factura"], "cantidad": int(r["cantidad"]), "importe": money(r["importe"])} for r in factura_rows],
+        "por_condicion_venta": [{"condicion": r["condicion"], "cantidad": int(r["cantidad"]), "importe": money(r["importe"])} for r in condicion_rows],
+        "por_punto_de_venta": [{"punto": r["punto_de_venta"], "tickets": int(r["tickets"]), "facturado": money(r["facturado"]), "pct_total": round(money(r["facturado"]) / total_fa * 100, 1)} for r in pdv_rows],
+    }
+
+
+@router.get("/ventas/transacciones")
+async def ventas_transacciones(
+    company_id: int = None,
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=50, le=200),
+    sort_by: str = Query(default="fecha"),
+    sort_dir: Literal["asc", "desc"] = "desc",
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+
+    params = filters.sql_params()
+    where = _ventas_base_where(filters)
+
+    safe_sort = {
+        "fecha", "total", "cliente_id", "cliente_nombre", "tipo_comprobante",
+        "punto_de_venta", "cod_vendedor", "neto", "iva_importe", "cantidad"
+    }
+    sort_col = sort_by if sort_by in safe_sort else "fecha"
+    direction = "ASC" if sort_dir == "asc" else "DESC"
+    offset = (page - 1) * limit
+    params["limit"] = limit
+    params["offset"] = offset
+
+    total_count = (await db.execute(text(f"SELECT COUNT(*) FROM ventas WHERE {where}"), params)).scalar()
+
+    rows = (await db.execute(text(f"""
+        SELECT id, fecha, tipo_comprobante, tipo_factura, punto_de_venta,
+               cliente_id, cliente_nombre, cod_vendedor,
+               COALESCE(neto::float, total/1.21) AS neto,
+               COALESCE(iva_importe::float, total - total/1.21) AS iva_importe,
+               total, condicion_venta_tipo, cod_deposito, anulada,
+               producto_id, producto_nombre, cantidad, precio_unitario,
+               COALESCE(precio_compra_actual::float, 0) AS precio_compra_actual,
+               COALESCE(descuento_porc::float, 0) AS descuento_porc
+        FROM ventas
+        WHERE {where}
+        ORDER BY {sort_col} {direction}
+        LIMIT :limit OFFSET :offset
+    """), params)).mappings().all()
+
+    return {
+        "total": int(total_count),
+        "page": page,
+        "limit": limit,
+        "pages": -(-int(total_count) // limit),
+        "rows": [
+            {**dict(r), "fecha": r["fecha"].isoformat() if r["fecha"] else None}
+            for r in rows
+        ],
+    }
+
+
+@router.get("/ventas/exportar")
+async def ventas_exportar(
+    company_id: int = None,
+    formato: Literal["excel", "csv"] = "excel",
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        import openpyxl
+        HAS_OPENPYXL = True
+    except ImportError:
+        HAS_OPENPYXL = False
+
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+
+    params = filters.sql_params()
+    where = _ventas_base_where(filters)
+
+    kpi_row = await _fetch_kpi_row(db, where, params)
+    fa = money(kpi_row["fa_bruto"])
+    nc = money(kpi_row["nc_total"])
+    fn = fa - nc
+
+    rows = (await db.execute(text(f"""
+        SELECT fecha, tipo_comprobante, tipo_factura, punto_de_venta,
+               cliente_id, cliente_nombre, cod_vendedor,
+               COALESCE(neto::float, total/1.21) AS neto,
+               COALESCE(iva_importe::float, 0)    AS iva_importe,
+               total, condicion_venta_tipo, anulada,
+               producto_id, producto_nombre, cantidad, precio_unitario,
+               COALESCE(precio_compra_actual::float,0) AS precio_compra_actual
+        FROM ventas
+        WHERE {where}
+        ORDER BY fecha DESC
+        LIMIT 10000
+    """), params)).mappings().all()
+
+    if formato == "csv":
+        import csv as csv_mod
+        buf = io.StringIO()
+        writer = csv_mod.DictWriter(buf, fieldnames=[
+            "fecha","tipo_comprobante","tipo_factura","punto_de_venta",
+            "cliente_id","cliente_nombre","cod_vendedor","neto","iva_importe",
+            "total","condicion_venta_tipo","anulada",
+            "producto_id","producto_nombre","cantidad","precio_unitario","precio_compra_actual"
+        ])
+        writer.writeheader()
+        for r in rows:
+            d = dict(r)
+            d["fecha"] = d["fecha"].isoformat() if d["fecha"] else ""
+            writer.writerow(d)
+        return StreamingResponse(
+            io.BytesIO(buf.getvalue().encode("utf-8-sig")),
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=ventas.csv"},
+        )
+
+    # Excel fallback: if openpyxl not installed, fall back to CSV
+    if not HAS_OPENPYXL:
+        return {"error": "openpyxl no disponible, use formato=csv"}
+
+    from openpyxl import Workbook
+    wb = Workbook()
+
+    # KPIs sheet
+    ws_kpi = wb.active
+    ws_kpi.title = "KPIs"
+    ws_kpi.append(["Métrica", "Valor"])
+    ws_kpi.append(["Facturado Neto", fn])
+    ws_kpi.append(["Facturado Bruto FA", fa])
+    ws_kpi.append(["Devoluciones NC/ND", nc])
+    ws_kpi.append(["IVA Débito", money(kpi_row["iva_debito"])])
+    ws_kpi.append(["Tickets", int(kpi_row["tickets"] or 0)])
+    ws_kpi.append(["Clientes únicos", int(kpi_row["clientes_unicos"] or 0)])
+    ws_kpi.append(["Unidades", money(kpi_row["unidades"])])
+
+    # Transacciones sheet
+    ws_tx = wb.create_sheet("Transacciones")
+    headers = ["Fecha","Tipo","Letra","Pto.Vta","Cliente ID","Cliente","Vendedor",
+               "Neto","IVA","Total","Condición","Anulada","Producto","Descripción","Cantidad","Precio U.","Costo U."]
+    ws_tx.append(headers)
+    for r in rows:
+        ws_tx.append([
+            r["fecha"].isoformat() if r["fecha"] else "",
+            r["tipo_comprobante"], r["tipo_factura"], r["punto_de_venta"],
+            r["cliente_id"], r["cliente_nombre"], r["cod_vendedor"],
+            r["neto"], r["iva_importe"], r["total"], r["condicion_venta_tipo"], r["anulada"],
+            r["producto_id"], r["producto_nombre"], r["cantidad"], r["precio_unitario"], r["precio_compra_actual"],
+        ])
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=ventas.xlsx"},
+    )
