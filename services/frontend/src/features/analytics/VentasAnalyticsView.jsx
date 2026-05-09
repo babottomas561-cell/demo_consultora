@@ -9,9 +9,9 @@ const VentasAnalyticsView = () => (
     buildView={(data, { KpiCard, DataTable, SeriesChart, ProgressBar }) => (
       <>
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-          <KpiCard label="Ventas" value={formatCurrency(data.summary?.total_ventas)} />
+          <KpiCard label="Ventas" value={formatCurrency(data.summary?.total_ventas)} sparklineData={data.series?.map((row) => row.total)} />
           <KpiCard label="Unidades" value={formatNumber(data.summary?.unidades)} />
-          <KpiCard label="Transacciones" value={formatNumber(data.summary?.transacciones)} />
+          <KpiCard label="Transacciones" value={formatNumber(data.summary?.transacciones)} sparklineData={data.series?.map((row) => row.transacciones)} />
           <KpiCard label="Clientes" value={formatNumber(data.summary?.clientes)} />
           <KpiCard label="Ticket promedio" value={formatCurrency(data.summary?.ticket_promedio)} tone="success" />
         </div>

@@ -9,9 +9,9 @@ const CajaAnalyticsView = () => (
     buildView={(data, { KpiCard, DataTable, SeriesChart }) => (
       <>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <KpiCard label="Cobros" value={formatCurrency(data.summary?.ingresos)} tone="success" />
-          <KpiCard label="Pagos" value={formatCurrency(data.summary?.egresos)} tone="danger" />
-          <KpiCard label="Saldo neto" value={formatCurrency(data.summary?.saldo_neto)} tone={(data.summary?.saldo_neto || 0) >= 0 ? 'success' : 'danger'} />
+          <KpiCard label="Cobros" value={formatCurrency(data.summary?.ingresos)} tone="success" sparklineData={data.series?.map((row) => row.cobros)} />
+          <KpiCard label="Pagos" value={formatCurrency(data.summary?.egresos)} tone="danger" sparklineData={data.series?.map((row) => row.pagos)} />
+          <KpiCard label="Saldo neto" value={formatCurrency(data.summary?.saldo_neto)} tone={(data.summary?.saldo_neto || 0) >= 0 ? 'success' : 'danger'} sparklineData={data.series?.map((row) => row.saldo_neto)} />
           <KpiCard label="Movimientos" value={formatNumber(data.summary?.movimientos)} />
         </div>
         <SeriesChart
@@ -22,9 +22,8 @@ const CajaAnalyticsView = () => (
             { key: 'pagos', label: 'Pagos', color: '#dc2626' },
           ]}
           lines={[
-            { key: 'saldo_acumulado', label: 'Saldo acumulado', color: '#4f46e5', yAxisId: 'right' },
+            { key: 'saldo_acumulado', label: 'Saldo acumulado', color: '#4f46e5' },
           ]}
-          yAxisRight
         />
         <DataTable
           title="Últimos movimientos"

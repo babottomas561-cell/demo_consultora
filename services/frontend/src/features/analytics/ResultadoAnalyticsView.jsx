@@ -9,18 +9,20 @@ const ResultadoAnalyticsView = () => (
     buildView={(data, { KpiCard, SeriesChart }) => (
       <>
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-          <KpiCard label="Ingresos" value={formatCurrency(data.summary?.ingresos)} />
-          <KpiCard label="Costo mercadería" value={formatCurrency(data.summary?.costo_mercaderia)} />
-          <KpiCard label="Gastos" value={formatCurrency(data.summary?.gastos)} />
+          <KpiCard label="Ingresos" value={formatCurrency(data.summary?.ingresos)} sparklineData={data.series?.map((row) => row.ingresos)} />
+          <KpiCard label="Costo mercadería" value={formatCurrency(data.summary?.costo_mercaderia)} sparklineData={data.series?.map((row) => row.compras)} />
+          <KpiCard label="Gastos" value={formatCurrency(data.summary?.gastos)} sparklineData={data.series?.map((row) => row.gastos)} />
           <KpiCard
             label="Resultado"
             value={formatCurrency(data.summary?.resultado)}
             tone={(data.summary?.resultado || 0) >= 0 ? 'success' : 'danger'}
+            sparklineData={data.series?.map((row) => row.resultado)}
           />
           <KpiCard
             label="Margen"
             value={`${((data.summary?.margen_resultado || 0) * 100).toFixed(1)}%`}
             tone={(data.summary?.margen_resultado || 0) >= 0 ? 'success' : 'danger'}
+            sparklineData={data.series?.map((row) => row.margen_pct)}
           />
         </div>
         <SeriesChart

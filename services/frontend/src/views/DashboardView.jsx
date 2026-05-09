@@ -14,13 +14,25 @@ const formatCurrency = (value) => {
   }).format(value);
 };
 
+const formatYAxisCurrency = (value) => {
+  const numeric = Number(value || 0);
+  if (Math.abs(numeric) >= 1000000) return `$${(numeric / 1000000).toFixed(1)}M`;
+  if (Math.abs(numeric) >= 1000) return `$${(numeric / 1000).toFixed(0)}K`;
+  return `$${numeric}`;
+};
+
 const formatDate = (isoString) => {
   if (!isoString) return 'Nunca';
   const date = new Date(isoString);
-  return date.toLocaleString('es-AR', { 
-    day: '2-digit', month: 'short', year: 'numeric', 
-    hour: '2-digit', minute:'2-digit' 
-  });
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const target = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const diffDays = Math.round((today - target) / 86400000);
+  const time = date.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false });
+
+  if (diffDays === 0) return `Hoy ${time}`;
+  if (diffDays === 1) return `Ayer ${time}`;
+  return `${date.toLocaleDateString('es-AR')} ${time}`;
 };
 
 const StatCard = ({ title, metric, icon: Icon, loading }) => (
@@ -194,7 +206,7 @@ const DashboardView = () => {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Main Chart */}
         <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm lg:col-span-2">
-          <h3 className="text-lg font-semibold text-slate-900 mb-6">Proyección de Ventas (6 meses)</h3>
+          <h3 className="text-lg font-semibold text-slate-900 mb-6">Ventas últimos 6 meses</h3>
           {loading ? (
             <div className="h-80 w-full bg-slate-50 animate-pulse rounded-lg border border-slate-100"></div>
           ) : (
@@ -208,7 +220,7 @@ const DashboardView = () => {
                     tickLine={false} 
                     tick={{ fill: '#64748b' }} 
                     dx={-10}
-                    tickFormatter={(value) => `$${value / 1000}k`}
+                    tickFormatter={formatYAxisCurrency}
                   />
                   <Tooltip 
                     cursor={{ fill: '#f1f5f9' }}

@@ -17,13 +17,54 @@ const formatYAxis = (value) => {
 
 const tooltipFormatter = (value) => [`$${Number(value || 0).toLocaleString('es-AR')}`, ''];
 
-const KpiCard = ({ label, value, tone = 'default', subtitle }) => {
+const normalizeSparkline = (values) => {
+  const numericValues = (values || []).map((item) => Number(item || 0)).filter(Number.isFinite);
+  if (numericValues.length < 2) return null;
+
+  const min = Math.min(...numericValues);
+  const max = Math.max(...numericValues);
+  const range = max - min || 1;
+  const step = 80 / (numericValues.length - 1);
+  return numericValues
+    .map((item, index) => `${(index * step).toFixed(2)},${(24 - ((item - min) / range) * 20).toFixed(2)}`)
+    .join(' ');
+};
+
+const getVariation = (values) => {
+  const numericValues = (values || []).map((item) => Number(item || 0)).filter(Number.isFinite);
+  if (numericValues.length < 2) return null;
+
+  const midpoint = Math.floor(numericValues.length / 2);
+  const previous = numericValues.slice(0, midpoint);
+  const current = numericValues.slice(midpoint);
+  const sum = (items) => items.reduce((acc, item) => acc + item, 0);
+  const previousTotal = sum(previous);
+  const currentTotal = sum(current);
+
+  if (!previous.length || previousTotal === 0) return null;
+  return ((currentTotal - previousTotal) / Math.abs(previousTotal)) * 100;
+};
+
+const formatVariation = (variation) => {
+  if (variation === null || Math.abs(variation) < 0.05) {
+    return { text: '→ sin cambios', className: 'text-slate-500' };
+  }
+  if (variation > 0) {
+    return { text: `↑ ${variation.toFixed(1)}% vs período anterior`, className: 'text-emerald-700' };
+  }
+  return { text: `↓ ${Math.abs(variation).toFixed(1)}% vs período anterior`, className: 'text-red-700' };
+};
+
+const KpiCard = ({ label, value, tone = 'default', subtitle, sparklineData, compareActive = false, variationPct }) => {
   const palette = {
     default: { border: 'border-t-indigo-600', pill: 'text-indigo-700 bg-indigo-50', line: '#4f46e5' },
     success: { border: 'border-t-emerald-600', pill: 'text-emerald-700 bg-emerald-50', line: '#16a34a' },
     warning: { border: 'border-t-amber-500', pill: 'text-amber-700 bg-amber-50', line: '#eab308' },
     danger: { border: 'border-t-red-600', pill: 'text-red-700 bg-red-50', line: '#dc2626' },
   }[tone] || { border: 'border-t-indigo-600', pill: 'text-indigo-700 bg-indigo-50', line: '#4f46e5' };
+  const points = normalizeSparkline(sparklineData);
+  const variation = formatVariation(variationPct ?? getVariation(sparklineData));
+  const showFooter = points || compareActive;
 
   return (
     <div className={`min-h-[118px] rounded-xl border border-t-[3px] border-slate-200 bg-white p-5 shadow-sm ${palette.border}`}>
@@ -32,12 +73,20 @@ const KpiCard = ({ label, value, tone = 'default', subtitle }) => {
         <span className="text-xl font-bold tabular-nums">{value}</span>
       </div>
       {subtitle && <p className="mt-1 text-xs text-slate-400">{subtitle}</p>}
-      <div className="mt-4 flex items-end justify-between gap-3">
-        <span className="text-[11px] text-slate-500">vs. período anterior</span>
-        <svg className="h-7 w-20" viewBox="0 0 80 28" preserveAspectRatio="none" aria-hidden="true">
-          <polyline fill="none" stroke={palette.line} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" points="0,22 10,18 20,20 30,14 40,16 50,10 60,12 70,6 80,4" />
-        </svg>
-      </div>
+      {showFooter && (
+        <div className="mt-4 flex items-end justify-between gap-3">
+          {compareActive ? (
+            <span className={`text-[11px] font-semibold ${variation.className}`}>{variation.text}</span>
+          ) : (
+            <span />
+          )}
+          {points && (
+            <svg className="h-7 w-20" viewBox="0 0 80 28" preserveAspectRatio="none" aria-hidden="true">
+              <polyline fill="none" stroke={palette.line} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" points={points} />
+            </svg>
+          )}
+        </div>
+      )}
     </div>
   );
 };
@@ -265,7 +314,14 @@ const AnalyticsPage = ({ title, description, endpoint, buildView }) => {
         <h1 className="text-2xl font-bold tracking-[-0.02em] text-slate-900">{title}</h1>
         <p className="mt-1 text-sm text-slate-500">{description}</p>
       </div>
-      {buildView(data || {}, { KpiCard, DataTable, SeriesChart, DonutChart, ProgressBar, Badge })}
+      {buildView(data || {}, {
+        KpiCard: (props) => <KpiCard compareActive={compararAnterior} {...props} />,
+        DataTable,
+        SeriesChart,
+        DonutChart,
+        ProgressBar,
+        Badge,
+      })}
     </div>
   );
 };

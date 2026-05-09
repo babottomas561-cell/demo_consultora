@@ -24,21 +24,21 @@ const tones = {
   },
 };
 
-const Sparkline = ({ color }) => (
-  <svg className="h-7 w-20" viewBox="0 0 80 28" preserveAspectRatio="none" aria-hidden="true">
-    <polyline
-      fill="none"
-      stroke={color}
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      points="0,22 10,18 20,20 30,14 40,16 50,10 60,12 70,6 80,4"
-    />
-  </svg>
-);
+const normalizeSparkline = (values) => {
+  const numericValues = (values || []).map((item) => Number(item || 0)).filter(Number.isFinite);
+  if (numericValues.length < 2) return null;
+  const min = Math.min(...numericValues);
+  const max = Math.max(...numericValues);
+  const range = max - min || 1;
+  const step = 80 / (numericValues.length - 1);
+  return numericValues
+    .map((item, index) => `${(index * step).toFixed(2)},${(24 - ((item - min) / range) * 20).toFixed(2)}`)
+    .join(' ');
+};
 
-const KPICard = ({ label, value, subtitle, icon: Icon, tone = 'default', trend, className }) => {
+const KPICard = ({ label, value, subtitle, icon: Icon, tone = 'default', trend, sparklineData, className }) => {
   const palette = tones[tone] || tones.default;
+  const points = normalizeSparkline(sparklineData);
   return (
   <Card className={cn('min-h-[118px] border-t-[3px] p-5', palette.border, className)}>
     <div className="flex items-start justify-between gap-3">
@@ -58,10 +58,16 @@ const KPICard = ({ label, value, subtitle, icon: Icon, tone = 'default', trend, 
         </div>
       )}
     </div>
-    <div className="mt-4 flex items-end justify-between gap-3">
-      <span className="text-[11px] text-slate-500">vs. período anterior</span>
-      <Sparkline color={palette.spark} />
-    </div>
+    {(trend || points) && (
+      <div className="mt-4 flex items-end justify-between gap-3">
+        {trend ? <span className="text-[11px] font-semibold text-emerald-700">{trend}</span> : <span />}
+        {points && (
+          <svg className="h-7 w-20" viewBox="0 0 80 28" preserveAspectRatio="none" aria-hidden="true">
+            <polyline fill="none" stroke={palette.spark} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" points={points} />
+          </svg>
+        )}
+      </div>
+    )}
   </Card>
   );
 };
