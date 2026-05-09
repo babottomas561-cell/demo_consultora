@@ -4,7 +4,7 @@ import { persist } from 'zustand/middleware';
 const getDefaultDates = () => {
   const hasta = new Date();
   const desde = new Date();
-  desde.setMonth(desde.getMonth() - 1);
+  desde.setFullYear(desde.getFullYear() - 1);
   return {
     desde: desde.toISOString().split('T')[0],
     hasta: hasta.toISOString().split('T')[0],
@@ -14,7 +14,7 @@ const getDefaultDates = () => {
 export const useFilterStore = create(
   persist(
     (set) => ({
-      periodo: 'mes',
+      periodo: 'anio',
       desde: getDefaultDates().desde,
       hasta: getDefaultDates().hasta,
 
@@ -52,9 +52,19 @@ export const useFilterStore = create(
 
       reset: () => {
         const dates = getDefaultDates();
-        set({ periodo: 'mes', ...dates });
+        set({ periodo: 'anio', ...dates });
       },
     }),
-    { name: 'bi-filters' }
+    {
+      name: 'bi-filters',
+      version: 1,
+      migrate: (persistedState, version) => {
+        if (version === 0) {
+          const dates = getDefaultDates();
+          return { ...persistedState, periodo: 'anio', ...dates };
+        }
+        return persistedState;
+      },
+    }
   )
 );

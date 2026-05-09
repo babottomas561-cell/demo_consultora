@@ -30,7 +30,7 @@ def resolve_dates(desde: Optional[str], hasta: Optional[str]):
     if not hasta:
         hasta = date.today().isoformat()
     if not desde:
-        desde = (date.today() - timedelta(days=30)).isoformat()
+        desde = (date.today() - timedelta(days=365)).isoformat()
     return desde, hasta
 
 
