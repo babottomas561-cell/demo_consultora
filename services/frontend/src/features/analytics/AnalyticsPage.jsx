@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Bar, BarChart, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis, PieChart, Pie, Cell, Legend } from 'recharts';
 import { Activity, AlertCircle, Loader2, RefreshCw } from 'lucide-react';
@@ -131,16 +131,67 @@ const DonutChart = ({ data, title }) => (
 const AnalyticsPage = ({ title, description, endpoint, buildView }) => {
   const user = useAuthStore((state) => state.user);
   const activeCompany = useAuthStore((state) => state.activeCompany);
-  const { desde, hasta } = useFilterStore();
+  const periodo = useFilterStore((state) => state.periodo);
+  const desde = useFilterStore((state) => state.desde);
+  const hasta = useFilterStore((state) => state.hasta);
+  const compararAnterior = useFilterStore((state) => state.comparar_anterior);
+  const codEmpresa = useFilterStore((state) => state.cod_empresa);
+  const tag = useFilterStore((state) => state.tag);
+  const puntoDeVenta = useFilterStore((state) => state.punto_de_venta);
+  const codVendedor = useFilterStore((state) => state.cod_vendedor);
+  const codRubro = useFilterStore((state) => state.cod_rubro);
+  const codSubrubro = useFilterStore((state) => state.cod_subrubro);
+  const tipoComprobante = useFilterStore((state) => state.tipo_comprobante);
+  const condicionVenta = useFilterStore((state) => state.condicion_venta);
+  const codCliente = useFilterStore((state) => state.cod_cliente);
+  const codArticulo = useFilterStore((state) => state.cod_articulo);
+  const codDeposito = useFilterStore((state) => state.cod_deposito);
+  const incluirAnuladas = useFilterStore((state) => state.incluir_anuladas);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  const filters = useMemo(() => ({
+    periodo,
+    desde,
+    hasta,
+    comparar_anterior: compararAnterior,
+    cod_empresa: codEmpresa,
+    tag,
+    punto_de_venta: puntoDeVenta,
+    cod_vendedor: codVendedor,
+    cod_rubro: codRubro,
+    cod_subrubro: codSubrubro,
+    tipo_comprobante: tipoComprobante,
+    condicion_venta: condicionVenta,
+    cod_cliente: codCliente,
+    cod_articulo: codArticulo,
+    cod_deposito: codDeposito,
+    incluir_anuladas: incluirAnuladas,
+  }), [
+    periodo,
+    desde,
+    hasta,
+    compararAnterior,
+    codEmpresa,
+    tag,
+    puntoDeVenta,
+    codVendedor,
+    codRubro,
+    codSubrubro,
+    tipoComprobante,
+    condicionVenta,
+    codCliente,
+    codArticulo,
+    codDeposito,
+    incluirAnuladas,
+  ]);
 
   const loadData = async () => {
     setLoading(true);
     setError(null);
     try {
-      const qs = buildQueryParams(user, activeCompany, desde, hasta);
+      const qs = buildQueryParams(user, activeCompany, filters);
       const response = await apiClient.get(`${endpoint}${qs}`);
       setData(response.data);
     } catch (err) {
@@ -157,7 +208,7 @@ const AnalyticsPage = ({ title, description, endpoint, buildView }) => {
     } else {
       setLoading(false);
     }
-  }, [user, activeCompany, endpoint, desde, hasta]);
+  }, [user, activeCompany, endpoint, filters]);
 
   if (user?.is_admin && !activeCompany) {
     return (

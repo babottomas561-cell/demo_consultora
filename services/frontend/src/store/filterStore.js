@@ -1,70 +1,198 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-const getDefaultDates = () => {
-  const hasta = new Date();
-  const desde = new Date();
-  desde.setFullYear(desde.getFullYear() - 1);
-  return {
-    desde: desde.toISOString().split('T')[0],
-    hasta: hasta.toISOString().split('T')[0],
-  };
+export const PERIODOS = ['hoy', 'semana', 'mes', 'trimestre', 'anio', 'custom'];
+
+const dateToISO = (date) => date.toISOString().split('T')[0];
+
+const getDefaultDates = (periodo = 'anio') => {
+  const hoy = new Date();
+  const hasta = dateToISO(hoy);
+  const desde = new Date(hoy);
+
+  if (periodo === 'hoy') {
+    return { desde: hasta, hasta };
+  }
+  if (periodo === 'semana') {
+    desde.setDate(desde.getDate() - 7);
+  } else if (periodo === 'mes') {
+    desde.setMonth(desde.getMonth() - 1);
+  } else if (periodo === 'trimestre') {
+    desde.setMonth(desde.getMonth() - 3);
+  } else {
+    desde.setFullYear(desde.getFullYear() - 1);
+  }
+
+  return { desde: dateToISO(desde), hasta };
 };
+
+const arrayFilters = [
+  'cod_empresa',
+  'tag',
+  'punto_de_venta',
+  'cod_vendedor',
+  'cod_rubro',
+  'cod_subrubro',
+  'tipo_comprobante',
+  'condicion_venta',
+  'cod_cliente',
+  'cod_articulo',
+  'cod_deposito',
+];
+
+const emptyAdvancedFilters = {
+  comparar_anterior: false,
+  cod_empresa: [],
+  tag: [],
+  punto_de_venta: [],
+  cod_vendedor: [],
+  cod_rubro: [],
+  cod_subrubro: [],
+  tipo_comprobante: [],
+  condicion_venta: [],
+  cod_cliente: [],
+  cod_articulo: [],
+  cod_deposito: [],
+  incluir_anuladas: false,
+};
+
+const createDefaultState = () => ({
+  periodo: 'anio',
+  ...getDefaultDates('anio'),
+  ...emptyAdvancedFilters,
+  savedViews: [],
+  activeViewId: null,
+});
+
+const normalizeArray = (value) => {
+  if (!value) return [];
+  return Array.isArray(value) ? value : [value];
+};
+
+const createViewId = () => {
+  if (window.crypto?.randomUUID) return window.crypto.randomUUID();
+  return `view_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+};
+
+const pickFilterState = (state) => ({
+  periodo: state.periodo,
+  desde: state.desde,
+  hasta: state.hasta,
+  comparar_anterior: state.comparar_anterior,
+  cod_empresa: state.cod_empresa,
+  tag: state.tag,
+  punto_de_venta: state.punto_de_venta,
+  cod_vendedor: state.cod_vendedor,
+  cod_rubro: state.cod_rubro,
+  cod_subrubro: state.cod_subrubro,
+  tipo_comprobante: state.tipo_comprobante,
+  condicion_venta: state.condicion_venta,
+  cod_cliente: state.cod_cliente,
+  cod_articulo: state.cod_articulo,
+  cod_deposito: state.cod_deposito,
+  incluir_anuladas: state.incluir_anuladas,
+});
 
 export const useFilterStore = create(
   persist(
-    (set) => ({
-      periodo: 'anio',
-      desde: getDefaultDates().desde,
-      hasta: getDefaultDates().hasta,
+    (set, get) => ({
+      ...createDefaultState(),
 
       setPeriodo: (periodo) => {
-        const hoy = new Date();
-        const hasta = hoy.toISOString().split('T')[0];
-        let desde = hasta;
-
-        if (periodo === 'hoy') {
-          desde = hasta;
-        } else if (periodo === 'semana') {
-          const d = new Date(hoy);
-          d.setDate(d.getDate() - 7);
-          desde = d.toISOString().split('T')[0];
-        } else if (periodo === 'mes') {
-          const d = new Date(hoy);
-          d.setMonth(d.getMonth() - 1);
-          desde = d.toISOString().split('T')[0];
-        } else if (periodo === 'trimestre') {
-          const d = new Date(hoy);
-          d.setMonth(d.getMonth() - 3);
-          desde = d.toISOString().split('T')[0];
-        } else if (periodo === 'anio') {
-          const d = new Date(hoy);
-          d.setFullYear(d.getFullYear() - 1);
-          desde = d.toISOString().split('T')[0];
+        if (periodo === 'custom') {
+          set({ periodo, activeViewId: null });
+          return;
         }
-
-        set({ periodo, desde, hasta });
+        set({ periodo, ...getDefaultDates(periodo), activeViewId: null });
       },
 
       setCustomRange: (desde, hasta) => {
-        set({ periodo: 'custom', desde, hasta });
+        set({ periodo: 'custom', desde, hasta, activeViewId: null });
+      },
+
+      setFilter: (name, value) => {
+        set({ [name]: arrayFilters.includes(name) ? normalizeArray(value) : value, activeViewId: null });
+      },
+
+      setFilters: (filters) => {
+        const next = { ...filters, activeViewId: null };
+        for (const key of arrayFilters) {
+          if (key in next) next[key] = normalizeArray(next[key]);
+        }
+        set(next);
+      },
+
+      clearFilter: (name) => {
+        const fallback = arrayFilters.includes(name) ? [] : emptyAdvancedFilters[name];
+        set({ [name]: fallback, activeViewId: null });
+      },
+
+      toggleArrayValue: (name, value) => {
+        const current = normalizeArray(get()[name]);
+        const exists = current.includes(value);
+        set({
+          [name]: exists ? current.filter((item) => item !== value) : [...current, value],
+          activeViewId: null,
+        });
+      },
+
+      resetAdvancedFilters: () => {
+        set({ ...emptyAdvancedFilters, activeViewId: null });
       },
 
       reset: () => {
-        const dates = getDefaultDates();
-        set({ periodo: 'anio', ...dates });
+        set(createDefaultState());
+      },
+
+      getApiFilters: () => pickFilterState(get()),
+
+      saveView: (name) => {
+        const trimmedName = name?.trim();
+        if (!trimmedName) return null;
+
+        const view = {
+          id: createViewId(),
+          name: trimmedName,
+          filters: pickFilterState(get()),
+          createdAt: new Date().toISOString(),
+        };
+
+        set((state) => ({
+          savedViews: [view, ...state.savedViews.filter((item) => item.name !== trimmedName)],
+          activeViewId: view.id,
+        }));
+        return view.id;
+      },
+
+      loadView: (id) => {
+        const view = get().savedViews.find((item) => item.id === id);
+        if (!view) return false;
+        set({ ...createDefaultState(), ...view.filters, activeViewId: id, savedViews: get().savedViews });
+        return true;
+      },
+
+      deleteView: (id) => {
+        set((state) => ({
+          savedViews: state.savedViews.filter((item) => item.id !== id),
+          activeViewId: state.activeViewId === id ? null : state.activeViewId,
+        }));
       },
     }),
     {
       name: 'bi-filters',
-      version: 1,
-      migrate: (persistedState, version) => {
-        if (version === 0) {
-          const dates = getDefaultDates();
-          return { ...persistedState, periodo: 'anio', ...dates };
-        }
-        return persistedState;
-      },
+      version: 2,
+      partialize: (state) => ({
+        ...pickFilterState(state),
+        savedViews: state.savedViews,
+        activeViewId: state.activeViewId,
+      }),
+      migrate: (persistedState) => ({
+        ...createDefaultState(),
+        ...persistedState,
+        ...Object.fromEntries(arrayFilters.map((key) => [key, normalizeArray(persistedState?.[key])])),
+        savedViews: persistedState?.savedViews || [],
+        activeViewId: persistedState?.activeViewId || null,
+      }),
     }
   )
 );
