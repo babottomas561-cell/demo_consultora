@@ -46,7 +46,9 @@ def _insert_ventas_chunk(session, tenant_schema: str, ventas):
         ventas_data.append({
             "fecha": v.fecha,
             "cliente_id": v.cliente_id,
+            "cliente_nombre": v.cliente_nombre,
             "producto_id": v.producto_id,
+            "producto_nombre": v.producto_nombre,
             "cantidad": v.cantidad,
             "precio_unitario": v.precio_unitario,
             "total": v.total,
