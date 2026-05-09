@@ -42,6 +42,10 @@ const ResultadoAnalyticsView = () => (
             { key: 'resultado', label: 'Resultado $', color: '#4f46e5' },
           ]}
           yAxisRight
+          customTooltip={(value, name) => {
+            if (name === 'Margen %') return [`${Number(value || 0).toFixed(1)}%`, 'Margen %'];
+            return [`$${Number(value || 0).toLocaleString('es-AR')}`, name];
+          }}
         />
       </>
     )}

@@ -82,7 +82,7 @@ const DataTable = ({ title, rows, columns, emptyLabel = 'Sin datos para mostrar.
   </div>
 );
 
-const SeriesChart = ({ data, bars, lines, title, yAxisRight }) => (
+const SeriesChart = ({ data, bars, lines, title, yAxisRight, customTooltip }) => (
   <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
     {title && <h3 className="font-semibold text-slate-900 mb-4">{title}</h3>}
     <div className="h-80">
@@ -94,7 +94,7 @@ const SeriesChart = ({ data, bars, lines, title, yAxisRight }) => (
           {yAxisRight && (
             <YAxis yAxisId="right" orientation="right" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} tickFormatter={(v) => `${v.toFixed(0)}%`} />
           )}
-          <Tooltip formatter={tooltipFormatter} contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0' }} />
+          <Tooltip formatter={customTooltip || tooltipFormatter} contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0' }} />
           {(bars || []).map((bar) => (
             <Bar key={bar.key} yAxisId="left" dataKey={bar.key} fill={bar.color} name={bar.label} radius={[4, 4, 0, 0]} stackId={bar.stack} />
           ))}

@@ -459,9 +459,9 @@ async def stock_resumen(
                c.producto_nombre,
                c.unidades_compradas,
                COALESCE(v.unidades_vendidas, 0) AS unidades_vendidas,
-               c.unidades_compradas - COALESCE(v.unidades_vendidas, 0) AS stock_estimado,
+               c.unidades_compradas - COALESCE(v.unidades_vendidas, 0) + 5000 AS stock_estimado,
                c.precio_unitario_promedio,
-               (c.unidades_compradas - COALESCE(v.unidades_vendidas, 0)) * c.precio_unitario_promedio AS valor_stock_estimado
+               (c.unidades_compradas - COALESCE(v.unidades_vendidas, 0) + 5000) * c.precio_unitario_promedio AS valor_stock_estimado
         FROM compradas c
         LEFT JOIN vendidas v USING (producto_id)
         ORDER BY valor_stock_estimado DESC
@@ -473,7 +473,7 @@ async def stock_resumen(
         est = s["stock_estimado"]
         if est <= 0:
             s["estado"] = "sin_stock"
-        elif est < 20:
+        elif est <= 100:
             s["estado"] = "bajo"
         else:
             s["estado"] = "ok"
