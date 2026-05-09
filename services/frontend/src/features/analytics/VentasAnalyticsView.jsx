@@ -546,17 +546,15 @@ const DonutSimple = ({ chartData, title, loading, onClick }) => (
 const ComprobantesTab = ({ comprobantes: data, loading }) => {
   const { applyFilter } = useCrossFilter();
 
-  const tipoData = (data?.por_tipo ?? []).map((r) => ({
-    name: r.tipo, value: r.importe, color: TIPO_COLORS[r.tipo] ?? '#94a3b8',
-  }));
-  const condData = (data?.por_condicion_venta ?? []).map((r, i) => ({
-    name: r.condicion,
-    value: r.importe,
-    color: COND_PALETTE[i % COND_PALETTE.length],
-  }));
-  const factData = (data?.por_tipo_factura ?? []).map((r, i) => ({
-    name: `Factura ${r.tipo}`, value: r.importe, color: FACT_PALETTE[i % FACT_PALETTE.length],
-  }));
+  const tipoData = (data?.por_tipo ?? [])
+    .map((r) => ({ name: r.tipo, value: Math.abs(r.importe), color: TIPO_COLORS[r.tipo] ?? '#94a3b8' }))
+    .filter((r) => r.value > 0);
+  const condData = (data?.por_condicion_venta ?? [])
+    .filter((r) => r.importe > 0)
+    .map((r, i) => ({ name: r.condicion, value: r.importe, color: COND_PALETTE[i % COND_PALETTE.length] }));
+  const factData = (data?.por_tipo_factura ?? [])
+    .filter((r) => r.importe > 0)
+    .map((r, i) => ({ name: `Factura ${r.tipo}`, value: r.importe, color: FACT_PALETTE[i % FACT_PALETTE.length] }));
 
   const pdvCols = [
     { key: 'punto', label: 'Punto de venta' },
