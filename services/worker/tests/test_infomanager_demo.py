@@ -36,12 +36,35 @@ def test_infomanager_demo_generates_coherent_analytics_data():
         "cta_cte_clientes",
         "cta_cte_proveedores",
         "movimientos_caja",
+        "vendedores",
+        "puntos_de_venta",
+        "depositos",
+        "rubros",
+        "subrubros",
+        "presupuestos",
+        "recibos",
+        "stock",
     }
     assert datos["ventas"]
     assert datos["compras"]
     assert datos["cta_cte_clientes"]
     assert datos["cta_cte_proveedores"]
     assert datos["movimientos_caja"]
+    assert len(datos["vendedores"]) == 5
+    assert len(datos["puntos_de_venta"]) == 3
+    assert len(datos["depositos"]) == 2
+    assert len(datos["rubros"]) == 8
+    assert len(datos["subrubros"]) == 14
+    assert len(datos["presupuestos"]) == 200
+    assert len(datos["stock"]) == 28
+    assert all(row["cantidad"] >= 0 for row in datos["stock"])
+
+    venta = datos["ventas"][0]
+    assert getattr(venta, "tipo_comprobante") in {"FA", "NC", "ND"}
+    assert getattr(venta, "cod_vendedor") in {1, 2, 3, 4, 5}
+    assert getattr(venta, "punto_de_venta") in {1, 2, 3}
+    assert getattr(venta, "cod_deposito") in {1, 2}
+    assert getattr(venta, "precio_compra_actual") > 0
 
     ventas_total = sum(v.total for v in datos["ventas"])
     facturas_clientes = sum(

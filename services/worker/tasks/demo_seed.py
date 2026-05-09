@@ -23,7 +23,15 @@ def _insert_chunk(session, tenant_schema: str, table_name: str, data: list, conf
     stmt = insert(table_obj).values(data)
 
     if conflict_cols:
-        stmt = stmt.on_conflict_do_nothing(index_elements=conflict_cols)
+        update_cols = {
+            key: getattr(stmt.excluded, key)
+            for key in data[0].keys()
+            if key not in conflict_cols
+        }
+        if update_cols:
+            stmt = stmt.on_conflict_do_update(index_elements=conflict_cols, set_=update_cols)
+        else:
+            stmt = stmt.on_conflict_do_nothing(index_elements=conflict_cols)
 
     result = session.execute(stmt)
     rows_inserted = result.rowcount
@@ -47,17 +55,37 @@ def _insert_ventas_chunk(session, tenant_schema: str, ventas):
         ventas_data.append({
             "fecha": v.fecha,
             "cliente_id": v.cliente_id,
+            "cliente_nombre": v.cliente_nombre,
             "producto_id": v.producto_id,
+            "producto_nombre": v.producto_nombre,
             "cantidad": v.cantidad,
             "precio_unitario": v.precio_unitario,
             "total": v.total,
-            "total_real": None
+            "total_real": None,
+            "tipo_comprobante": getattr(v, "tipo_comprobante", "FA"),
+            "tipo_factura": getattr(v, "tipo_factura", None),
+            "punto_de_venta": getattr(v, "punto_de_venta", None),
+            "cod_vendedor": getattr(v, "cod_vendedor", None),
+            "cod_empresa": getattr(v, "cod_empresa", 1),
+            "tag": getattr(v, "tag", "S"),
+            "condicion_venta_tipo": getattr(v, "condicion_venta_tipo", None),
+            "neto": getattr(v, "neto", None),
+            "iva_importe": getattr(v, "iva_importe", None),
+            "anulada": getattr(v, "anulada", "N"),
+            "cod_deposito": getattr(v, "cod_deposito", None),
+            "cod_rubro": getattr(v, "cod_rubro", None),
+            "cod_subrubro": getattr(v, "cod_subrubro", None),
+            "precio_compra_actual": getattr(v, "precio_compra_actual", None),
+            "descuento_porc": getattr(v, "descuento_porc", 0),
         })
 
     if clientes_data:
         clientes_table = table("clientes", column("external_id"), column("nombre"))
         stmt_clientes = insert(clientes_table).values(list(clientes_data.values()))
-        stmt_clientes = stmt_clientes.on_conflict_do_nothing(index_elements=['external_id'])
+        stmt_clientes = stmt_clientes.on_conflict_do_update(
+            index_elements=['external_id'],
+            set_={"nombre": stmt_clientes.excluded.nombre},
+        )
         session.execute(stmt_clientes)
 
     rows_inserted, failed = _insert_chunk(session, tenant_schema, "ventas", ventas_data, ['fecha', 'cliente_id', 'producto_id'])
@@ -77,6 +105,9 @@ def seed_tenant_demo(self, tenant_schema: str, meses: int = 12):
         cta_cte_cli = datos["cta_cte_clientes"]
         cta_cte_prov = datos["cta_cte_proveedores"]
         caja = datos["movimientos_caja"]
+        recibos = datos["recibos"]
+        presupuestos = datos["presupuestos"]
+        stock = datos["stock"]
 
         with SessionLocal() as session:
             chunk_size = 5000
@@ -85,6 +116,14 @@ def seed_tenant_demo(self, tenant_schema: str, meses: int = 12):
             total_cta_cli = 0
             total_cta_prov = 0
             total_caja = 0
+            total_recibos = 0
+            total_presupuestos = 0
+
+            _insert_chunk(session, tenant_schema, "vendedores", datos["vendedores"], ['cod_vendedor'])
+            _insert_chunk(session, tenant_schema, "puntos_de_venta", datos["puntos_de_venta"], ['id'])
+            _insert_chunk(session, tenant_schema, "depositos", datos["depositos"], ['cod_deposito'])
+            _insert_chunk(session, tenant_schema, "rubros", datos["rubros"], ['cod_rubro'])
+            _insert_chunk(session, tenant_schema, "subrubros", datos["subrubros"], ['cod_subrubro'])
 
             for i in range(0, len(ventas), chunk_size):
                 inserted, _ = _insert_ventas_chunk(session, tenant_schema, ventas[i:i+chunk_size])
@@ -130,16 +169,41 @@ def seed_tenant_demo(self, tenant_schema: str, meses: int = 12):
                 )
                 total_caja += inserted
 
+            for i in range(0, len(recibos), chunk_size):
+                inserted, _ = _insert_chunk(
+                    session,
+                    tenant_schema,
+                    "recibos",
+                    recibos[i:i+chunk_size],
+                    ['id'],
+                )
+                total_recibos += inserted
+
+            for i in range(0, len(presupuestos), chunk_size):
+                inserted, _ = _insert_chunk(
+                    session,
+                    tenant_schema,
+                    "presupuestos",
+                    presupuestos[i:i+chunk_size],
+                    ['id'],
+                )
+                total_presupuestos += inserted
+
+            _insert_chunk(session, tenant_schema, "stock", stock, ['cod_articulo', 'cod_deposito'])
+
             session.commit()
 
         logger.info(
-            "Successfully seeded tenant %s: ventas=%s compras=%s cta_clientes=%s cta_proveedores=%s caja=%s",
+            "Successfully seeded tenant %s: ventas=%s compras=%s cta_clientes=%s cta_proveedores=%s caja=%s recibos=%s presupuestos=%s stock=%s",
             tenant_schema,
             total_ventas,
             total_compras,
             total_cta_cli,
             total_cta_prov,
             total_caja,
+            total_recibos,
+            total_presupuestos,
+            len(stock),
         )
         return {
             "status": "done",
@@ -148,11 +212,17 @@ def seed_tenant_demo(self, tenant_schema: str, meses: int = 12):
             "cta_clientes_generadas": len(cta_cte_cli),
             "cta_proveedores_generadas": len(cta_cte_prov),
             "movimientos_caja_generados": len(caja),
+            "recibos_generados": len(recibos),
+            "presupuestos_generados": len(presupuestos),
+            "stock_generado": len(stock),
             "ventas_insertadas": total_ventas,
             "compras_insertadas": total_compras,
             "cta_clientes_insertadas": total_cta_cli,
             "cta_proveedores_insertadas": total_cta_prov,
             "movimientos_caja_insertados": total_caja,
+            "recibos_insertados": total_recibos,
+            "presupuestos_insertados": total_presupuestos,
+            "stock_insertado": len(stock),
         }
     except Exception as e:
         print(traceback.format_exc())
