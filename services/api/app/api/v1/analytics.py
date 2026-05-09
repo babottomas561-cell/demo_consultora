@@ -48,7 +48,7 @@ async def ventas_resumen(
         ORDER BY 1
     """))).mappings().all()
     top_productos = (await db.execute(text("""
-        SELECT producto_id, COALESCE(MAX(producto_nombre), producto_id) AS producto_nombre,
+        SELECT producto_id, producto_id AS producto_nombre,
                COALESCE(SUM(total), 0) AS total,
                COALESCE(SUM(cantidad), 0) AS unidades
         FROM ventas
