@@ -525,35 +525,38 @@ const ClientesTab = ({ clientes: data, loading }) => {
 
 // ── Comprobantes Tab ──────────────────────────────────────────────────────────
 
+const COND_PALETTE = ['#4f46e5', '#16a34a', '#eab308', '#94a3b8'];
+const FACT_PALETTE = ['#4f46e5', '#818cf8', '#c7d2fe'];
+
+const DonutSimple = ({ chartData, title, loading, onClick }) => (
+  <ChartCard title={title} loading={loading} empty={!loading && !chartData.length} className="h-[260px]" contentClassName="h-[190px]">
+    <ResponsiveContainer width="100%" height="100%">
+      <PieChart>
+        <Pie data={chartData} cx="50%" cy="50%" innerRadius={45} outerRadius={80} paddingAngle={3} dataKey="value"
+          onClick={(d) => onClick && onClick(d)}>
+          {chartData.map((d, i) => <Cell key={i} fill={d.color} cursor={onClick ? 'pointer' : 'default'} />)}
+        </Pie>
+        <Tooltip formatter={(v) => formatCurrency(v)} contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12 }} />
+        <Legend iconType="circle" iconSize={9} formatter={(v) => <span className="text-xs">{v}</span>} />
+      </PieChart>
+    </ResponsiveContainer>
+  </ChartCard>
+);
+
 const ComprobantesTab = ({ comprobantes: data, loading }) => {
   const { applyFilter } = useCrossFilter();
 
   const tipoData = (data?.por_tipo ?? []).map((r) => ({
     name: r.tipo, value: r.importe, color: TIPO_COLORS[r.tipo] ?? '#94a3b8',
   }));
-  const condData = (data?.por_condicion_venta ?? []).map((r) => ({
-    name: CONDICION_LABEL[r.condicion] ?? r.condicion,
+  const condData = (data?.por_condicion_venta ?? []).map((r, i) => ({
+    name: r.condicion,
     value: r.importe,
-    color: CONDICION_COLORS[r.condicion] ?? '#94a3b8',
+    color: COND_PALETTE[i % COND_PALETTE.length],
   }));
-  const factData = (data?.por_tipo_factura ?? []).map((r) => ({
-    name: `Factura ${r.tipo}`, value: r.importe, color: ['#4f46e5', '#818cf8', '#c7d2fe'][condData.indexOf(r) % 3],
+  const factData = (data?.por_tipo_factura ?? []).map((r, i) => ({
+    name: `Factura ${r.tipo}`, value: r.importe, color: FACT_PALETTE[i % FACT_PALETTE.length],
   }));
-
-  const DonutSimple = ({ chartData, title, onClick }) => (
-    <ChartCard title={title} loading={loading} empty={!loading && !chartData.length} className="h-[260px]" contentClassName="h-[190px]">
-      <ResponsiveContainer width="100%" height="100%">
-        <PieChart>
-          <Pie data={chartData} cx="50%" cy="50%" innerRadius={45} outerRadius={80} paddingAngle={3} dataKey="value"
-            onClick={(d) => onClick && onClick(d)}>
-            {chartData.map((d, i) => <Cell key={i} fill={d.color} cursor={onClick ? 'pointer' : 'default'} />)}
-          </Pie>
-          <Tooltip formatter={(v) => formatCurrency(v)} contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12 }} />
-          <Legend iconType="circle" iconSize={9} formatter={(v) => <span className="text-xs">{v}</span>} />
-        </PieChart>
-      </ResponsiveContainer>
-    </ChartCard>
-  );
 
   const pdvCols = [
     { key: 'punto', label: 'Punto de venta' },
@@ -565,9 +568,9 @@ const ComprobantesTab = ({ comprobantes: data, loading }) => {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <DonutSimple chartData={tipoData} title="Por tipo comprobante" onClick={(d) => applyFilter('tipo_comprobante', [d.name])} />
-        <DonutSimple chartData={condData} title="Por condición de venta" onClick={(d) => applyFilter('condicion_venta', [d.name])} />
-        <DonutSimple chartData={factData} title="Por tipo de factura" />
+        <DonutSimple chartData={tipoData} title="Por tipo comprobante" loading={loading} onClick={(d) => applyFilter('tipo_comprobante', [d.name])} />
+        <DonutSimple chartData={condData} title="Por condición de venta" loading={loading} onClick={(d) => applyFilter('condicion_venta', [d.name])} />
+        <DonutSimple chartData={factData} title="Por tipo de factura" loading={loading} />
       </div>
       <DataTable title="Por punto de venta" columns={pdvCols} rows={data?.por_punto_de_venta ?? []} loading={loading} />
     </div>
