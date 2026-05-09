@@ -11,8 +11,8 @@ const ProveedoresAnalyticsView = () => (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <KpiCard label="Proveedores con movimiento" value={formatNumber(data.summary?.proveedores_con_movimiento)} />
           <KpiCard label="Facturado" value={formatCurrency(data.summary?.facturado)} />
-          <KpiCard label="Pagado" value={formatCurrency(data.summary?.pagado)} />
-          <KpiCard label="Saldo" value={formatCurrency(data.summary?.saldo_total)} />
+          <KpiCard label="Pagado" value={formatCurrency(data.summary?.pagado)} tone="success" />
+          <KpiCard label="Saldo" value={formatCurrency(data.summary?.saldo_total)} tone="danger" />
         </div>
         <DataTable
           title="Mayores saldos proveedores"
@@ -24,14 +24,15 @@ const ProveedoresAnalyticsView = () => (
           ]}
         />
         <DataTable
-          title="Próximos pagos"
-          rows={data.proximos_pagos}
+          title="Próximos vencimientos (30 días)"
+          rows={data.proximos_vencimientos}
           columns={[
             { key: 'proveedor_nombre', label: 'Proveedor' },
             { key: 'comprobante_id', label: 'Comprobante' },
             { key: 'fecha_vencimiento', label: 'Vencimiento', render: (row) => row.fecha_vencimiento?.slice(0, 10) || '-' },
-            { key: 'importe', label: 'Importe', render: (row) => formatCurrency(row.importe) },
+            { key: 'importe', label: 'Monto', render: (row) => formatCurrency(row.importe) },
           ]}
+          emptyLabel="No hay vencimientos en los próximos 30 días."
         />
       </>
     )}

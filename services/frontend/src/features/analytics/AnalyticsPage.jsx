@@ -1,14 +1,22 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Bar, BarChart, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis, PieChart, Pie, Cell, Legend } from 'recharts';
 import { Activity, AlertCircle, Loader2, RefreshCw } from 'lucide-react';
 
 import apiClient from '../../api/client';
 import useAuthStore from '../../store/authStore';
 import { formatCurrency, withCompanyParam } from './analyticsUtils';
 
-const KpiCard = ({ label, value, tone = 'default' }) => {
-  const toneClass = tone === 'danger' ? 'text-red-700 bg-red-50' : tone === 'success' ? 'text-emerald-700 bg-emerald-50' : 'text-indigo-700 bg-indigo-50';
+const formatYAxis = (value) => {
+  if (Math.abs(value) >= 1000000) return `$${(value / 1000000).toFixed(1)}M`;
+  if (Math.abs(value) >= 1000) return `$${(value / 1000).toFixed(0)}K`;
+  return `$${value}`;
+};
+
+const tooltipFormatter = (value) => [`$${Number(value || 0).toLocaleString('es-AR')}`, ''];
+
+const KpiCard = ({ label, value, tone = 'default', subtitle }) => {
+  const toneClass = tone === 'danger' ? 'text-red-700 bg-red-50' : tone === 'success' ? 'text-emerald-700 bg-emerald-50' : tone === 'warning' ? 'text-amber-700 bg-amber-50' : 'text-indigo-700 bg-indigo-50';
 
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
@@ -16,8 +24,26 @@ const KpiCard = ({ label, value, tone = 'default' }) => {
       <div className={`mt-3 inline-flex px-3 py-1 rounded-lg ${toneClass}`}>
         <span className="text-xl font-bold">{value}</span>
       </div>
+      {subtitle && <p className="mt-1 text-xs text-slate-400">{subtitle}</p>}
     </div>
   );
+};
+
+const ProgressBar = ({ value, max, color = '#4f46e5' }) => {
+  const pct = max > 0 ? Math.min((value / max) * 100, 100) : 0;
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex-1 bg-slate-100 rounded-full h-2.5 overflow-hidden">
+        <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: color }} />
+      </div>
+      <span className="text-xs font-medium text-slate-500 w-12 text-right">{pct.toFixed(1)}%</span>
+    </div>
+  );
+};
+
+const Badge = ({ text, tone = 'default' }) => {
+  const cls = tone === 'danger' ? 'bg-red-100 text-red-700' : tone === 'success' ? 'bg-emerald-100 text-emerald-700' : tone === 'warning' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-700';
+  return <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${cls}`}>{text}</span>;
 };
 
 const DataTable = ({ title, rows, columns, emptyLabel = 'Sin datos para mostrar.' }) => (
@@ -56,19 +82,45 @@ const DataTable = ({ title, rows, columns, emptyLabel = 'Sin datos para mostrar.
   </div>
 );
 
-const SeriesChart = ({ data, bars }) => (
+const SeriesChart = ({ data, bars, lines, title, yAxisRight }) => (
   <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+    {title && <h3 className="font-semibold text-slate-900 mb-4">{title}</h3>}
     <div className="h-80">
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data || []}>
+        <ComposedChart data={data || []}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-          <XAxis dataKey="periodo" axisLine={false} tickLine={false} tick={{ fill: '#64748b' }} />
-          <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b' }} tickFormatter={(value) => `$${Math.round(value / 1000)}k`} />
-          <Tooltip formatter={(value) => formatCurrency(value)} contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0' }} />
-          {bars.map((bar) => (
-            <Bar key={bar.key} dataKey={bar.key} fill={bar.color} name={bar.label} radius={[4, 4, 0, 0]} />
+          <XAxis dataKey="periodo" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
+          <YAxis yAxisId="left" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} tickFormatter={formatYAxis} />
+          {yAxisRight && (
+            <YAxis yAxisId="right" orientation="right" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} tickFormatter={(v) => `${v.toFixed(0)}%`} />
+          )}
+          <Tooltip formatter={tooltipFormatter} contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0' }} />
+          {(bars || []).map((bar) => (
+            <Bar key={bar.key} yAxisId="left" dataKey={bar.key} fill={bar.color} name={bar.label} radius={[4, 4, 0, 0]} stackId={bar.stack} />
           ))}
-        </BarChart>
+          {(lines || []).map((line) => (
+            <Line key={line.key} yAxisId={line.yAxisId || 'left'} type="monotone" dataKey={line.key} stroke={line.color} name={line.label} strokeWidth={2} dot={false} />
+          ))}
+        </ComposedChart>
+      </ResponsiveContainer>
+    </div>
+  </div>
+);
+
+const DonutChart = ({ data, title }) => (
+  <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+    {title && <h3 className="font-semibold text-slate-900 mb-4">{title}</h3>}
+    <div className="h-72">
+      <ResponsiveContainer width="100%" height="100%">
+        <PieChart>
+          <Pie data={data} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={3} dataKey="value">
+            {data.map((entry, i) => (
+              <Cell key={i} fill={entry.color} />
+            ))}
+          </Pie>
+          <Tooltip formatter={(value) => formatCurrency(value)} />
+          <Legend formatter={(value) => <span className="text-sm text-slate-600">{value}</span>} />
+        </PieChart>
       </ResponsiveContainer>
     </div>
   </div>
@@ -146,7 +198,7 @@ const AnalyticsPage = ({ title, description, endpoint, buildView }) => {
         <h1 className="text-2xl font-bold text-slate-900">{title}</h1>
         <p className="text-slate-500 mt-1">{description}</p>
       </div>
-      {buildView(data || {}, { KpiCard, DataTable, SeriesChart })}
+      {buildView(data || {}, { KpiCard, DataTable, SeriesChart, DonutChart, ProgressBar, Badge })}
     </div>
   );
 };
