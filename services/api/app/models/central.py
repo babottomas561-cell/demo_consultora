@@ -28,3 +28,21 @@ class User(Base):
     company_id = Column(Integer, ForeignKey("public.companies.id"), nullable=True)
 
     company = relationship("Company", back_populates="users")
+    saved_views = relationship("SavedView", back_populates="user", cascade="all, delete-orphan")
+
+
+class SavedView(Base):
+    __tablename__ = "saved_views"
+    __table_args__ = {"schema": "public"}
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("public.users.id"), nullable=False)
+    name = Column(String, nullable=False)
+    description = Column(String, nullable=True)
+    panel = Column(String, nullable=True)
+    filters = Column(JSON, nullable=False)
+    is_default = Column(Boolean, default=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    user = relationship("User", back_populates="saved_views")
