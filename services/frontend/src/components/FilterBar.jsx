@@ -39,14 +39,14 @@ const FilterBar = () => {
   };
 
   return (
-    <div className="bg-white border-b border-slate-200 -mx-8 -mt-8 mb-6 px-6 sticky top-0 z-10">
+    <div className="sticky top-0 z-10 -mx-8 -mt-8 mb-6 border-b border-slate-200 bg-white px-6 shadow-sm">
       <div className="flex items-center justify-between py-3">
-        <div className="flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5">
           {PERIODOS.map(({ key, label }) => (
             <button
               key={key}
               onClick={() => handlePeriodoClick(key)}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+              className={`rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${
                 periodo === key
                   ? 'bg-indigo-600 text-white shadow-sm'
                   : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 hover:border-slate-300'
@@ -56,7 +56,7 @@ const FilterBar = () => {
             </button>
           ))}
         </div>
-        <div className="flex items-center gap-2 text-xs text-slate-500">
+        <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
           <Calendar size={14} className="text-slate-400" />
           <span>{formatDateDisplay(desde)} — {formatDateDisplay(hasta)}</span>
         </div>
@@ -68,18 +68,18 @@ const FilterBar = () => {
             type="date"
             value={customDesde}
             onChange={(e) => setCustomDesde(e.target.value)}
-            className="px-3 py-1.5 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
           <span className="text-slate-400 text-sm">—</span>
           <input
             type="date"
             value={customHasta}
             onChange={(e) => setCustomHasta(e.target.value)}
-            className="px-3 py-1.5 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
           <button
             onClick={handleApplyCustom}
-            className="px-4 py-1.5 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 transition-colors"
+            className="rounded-lg bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
           >
             Aplicar
           </button>

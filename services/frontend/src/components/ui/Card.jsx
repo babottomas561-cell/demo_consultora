@@ -9,7 +9,7 @@ export const CardHeader = ({ className, ...props }) => (
 );
 
 export const CardTitle = ({ className, ...props }) => (
-  <h3 className={cn('text-sm font-semibold text-slate-900', className)} {...props} />
+  <h3 className={cn('text-lg font-semibold text-slate-900', className)} {...props} />
 );
 
 export const CardContent = ({ className, ...props }) => (

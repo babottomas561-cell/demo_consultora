@@ -24,17 +24,28 @@ const formatDate = (isoString) => {
 };
 
 const StatCard = ({ title, metric, icon: Icon, loading }) => (
-  <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6 flex items-start justify-between">
+  <div className="flex min-h-40 flex-col gap-3 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="flex items-start justify-between gap-3">
     <div>
-      <p className="text-sm font-medium text-slate-500 mb-1">{title}</p>
+      <p className="mb-1 text-xs font-semibold uppercase tracking-[0.05em] text-slate-500">{title}</p>
       {loading ? (
         <div className="h-8 w-24 bg-slate-200 animate-pulse rounded mt-2"></div>
       ) : (
-        <h3 className="text-2xl font-bold text-slate-900">{metric}</h3>
+        <h3 className="text-3xl font-bold tracking-[-0.02em] text-slate-900 tabular-nums">{metric}</h3>
       )}
     </div>
-    <div className="p-3 bg-indigo-50 rounded-lg">
-      <Icon className="text-indigo-600" size={24} />
+    <div className="rounded-[10px] bg-indigo-50 p-3 text-indigo-600">
+      <Icon size={18} />
+    </div>
+    </div>
+    <div className="mt-auto flex h-9 items-end gap-1">
+      {[35, 50, 42, 60, 55, 68, 74, 62, 80, 72, 88, 95].map((height, index) => (
+        <span
+          key={index}
+          className={`flex-1 rounded-t-sm ${index === 11 ? 'bg-indigo-600' : 'bg-indigo-100'}`}
+          style={{ height: `${height}%` }}
+        />
+      ))}
     </div>
   </div>
 );
@@ -145,15 +156,15 @@ const DashboardView = () => {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Hola, {user?.email}</h1>
-          <p className="text-slate-500 mt-1">
+          <h1 className="text-2xl font-bold tracking-[-0.02em] text-slate-900">Hola, {user?.email}</h1>
+          <p className="mt-1 text-sm text-slate-500">
             Aquí tienes el resumen financiero de {activeCompany ? activeCompany.name : 'tu empresa'}.
           </p>
         </div>
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
         <StatCard 
           title="Ventas del Mes" 
           metric={formatCurrency(kpis?.total_ventas_mes || 0)} 
@@ -180,9 +191,9 @@ const DashboardView = () => {
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Main Chart */}
-        <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-100 p-6">
+        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm lg:col-span-2">
           <h3 className="text-lg font-semibold text-slate-900 mb-6">Proyección de Ventas (6 meses)</h3>
           {loading ? (
             <div className="h-80 w-full bg-slate-50 animate-pulse rounded-lg border border-slate-100"></div>
@@ -201,7 +212,7 @@ const DashboardView = () => {
                   />
                   <Tooltip 
                     cursor={{ fill: '#f1f5f9' }}
-                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                    contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(15 23 42 / 0.10)', background: '#fff' }}
                     formatter={(value) => formatCurrency(value)}
                     labelStyle={{ color: '#64748b', marginBottom: '4px' }}
                   />
@@ -213,7 +224,7 @@ const DashboardView = () => {
         </div>
 
         {/* Top Clientes Table */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
+        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
           <h3 className="text-lg font-semibold text-slate-900 mb-4">Top Clientes del Mes</h3>
           {loading ? (
             <div className="space-y-4">

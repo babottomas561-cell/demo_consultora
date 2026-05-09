@@ -4,6 +4,41 @@
 
 @layer base {
   :root {
+    --indigo-50: #eef2ff;
+    --indigo-100: #e0e7ff;
+    --indigo-300: #a5b4fc;
+    --indigo-500: #6366f1;
+    --indigo-600: #4f46e5;
+    --indigo-700: #4338ca;
+    --indigo-800: #3730a3;
+    --slate-50: #f8fafc;
+    --slate-100: #f1f5f9;
+    --slate-200: #e2e8f0;
+    --slate-300: #cbd5e1;
+    --slate-400: #94a3b8;
+    --slate-500: #64748b;
+    --slate-600: #475569;
+    --slate-700: #334155;
+    --slate-800: #1e293b;
+    --slate-900: #0f172a;
+    --emerald-50: #ecfdf5;
+    --emerald-100: #d1fae5;
+    --emerald-600: #16a34a;
+    --emerald-700: #047857;
+    --red-50: #fef2f2;
+    --red-100: #fee2e2;
+    --red-600: #dc2626;
+    --red-700: #b91c1c;
+    --red-800: #991b1b;
+    --amber-50: #fffbeb;
+    --amber-100: #fef3c7;
+    --amber-500: #eab308;
+    --amber-700: #a16207;
+    --orange-50: #fff7ed;
+    --orange-500: #f97316;
+    --orange-700: #c2410c;
+    --teal-600: #0f766e;
+
     --color-bg: 248 250 252;
     --color-surface: 255 255 255;
     --color-border: 226 232 240;
@@ -11,7 +46,18 @@
     --color-muted: 100 116 139;
     --color-brand: 79 70 229;
     --radius-ui: 8px;
+    --radius-card: 12px;
+    --radius-shell: 24px;
     --space-page: 2rem;
+    --shadow-sm: 0 1px 2px 0 rgb(15 23 42 / 0.05);
+    --shadow-md: 0 4px 6px -1px rgb(15 23 42 / 0.10), 0 2px 4px -2px rgb(15 23 42 / 0.05);
+    --shadow-xl: 0 20px 25px -5px rgb(15 23 42 / 0.10), 0 8px 10px -6px rgb(15 23 42 / 0.05);
+    --chart-indigo: #4f46e5;
+    --chart-teal: #0f766e;
+    --chart-emerald: #16a34a;
+    --chart-red: #dc2626;
+    --chart-orange: #f97316;
+    --chart-amber: #eab308;
   }
 
   html {
@@ -20,6 +66,7 @@
 
   body {
     @apply bg-slate-50 text-slate-900 font-sans antialiased;
+    font-feature-settings: "ss01", "cv01";
   }
 
   button,
@@ -36,10 +83,18 @@
   }
 
   .ui-card {
-    @apply rounded-ui border border-slate-200 bg-white shadow-ui;
+    @apply rounded-card border border-slate-200 bg-white shadow-ui;
   }
 
   .ui-muted {
     @apply text-slate-500;
+  }
+
+  .bi-section-label {
+    @apply text-[11px] font-semibold uppercase tracking-[0.05em] text-slate-500;
+  }
+
+  .bi-chart-tooltip {
+    @apply rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-ui-md;
   }
 }

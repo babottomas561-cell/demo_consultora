@@ -13,12 +13,12 @@ const VendedoresAnalyticsView = () => (
       return (
         <>
           {/* Ranking visual */}
-          <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
-            <h3 className="font-semibold text-slate-900 mb-4">Ranking por Facturación</h3>
+          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h3 className="mb-4 text-lg font-semibold text-slate-900">Ranking por Facturación</h3>
             <div className="space-y-4">
               {vendedores.map((v, i) => (
                 <div key={v.vendedor_id} className="flex items-center gap-4">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white ${i === 0 ? 'bg-amber-500' : i === 1 ? 'bg-slate-400' : i === 2 ? 'bg-amber-700' : 'bg-slate-300'}`}>
+                  <div className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold text-white ${i === 0 ? 'bg-amber-500' : i === 1 ? 'bg-slate-400' : i === 2 ? 'bg-amber-700' : 'bg-slate-300'}`}>
                     {i + 1}
                   </div>
                   <div className="w-40 truncate">
@@ -26,7 +26,7 @@ const VendedoresAnalyticsView = () => (
                     <p className="text-xs text-slate-400">{v.vendedor_id}</p>
                   </div>
                   <div className="flex-1">
-                    <div className="bg-slate-100 rounded-full h-5 overflow-hidden">
+                    <div className="h-5 overflow-hidden rounded-full bg-slate-100">
                       <div
                         className="h-full rounded-full transition-all flex items-center justify-end pr-2"
                         style={{
@@ -45,9 +45,9 @@ const VendedoresAnalyticsView = () => (
           </div>
 
           {/* Cards individuales */}
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
             {vendedores.map((v) => (
-              <div key={v.vendedor_id} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+              <div key={v.vendedor_id} className="rounded-xl border border-t-[3px] border-slate-200 border-t-indigo-600 bg-white p-4 shadow-sm">
                 <p className="text-sm font-bold text-slate-800">{v.vendedor_nombre}</p>
                 <div className="mt-3 space-y-2 text-sm">
                   <div className="flex justify-between">
