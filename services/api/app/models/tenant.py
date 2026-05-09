@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, UniqueConstraint, func
+from sqlalchemy import BigInteger, Column, Date, DateTime, ForeignKey, Integer, Numeric, String, Float, Boolean, UniqueConstraint, func
 from sqlalchemy.ext.declarative import declared_attr
 from app.core.database import Base
 
@@ -30,6 +30,21 @@ class Venta(TenantBase):
     total = Column(Float, nullable=False)
     total_real = Column(Float, nullable=True) # Deflactado
     created_at = Column(DateTime, default=func.now(), server_default=func.now(), nullable=False)
+    tipo_comprobante = Column(String, default='FA', server_default='FA')
+    tipo_factura = Column(String, nullable=True)
+    punto_de_venta = Column(Integer, nullable=True)
+    cod_vendedor = Column(Integer, nullable=True)
+    cod_empresa = Column(Integer, default=1, server_default='1')
+    tag = Column(String, default='S', server_default='S')
+    condicion_venta_tipo = Column(Integer, nullable=True)
+    neto = Column(Numeric, nullable=True)
+    iva_importe = Column(Numeric, nullable=True)
+    anulada = Column(String, default='N', server_default='N')
+    cod_deposito = Column(Integer, nullable=True)
+    cod_rubro = Column(Integer, nullable=True)
+    cod_subrubro = Column(Integer, nullable=True)
+    precio_compra_actual = Column(Numeric, nullable=True)
+    descuento_porc = Column(Numeric, default=0, server_default='0')
 
 class SimulationResult(TenantBase):
     __tablename__ = "simulation_results"
@@ -109,3 +124,76 @@ class MovimientoCaja(TenantBase):
     importe = Column(Float, nullable=False) # positivo (ingreso), negativo (egreso)
     saldo_acumulado = Column(Float, nullable=False)
     created_at = Column(DateTime, default=func.now(), server_default=func.now(), nullable=False)
+
+class Vendedor(TenantBase):
+    __tablename__ = "vendedores"
+
+    cod_vendedor = Column(Integer, primary_key=True)
+    nombre = Column(String, nullable=False)
+    email = Column(String, nullable=True)
+    habilitado = Column(Boolean, default=True, server_default='true')
+    cuota_mensual = Column(Numeric, nullable=True)
+
+class PuntoDeVenta(TenantBase):
+    __tablename__ = "puntos_de_venta"
+
+    id = Column(Integer, primary_key=True)
+    nombre = Column(String, nullable=False)
+    cod_empresa = Column(Integer, nullable=True)
+    habilitado = Column(Boolean, default=True, server_default='true')
+
+class Rubro(TenantBase):
+    __tablename__ = "rubros"
+
+    cod_rubro = Column(Integer, primary_key=True)
+    nombre = Column(String, nullable=False)
+
+class Subrubro(TenantBase):
+    __tablename__ = "subrubros"
+
+    cod_subrubro = Column(Integer, primary_key=True)
+    cod_rubro = Column(Integer, ForeignKey("rubros.cod_rubro"), nullable=True)
+    nombre = Column(String, nullable=False)
+
+class Presupuesto(TenantBase):
+    __tablename__ = "presupuestos"
+
+    id = Column(BigInteger, primary_key=True)
+    fecha = Column(Date, nullable=True)
+    cod_cliente = Column(Integer, nullable=True)
+    cliente_nombre = Column(String, nullable=True)
+    cod_vendedor = Column(Integer, nullable=True)
+    total = Column(Numeric, nullable=True)
+    confirmado = Column(Boolean, default=False, server_default='false')
+    fecha_conversion = Column(Date, nullable=True)
+    venta_id = Column(BigInteger, nullable=True)
+
+class Recibo(TenantBase):
+    __tablename__ = "recibos"
+
+    id = Column(BigInteger, primary_key=True)
+    fecha = Column(Date, nullable=True)
+    cod_cliente = Column(Integer, nullable=True)
+    cliente_nombre = Column(String, nullable=True)
+    forma_pago = Column(String, nullable=True)
+    importe = Column(Numeric, nullable=True)
+    factura_id = Column(BigInteger, nullable=True)
+    tarjeta_numero = Column(String, nullable=True)
+    tarjeta_cupon = Column(String, nullable=True)
+
+class Stock(TenantBase):
+    __tablename__ = "stock"
+
+    cod_articulo = Column(Integer, primary_key=True)
+    cod_deposito = Column(Integer, primary_key=True)
+    cantidad = Column(Numeric, nullable=True)
+    stock_minimo = Column(Numeric, default=0, server_default='0')
+    precio_compra_actual = Column(Numeric, nullable=True)
+    ultima_actualizacion = Column(DateTime, default=func.now(), server_default=func.now())
+
+class Deposito(TenantBase):
+    __tablename__ = "depositos"
+
+    cod_deposito = Column(Integer, primary_key=True)
+    nombre = Column(String, nullable=False)
+    habilitado = Column(Boolean, default=True, server_default='true')
