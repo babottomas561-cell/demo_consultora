@@ -39,8 +39,7 @@ const fmtM = (v) => {
 
 const fmtPct = (v) => `${Number(v ?? 0).toFixed(1)}%`;
 
-const CONDICION_LABEL = { 1: 'Efectivo', 2: 'Cta Cte', 3: 'Tarjeta', 4: 'Otros' };
-const CONDICION_COLORS = { 1: '#16a34a', 2: '#4f46e5', 3: '#eab308', 4: '#94a3b8' };
+const CONDICION_LABEL = { '1': 'Efectivo', '2': 'Cta Cte', '3': 'Tarjeta', '4': 'Otros' };
 const TIPO_COLORS = { FA: '#4f46e5', NC: '#ef4444', ND: '#f97316', PR: '#8b5cf6' };
 const SEGMENTO_COLORS = { A: '#4f46e5', B: '#eab308', C: '#94a3b8' };
 
@@ -551,7 +550,7 @@ const ComprobantesTab = ({ comprobantes: data, loading }) => {
     .filter((r) => r.value > 0);
   const condData = (data?.por_condicion_venta ?? [])
     .filter((r) => r.importe > 0)
-    .map((r, i) => ({ name: r.condicion, value: r.importe, color: COND_PALETTE[i % COND_PALETTE.length] }));
+    .map((r, i) => ({ name: CONDICION_LABEL[r.condicion] ?? r.condicion, value: r.importe, color: COND_PALETTE[i % COND_PALETTE.length] }));
   const factData = (data?.por_tipo_factura ?? [])
     .filter((r) => r.importe > 0)
     .map((r, i) => ({ name: `Factura ${r.tipo}`, value: r.importe, color: FACT_PALETTE[i % FACT_PALETTE.length] }));
