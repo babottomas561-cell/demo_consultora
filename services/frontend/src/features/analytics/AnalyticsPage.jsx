@@ -5,7 +5,9 @@ import { Activity, AlertCircle, Loader2, RefreshCw } from 'lucide-react';
 
 import apiClient from '../../api/client';
 import useAuthStore from '../../store/authStore';
-import { formatCurrency, withCompanyParam } from './analyticsUtils';
+import { useFilterStore } from '../../store/filterStore';
+import FilterBar from '../../components/FilterBar';
+import { formatCurrency, buildQueryParams } from './analyticsUtils';
 
 const formatYAxis = (value) => {
   if (Math.abs(value) >= 1000000) return `$${(value / 1000000).toFixed(1)}M`;
@@ -129,6 +131,7 @@ const DonutChart = ({ data, title }) => (
 const AnalyticsPage = ({ title, description, endpoint, buildView }) => {
   const user = useAuthStore((state) => state.user);
   const activeCompany = useAuthStore((state) => state.activeCompany);
+  const { desde, hasta } = useFilterStore();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -137,7 +140,8 @@ const AnalyticsPage = ({ title, description, endpoint, buildView }) => {
     setLoading(true);
     setError(null);
     try {
-      const response = await apiClient.get(`${endpoint}${withCompanyParam(user, activeCompany)}`);
+      const qs = buildQueryParams(user, activeCompany, desde, hasta);
+      const response = await apiClient.get(`${endpoint}${qs}`);
       setData(response.data);
     } catch (err) {
       console.error(err);
@@ -153,7 +157,7 @@ const AnalyticsPage = ({ title, description, endpoint, buildView }) => {
     } else {
       setLoading(false);
     }
-  }, [user, activeCompany, endpoint]);
+  }, [user, activeCompany, endpoint, desde, hasta]);
 
   if (user?.is_admin && !activeCompany) {
     return (
@@ -194,6 +198,7 @@ const AnalyticsPage = ({ title, description, endpoint, buildView }) => {
 
   return (
     <div className="space-y-6">
+      <FilterBar />
       <div>
         <h1 className="text-2xl font-bold text-slate-900">{title}</h1>
         <p className="text-slate-500 mt-1">{description}</p>

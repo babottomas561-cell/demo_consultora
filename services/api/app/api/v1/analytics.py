@@ -1,3 +1,6 @@
+from datetime import date, timedelta
+from typing import Optional
+
 from fastapi import APIRouter, Depends
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,50 +25,72 @@ def money(value) -> float:
     return float(value or 0)
 
 
+def resolve_dates(desde: Optional[str], hasta: Optional[str]):
+    """Return (desde, hasta) as ISO strings, defaulting to last 30 days."""
+    if not hasta:
+        hasta = date.today().isoformat()
+    if not desde:
+        desde = (date.today() - timedelta(days=30)).isoformat()
+    return desde, hasta
+
+
+def date_filter(col: str = "fecha") -> str:
+    """Return a WHERE clause fragment for date filtering using :desde/:hasta params."""
+    return f"{col} >= :desde::timestamp AND {col} <= (:hasta::date + interval '1 day')"
+
+
 @router.get("/ventas/resumen")
 async def ventas_resumen(
     company_id: int = None,
+    desde: str = None,
+    hasta: str = None,
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     tenant_schema = await get_tenant_schema(current_user, db, company_id)
     await set_tenant_search_path(db, tenant_schema)
+    desde, hasta = resolve_dates(desde, hasta)
+    params = {"desde": desde, "hasta": hasta}
 
-    totals = (await db.execute(text("""
+    totals = (await db.execute(text(f"""
         SELECT
             COALESCE(SUM(total), 0) AS total_ventas,
             COALESCE(SUM(cantidad), 0) AS unidades,
             COUNT(*) AS transacciones,
             COUNT(DISTINCT cliente_id) AS clientes
         FROM ventas
-    """))).mappings().one()
-    series = (await db.execute(text("""
+        WHERE {date_filter()}
+    """), params)).mappings().one()
+    series = (await db.execute(text(f"""
         SELECT to_char(date_trunc('month', fecha), 'YYYY-MM') AS periodo,
                COALESCE(SUM(total), 0) AS total,
                COUNT(*) AS transacciones
         FROM ventas
+        WHERE {date_filter()}
         GROUP BY 1
         ORDER BY 1
-    """))).mappings().all()
-    top_productos = (await db.execute(text("""
+    """), params)).mappings().all()
+    top_productos = (await db.execute(text(f"""
         SELECT producto_id, COALESCE(MAX(producto_nombre), producto_id) AS producto_nombre,
                COALESCE(SUM(total), 0) AS total,
                COALESCE(SUM(cantidad), 0) AS unidades
         FROM ventas
+        WHERE {date_filter()}
         GROUP BY producto_id
         ORDER BY total DESC
         LIMIT 10
-    """))).mappings().all()
-    top_clientes = (await db.execute(text("""
+    """), params)).mappings().all()
+    top_clientes = (await db.execute(text(f"""
         SELECT cliente_id, COALESCE(MAX(cliente_nombre), cliente_id) AS cliente_nombre,
                COUNT(*) AS transacciones,
                COALESCE(SUM(total), 0) AS facturacion,
                CASE WHEN COUNT(*) > 0 THEN COALESCE(SUM(total), 0) / COUNT(*) ELSE 0 END AS ticket_promedio
         FROM ventas
+        WHERE {date_filter()}
         GROUP BY cliente_id
         ORDER BY facturacion DESC
         LIMIT 10
-    """))).mappings().all()
+    """), params)).mappings().all()
 
     total_ventas = money(totals["total_ventas"])
     transacciones = totals["transacciones"]
@@ -91,51 +116,60 @@ async def ventas_resumen(
 @router.get("/compras/resumen")
 async def compras_resumen(
     company_id: int = None,
+    desde: str = None,
+    hasta: str = None,
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     tenant_schema = await get_tenant_schema(current_user, db, company_id)
     await set_tenant_search_path(db, tenant_schema)
+    desde, hasta = resolve_dates(desde, hasta)
+    params = {"desde": desde, "hasta": hasta}
 
-    totals = (await db.execute(text("""
+    totals = (await db.execute(text(f"""
         SELECT
             COALESCE(SUM(total), 0) AS total_compras,
             COALESCE(SUM(cantidad), 0) AS unidades,
             COUNT(*) AS ordenes,
             COUNT(DISTINCT proveedor_id) AS proveedores
         FROM compras
-    """))).mappings().one()
+        WHERE {date_filter()}
+    """), params)).mappings().one()
 
-    total_ventas_row = (await db.execute(text("""
+    total_ventas_row = (await db.execute(text(f"""
         SELECT COALESCE(SUM(total), 0) AS total FROM ventas
-    """))).mappings().one()
+        WHERE {date_filter()}
+    """), params)).mappings().one()
 
-    series = (await db.execute(text("""
+    series = (await db.execute(text(f"""
         SELECT to_char(date_trunc('month', fecha), 'YYYY-MM') AS periodo,
                COALESCE(SUM(total), 0) AS total,
                COUNT(*) AS ordenes
         FROM compras
+        WHERE {date_filter()}
         GROUP BY 1
         ORDER BY 1
-    """))).mappings().all()
-    top_proveedores = (await db.execute(text("""
+    """), params)).mappings().all()
+    top_proveedores = (await db.execute(text(f"""
         SELECT proveedor_id, proveedor_nombre,
                COALESCE(SUM(total), 0) AS total,
                COUNT(*) AS ordenes
         FROM compras
+        WHERE {date_filter()}
         GROUP BY proveedor_id, proveedor_nombre
         ORDER BY total DESC
         LIMIT 10
-    """))).mappings().all()
-    top_productos = (await db.execute(text("""
+    """), params)).mappings().all()
+    top_productos = (await db.execute(text(f"""
         SELECT producto_id, COALESCE(MAX(producto_nombre), producto_id) AS producto_nombre,
                COALESCE(SUM(cantidad), 0) AS cantidad,
                COALESCE(SUM(total), 0) AS total
         FROM compras
+        WHERE {date_filter()}
         GROUP BY producto_id
         ORDER BY total DESC
         LIMIT 10
-    """))).mappings().all()
+    """), params)).mappings().all()
 
     total_compras = money(totals["total_compras"])
     total_ventas = money(total_ventas_row["total"])
@@ -163,49 +197,53 @@ async def compras_resumen(
 @router.get("/resultado/resumen")
 async def resultado_resumen(
     company_id: int = None,
+    desde: str = None,
+    hasta: str = None,
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     tenant_schema = await get_tenant_schema(current_user, db, company_id)
     await set_tenant_search_path(db, tenant_schema)
+    desde, hasta = resolve_dates(desde, hasta)
+    params = {"desde": desde, "hasta": hasta}
 
-    totals = (await db.execute(text("""
+    totals = (await db.execute(text(f"""
         WITH ventas_total AS (
-            SELECT COALESCE(SUM(total), 0) AS total FROM ventas
+            SELECT COALESCE(SUM(total), 0) AS total FROM ventas WHERE {date_filter()}
         ),
         compras_total AS (
-            SELECT COALESCE(SUM(total), 0) AS total FROM compras
+            SELECT COALESCE(SUM(total), 0) AS total FROM compras WHERE {date_filter()}
         ),
         gastos_total AS (
             SELECT COALESCE(SUM(ABS(importe)), 0) AS total
             FROM movimientos_caja
-            WHERE tipo = 'gasto'
+            WHERE tipo = 'gasto' AND {date_filter()}
         )
         SELECT ventas_total.total AS ingresos,
                compras_total.total AS costo_mercaderia,
                gastos_total.total AS gastos,
                ventas_total.total - compras_total.total - gastos_total.total AS resultado
         FROM ventas_total, compras_total, gastos_total
-    """))).mappings().one()
-    series = (await db.execute(text("""
+    """), params)).mappings().one()
+    series = (await db.execute(text(f"""
         WITH meses AS (
-            SELECT date_trunc('month', fecha) AS mes FROM ventas
+            SELECT date_trunc('month', fecha) AS mes FROM ventas WHERE {date_filter()}
             UNION
-            SELECT date_trunc('month', fecha) AS mes FROM compras
+            SELECT date_trunc('month', fecha) AS mes FROM compras WHERE {date_filter()}
             UNION
-            SELECT date_trunc('month', fecha) AS mes FROM movimientos_caja
+            SELECT date_trunc('month', fecha) AS mes FROM movimientos_caja WHERE {date_filter()}
         ),
         ventas_mes AS (
             SELECT date_trunc('month', fecha) AS mes, SUM(total) AS ingresos
-            FROM ventas GROUP BY 1
+            FROM ventas WHERE {date_filter()} GROUP BY 1
         ),
         compras_mes AS (
             SELECT date_trunc('month', fecha) AS mes, SUM(total) AS compras
-            FROM compras GROUP BY 1
+            FROM compras WHERE {date_filter()} GROUP BY 1
         ),
         gastos_mes AS (
             SELECT date_trunc('month', fecha) AS mes, SUM(ABS(importe)) AS gastos
-            FROM movimientos_caja WHERE tipo = 'gasto' GROUP BY 1
+            FROM movimientos_caja WHERE tipo = 'gasto' AND {date_filter()} GROUP BY 1
         )
         SELECT to_char(meses.mes, 'YYYY-MM') AS periodo,
                COALESCE(ventas_mes.ingresos, 0) AS ingresos,
@@ -221,7 +259,7 @@ async def resultado_resumen(
         LEFT JOIN compras_mes USING (mes)
         LEFT JOIN gastos_mes USING (mes)
         ORDER BY periodo
-    """))).mappings().all()
+    """), params)).mappings().all()
 
     ingresos = money(totals["ingresos"])
     resultado = money(totals["resultado"])
@@ -241,28 +279,34 @@ async def resultado_resumen(
 @router.get("/clientes/resumen")
 async def clientes_resumen(
     company_id: int = None,
+    desde: str = None,
+    hasta: str = None,
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     tenant_schema = await get_tenant_schema(current_user, db, company_id)
     await set_tenant_search_path(db, tenant_schema)
+    desde, hasta = resolve_dates(desde, hasta)
+    params = {"desde": desde, "hasta": hasta}
 
-    totals = (await db.execute(text("""
+    totals = (await db.execute(text(f"""
         SELECT
             COUNT(DISTINCT cliente_id) AS clientes_con_movimiento,
             COALESCE(SUM(CASE WHEN tipo = 'factura' THEN importe ELSE 0 END), 0) AS facturado,
             COALESCE(SUM(CASE WHEN tipo = 'recibo' THEN ABS(importe) ELSE 0 END), 0) AS cobrado,
             COALESCE(SUM(importe), 0) AS saldo_total
         FROM cuentas_corrientes_clientes
-    """))).mappings().one()
-    top_saldos = (await db.execute(text("""
+        WHERE {date_filter()}
+    """), params)).mappings().one()
+    top_saldos = (await db.execute(text(f"""
         SELECT cliente_id, cliente_nombre, MAX(fecha) AS ultimo_movimiento,
                COALESCE(SUM(importe), 0) AS saldo
         FROM cuentas_corrientes_clientes
+        WHERE {date_filter()}
         GROUP BY cliente_id, cliente_nombre
         ORDER BY saldo DESC
         LIMIT 10
-    """))).mappings().all()
+    """), params)).mappings().all()
     ageing = (await db.execute(text("""
         SELECT
             COALESCE(SUM(CASE WHEN fecha_vencimiento < now() AND fecha_vencimiento >= now() - interval '30 days' THEN GREATEST(importe, 0) ELSE 0 END), 0) AS vencido_0_30,
@@ -314,28 +358,34 @@ async def clientes_resumen(
 @router.get("/proveedores/resumen")
 async def proveedores_resumen(
     company_id: int = None,
+    desde: str = None,
+    hasta: str = None,
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     tenant_schema = await get_tenant_schema(current_user, db, company_id)
     await set_tenant_search_path(db, tenant_schema)
+    desde, hasta = resolve_dates(desde, hasta)
+    params = {"desde": desde, "hasta": hasta}
 
-    totals = (await db.execute(text("""
+    totals = (await db.execute(text(f"""
         SELECT
             COUNT(DISTINCT proveedor_id) AS proveedores_con_movimiento,
             COALESCE(SUM(CASE WHEN tipo = 'factura' THEN importe ELSE 0 END), 0) AS facturado,
             COALESCE(SUM(CASE WHEN tipo = 'pago' THEN ABS(importe) ELSE 0 END), 0) AS pagado,
             COALESCE(SUM(importe), 0) AS saldo_total
         FROM cuentas_corrientes_proveedores
-    """))).mappings().one()
-    top_saldos = (await db.execute(text("""
+        WHERE {date_filter()}
+    """), params)).mappings().one()
+    top_saldos = (await db.execute(text(f"""
         SELECT proveedor_id, proveedor_nombre, MAX(fecha) AS ultimo_movimiento,
                COALESCE(SUM(importe), 0) AS saldo
         FROM cuentas_corrientes_proveedores
+        WHERE {date_filter()}
         GROUP BY proveedor_id, proveedor_nombre
         ORDER BY saldo DESC
         LIMIT 10
-    """))).mappings().all()
+    """), params)).mappings().all()
     proximos_vencimientos = (await db.execute(text("""
         SELECT proveedor_id, proveedor_nombre, comprobante_id, fecha_vencimiento, importe
         FROM cuentas_corrientes_proveedores
@@ -373,29 +423,35 @@ async def proveedores_resumen(
 @router.get("/caja/resumen")
 async def caja_resumen(
     company_id: int = None,
+    desde: str = None,
+    hasta: str = None,
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     tenant_schema = await get_tenant_schema(current_user, db, company_id)
     await set_tenant_search_path(db, tenant_schema)
+    desde, hasta = resolve_dates(desde, hasta)
+    params = {"desde": desde, "hasta": hasta}
 
-    totals = (await db.execute(text("""
+    totals = (await db.execute(text(f"""
         SELECT
             COALESCE(SUM(CASE WHEN importe > 0 THEN importe ELSE 0 END), 0) AS ingresos,
             COALESCE(SUM(CASE WHEN importe < 0 THEN ABS(importe) ELSE 0 END), 0) AS egresos,
             COALESCE(SUM(importe), 0) AS saldo_neto,
             COUNT(*) AS movimientos
         FROM movimientos_caja
-    """))).mappings().one()
-    series = (await db.execute(text("""
+        WHERE {date_filter()}
+    """), params)).mappings().one()
+    series = (await db.execute(text(f"""
         SELECT to_char(date_trunc('month', fecha), 'YYYY-MM') AS periodo,
                COALESCE(SUM(CASE WHEN importe > 0 THEN importe ELSE 0 END), 0) AS cobros,
                COALESCE(SUM(CASE WHEN importe < 0 THEN ABS(importe) ELSE 0 END), 0) AS pagos,
                COALESCE(SUM(importe), 0) AS saldo_neto
         FROM movimientos_caja
+        WHERE {date_filter()}
         GROUP BY 1
         ORDER BY 1
-    """))).mappings().all()
+    """), params)).mappings().all()
 
     # Build cumulative saldo
     saldo_acum = 0
@@ -406,12 +462,13 @@ async def caja_resumen(
         d["saldo_acumulado"] = saldo_acum
         series_with_acum.append(d)
 
-    ultimos_movimientos = (await db.execute(text("""
+    ultimos_movimientos = (await db.execute(text(f"""
         SELECT fecha, tipo, descripcion, importe, saldo_acumulado
         FROM movimientos_caja
+        WHERE {date_filter()}
         ORDER BY fecha DESC
         LIMIT 15
-    """))).mappings().all()
+    """), params)).mappings().all()
 
     return {
         "summary": {
@@ -434,25 +491,31 @@ async def caja_resumen(
 @router.get("/stock/resumen")
 async def stock_resumen(
     company_id: int = None,
+    desde: str = None,
+    hasta: str = None,
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     tenant_schema = await get_tenant_schema(current_user, db, company_id)
     await set_tenant_search_path(db, tenant_schema)
+    desde, hasta = resolve_dates(desde, hasta)
+    params = {"desde": desde, "hasta": hasta}
 
-    stock = (await db.execute(text("""
+    stock = (await db.execute(text(f"""
         WITH compradas AS (
             SELECT producto_id,
                    COALESCE(MAX(producto_nombre), producto_id) AS producto_nombre,
                    COALESCE(SUM(cantidad), 0) AS unidades_compradas,
                    CASE WHEN SUM(cantidad) > 0 THEN SUM(total) / SUM(cantidad) ELSE 0 END AS precio_unitario_promedio
             FROM compras
+            WHERE {date_filter()}
             GROUP BY producto_id
         ),
         vendidas AS (
             SELECT producto_id,
                    COALESCE(SUM(cantidad), 0) AS unidades_vendidas
             FROM ventas
+            WHERE {date_filter()}
             GROUP BY producto_id
         )
         SELECT c.producto_id,
@@ -465,7 +528,7 @@ async def stock_resumen(
         FROM compradas c
         LEFT JOIN vendidas v USING (producto_id)
         ORDER BY valor_stock_estimado DESC
-    """))).mappings().all()
+    """), params)).mappings().all()
 
     stock_list = []
     for row in stock:
@@ -496,11 +559,15 @@ async def stock_resumen(
 @router.get("/vendedores/resumen")
 async def vendedores_resumen(
     company_id: int = None,
+    desde: str = None,
+    hasta: str = None,
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     tenant_schema = await get_tenant_schema(current_user, db, company_id)
     await set_tenant_search_path(db, tenant_schema)
+    desde, hasta = resolve_dates(desde, hasta)
+    params = {"desde": desde, "hasta": hasta}
 
     VENDEDORES = [
         {"id": "V001", "nombre": "Lucas García"},
@@ -510,14 +577,15 @@ async def vendedores_resumen(
         {"id": "V005", "nombre": "Diego Fernández"},
     ]
 
-    # Get all client sales summaries
-    client_sales = (await db.execute(text("""
+    # Get all client sales summaries within the date range
+    client_sales = (await db.execute(text(f"""
         SELECT cliente_id,
                COUNT(*) AS transacciones,
                COALESCE(SUM(total), 0) AS facturacion
         FROM ventas
+        WHERE {date_filter()}
         GROUP BY cliente_id
-    """))).mappings().all()
+    """), params)).mappings().all()
 
     # Deterministic assignment: hash(cliente_id) mod 5
     vendedor_data = {v["id"]: {
