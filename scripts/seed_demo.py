@@ -16,6 +16,13 @@ def _insert_chunk(session, tenant_schema: str, table_name: str, data: list, conf
     if not data:
         return 0, 0
 
+    if conflict_cols:
+        deduped = {}
+        for row in data:
+            key = tuple(row.get(col) for col in conflict_cols)
+            deduped[key] = row
+        data = list(deduped.values())
+
     session.execute(text(f'SET search_path TO "{tenant_schema}"'))
 
     table_obj = table(table_name, *[column(k) for k in data[0].keys()])
@@ -92,6 +99,57 @@ def _insert_ventas_chunk(session, tenant_schema: str, ventas):
     rows_inserted, failed = _insert_chunk(session, tenant_schema, "ventas", ventas_data, ['fecha', 'cliente_id', 'producto_id'])
     return rows_inserted, failed
 
+def _backfill_ventas_infomanager_fields(session, tenant_schema: str):
+    session.execute(text(f'SET search_path TO "{tenant_schema}"'))
+    session.execute(text("""
+        UPDATE ventas
+        SET
+            tipo_comprobante = COALESCE(tipo_comprobante, 'FA'),
+            tipo_factura = COALESCE(tipo_factura, CASE WHEN cliente_id LIKE 'MAY%' THEN 'A' ELSE 'B' END),
+            punto_de_venta = COALESCE(punto_de_venta, ((id % 3) + 1)),
+            cod_vendedor = COALESCE(cod_vendedor, ((id % 5) + 1)),
+            cod_empresa = COALESCE(cod_empresa, 1),
+            tag = COALESCE(tag, 'S'),
+            condicion_venta_tipo = COALESCE(condicion_venta_tipo, CASE WHEN cliente_id LIKE 'MAY%' THEN 2 ELSE 1 END),
+            neto = COALESCE(neto, total / 1.21),
+            iva_importe = COALESCE(iva_importe, total - (total / 1.21)),
+            anulada = COALESCE(anulada, 'N'),
+            cod_deposito = COALESCE(cod_deposito, CASE WHEN id % 4 = 0 THEN 2 ELSE 1 END),
+            cod_rubro = COALESCE(cod_rubro, CASE
+                WHEN producto_id LIKE 'REM%' THEN 1
+                WHEN producto_id LIKE 'PAN%' THEN 2
+                WHEN producto_id LIKE 'VES%' THEN 3
+                WHEN producto_id LIKE 'CAM%' THEN 4
+                WHEN producto_id LIKE 'BUZ%' THEN 5
+                WHEN producto_id LIKE 'CAL%' THEN 6
+                WHEN producto_id LIKE 'ACC%' THEN 7
+                ELSE 8
+            END),
+            cod_subrubro = COALESCE(cod_subrubro, CASE producto_id
+                WHEN 'REM001' THEN 101
+                WHEN 'REM002' THEN 102
+                WHEN 'PAN001' THEN 201
+                WHEN 'PAN002' THEN 202
+                WHEN 'VES001' THEN 301
+                WHEN 'VES002' THEN 302
+                WHEN 'CAM001' THEN 401
+                WHEN 'CAM002' THEN 402
+                WHEN 'BUZ001' THEN 501
+                WHEN 'CAL001' THEN 601
+                WHEN 'CAL002' THEN 602
+                WHEN 'CAL003' THEN 603
+                WHEN 'ACC001' THEN 701
+                WHEN 'ACC002' THEN 702
+                ELSE 801
+            END),
+            precio_compra_actual = COALESCE(precio_compra_actual, precio_unitario * 0.55),
+            descuento_porc = COALESCE(descuento_porc, CASE WHEN cliente_id LIKE 'MAY%' THEN 25 ELSE 0 END)
+        WHERE cod_vendedor IS NULL
+           OR precio_compra_actual IS NULL
+           OR cod_rubro IS NULL
+           OR cod_subrubro IS NULL
+    """))
+
 def seed_tenant(tenant_schema: str, database_url: str):
     print(f"Connecting to DB and seeding tenant: {tenant_schema}...")
     engine = create_engine(database_url)
@@ -131,6 +189,7 @@ def seed_tenant(tenant_schema: str, database_url: str):
                 chunk = ventas[i:i+chunk_size]
                 inserted, _ = _insert_ventas_chunk(session, tenant_schema, chunk)
                 total_ventas += inserted
+            _backfill_ventas_infomanager_fields(session, tenant_schema)
             print(f"Inserted {total_ventas} ventas.")
 
             # Compras
