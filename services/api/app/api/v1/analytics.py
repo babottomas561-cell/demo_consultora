@@ -2272,3 +2272,534 @@ async def resultado_exportar(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": "attachment; filename=resultado.xlsx"},
     )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# FASE 6: Panel Stock
+# ══════════════════════════════════════════════════════════════════════════════
+
+# Hard-coded mapping between stock.cod_articulo (int) and ventas.producto_id (str)
+# This is stable for the demo product catalog.
+_ARTICULO_MAP_SQL = """
+    (VALUES
+        (1001,'REM001','Remera básica'),
+        (1002,'REM002','Remera estampada'),
+        (2001,'PAN001','Pantalón jean slim'),
+        (2002,'PAN002','Pantalón cargo'),
+        (3001,'VES001','Vestido floral'),
+        (3002,'VES002','Vestido casual'),
+        (4001,'CAM001','Campera impermeable'),
+        (4002,'CAM002','Campera de abrigo'),
+        (5001,'BUZ001','Buzo con capucha'),
+        (6001,'CAL001','Zapatillas urbanas'),
+        (6002,'CAL002','Botas de cuero'),
+        (6003,'CAL003','Sandalias verano'),
+        (7001,'ACC001','Cinturón cuero'),
+        (7002,'ACC002','Cartera mediana')
+    ) AS am(cod_articulo, producto_id, nombre)
+"""
+
+
+@router.get("/stock/kpis")
+async def stock_kpis(
+    company_id: int = None,
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+    params = filters.sql_params()
+    ventas_where = _ventas_base_where(filters)
+
+    # Aggregate from stock table grouped by cod_articulo (each article can span multiple depositos)
+    stock_totals = (await db.execute(text("""
+        SELECT
+            COUNT(DISTINCT cod_articulo)                           AS total_articulos,
+            COUNT(DISTINCT CASE WHEN cantidad > 0 THEN cod_articulo END) AS con_stock,
+            COUNT(DISTINCT CASE WHEN cantidad <= 0 THEN cod_articulo END) AS sin_stock,
+            COUNT(DISTINCT CASE WHEN cantidad > 0 AND cantidad < COALESCE(stock_minimo, 50)
+                                THEN cod_articulo END)              AS stock_bajo,
+            COALESCE(SUM(cantidad * COALESCE(precio_compra_actual, 0)), 0)  AS valor_costo,
+            COALESCE(SUM(cantidad), 0)                             AS total_unidades
+        FROM stock
+    """))).mappings().one()
+
+    # Ventas diarias por articulo en el período → días inventario
+    dias_90_ago = (filters.hasta - timedelta(days=90)).isoformat() if hasattr(filters, 'hasta') else None
+
+    ventas_mov = (await db.execute(text(f"""
+        WITH vperiod AS (
+            SELECT am.cod_articulo, COALESCE(SUM(v.cantidad),0) AS vendido_periodo
+            FROM {_ARTICULO_MAP_SQL}
+            LEFT JOIN ventas v ON v.producto_id = am.producto_id AND {ventas_where}
+            GROUP BY am.cod_articulo
+        ),
+        stock_agg AS (
+            SELECT cod_articulo, SUM(cantidad) AS cantidad_total
+            FROM stock GROUP BY cod_articulo
+        )
+        SELECT
+            COALESCE(AVG(
+                CASE WHEN vp.vendido_periodo > 0
+                     THEN sa.cantidad_total / (vp.vendido_periodo / GREATEST(
+                         (:hasta::date - :desde::date), 1
+                     ))
+                END
+            ), 0) AS dias_inv_prom
+        FROM stock_agg sa
+        LEFT JOIN vperiod vp USING (cod_articulo)
+    """), params)).mappings().one()
+
+    # Articles with no ventas in last 90 days
+    noventa = (filters.hasta - timedelta(days=90)).isoformat() if hasattr(filters, 'hasta') else str(filters.desde)
+    sin_mov_rows = (await db.execute(text(f"""
+        SELECT COUNT(DISTINCT am.cod_articulo) AS cnt
+        FROM {_ARTICULO_MAP_SQL}
+        JOIN stock s ON s.cod_articulo = am.cod_articulo AND s.cantidad > 0
+        WHERE am.producto_id NOT IN (
+            SELECT DISTINCT producto_id FROM ventas
+            WHERE fecha >= :noventa90 AND tipo_comprobante='FA'
+        )
+    """), {"noventa90": noventa}))).mappings().one()
+
+    total = int(stock_totals["total_articulos"] or 0)
+    con = int(stock_totals["con_stock"] or 0)
+    sin = int(stock_totals["sin_stock"] or 0)
+    bajo = int(stock_totals["stock_bajo"] or 0)
+    val_costo = money(stock_totals["valor_costo"])
+    dias_inv = round(float(ventas_mov["dias_inv_prom"] or 0), 1)
+    sin_mov = int(sin_mov_rows["cnt"] or 0)
+
+    return {
+        "total_articulos": {"actual": total},
+        "con_stock": {"actual": con},
+        "sin_stock": {"actual": sin},
+        "stock_bajo": {"actual": bajo},
+        "valor_inventario_costo": {"actual": round(val_costo, 2)},
+        "dias_inventario_promedio": {"actual": dias_inv},
+        "articulos_sin_movimiento": {"actual": sin_mov},
+    }
+
+
+@router.get("/stock/por-producto")
+async def stock_por_producto(
+    company_id: int = None,
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+    params = dict(filters.sql_params())
+    ventas_where = _ventas_base_where(filters)
+    noventa = (filters.hasta - timedelta(days=90)).isoformat()
+    dias_periodo = max((filters.hasta - filters.desde).days, 1)
+    params["dias_periodo"] = dias_periodo
+    params["noventa90"] = noventa
+
+    rows = (await db.execute(text(f"""
+        WITH vperiod AS (
+            SELECT am.cod_articulo, am.nombre,
+                   COALESCE(SUM(CASE WHEN v.tipo_comprobante='FA' THEN v.cantidad ELSE 0 END), 0) AS vendido,
+                   MAX(CASE WHEN v.tipo_comprobante='FA' THEN v.fecha END) AS ultimo_mov
+            FROM {_ARTICULO_MAP_SQL}
+            LEFT JOIN ventas v ON v.producto_id = am.producto_id AND {ventas_where}
+            GROUP BY am.cod_articulo, am.nombre
+        ),
+        stock_agg AS (
+            SELECT s.cod_articulo, d.nombre AS deposito_nombre, s.cod_deposito,
+                   SUM(s.cantidad) AS cantidad,
+                   MIN(s.stock_minimo) AS stock_minimo,
+                   AVG(s.precio_compra_actual) AS precio_compra_actual,
+                   MAX(s.ultima_actualizacion) AS ultima_actualizacion
+            FROM stock s
+            LEFT JOIN depositos d ON d.cod_deposito = s.cod_deposito
+            GROUP BY s.cod_articulo, d.nombre, s.cod_deposito
+        )
+        SELECT
+            sa.cod_articulo, sa.cod_deposito,
+            COALESCE(sa.deposito_nombre, 'Sin depósito') AS deposito_nombre,
+            vp.nombre,
+            sa.cantidad,
+            sa.stock_minimo,
+            sa.precio_compra_actual,
+            COALESCE(sa.cantidad * sa.precio_compra_actual, 0) AS valor_stock,
+            vp.vendido AS unidades_vendidas_periodo,
+            vp.ultimo_mov
+        FROM stock_agg sa
+        JOIN vperiod vp ON vp.cod_articulo = sa.cod_articulo
+        ORDER BY valor_stock DESC
+    """), params)).mappings().all()
+
+    hoy = filters.hasta
+    productos = []
+    for r in rows:
+        cant = float(r["cantidad"] or 0)
+        vendido = float(r["unidades_vendidas_periodo"] or 0)
+        venta_diaria = round(vendido / dias_periodo, 2)
+        dias_inv = round(cant / venta_diaria, 1) if venta_diaria > 0 else 999
+        ultimo_mov = r["ultimo_mov"]
+        dias_sin_mov = (hoy - ultimo_mov.date()).days if ultimo_mov else 999
+
+        if cant <= 0:
+            estado = "sin_stock"
+            alerta = "sin_stock"
+        elif cant < float(r["stock_minimo"] or 50):
+            estado = "bajo"
+            alerta = "bajo_minimo"
+        elif dias_inv > 180:
+            estado = "sobrestock"
+            alerta = "sobrestock"
+        elif dias_sin_mov >= 90:
+            estado = "sin_movimiento"
+            alerta = "sin_movimiento_90d"
+        else:
+            estado = "ok"
+            alerta = None
+
+        productos.append({
+            "cod_articulo": r["cod_articulo"],
+            "nombre": r["nombre"],
+            "cod_deposito": r["cod_deposito"],
+            "deposito_nombre": r["deposito_nombre"],
+            "cantidad": round(cant, 0),
+            "stock_minimo": float(r["stock_minimo"] or 50),
+            "precio_compra_actual": round(float(r["precio_compra_actual"] or 0), 2),
+            "valor_stock": round(float(r["valor_stock"] or 0), 2),
+            "unidades_vendidas_periodo": round(vendido, 0),
+            "venta_diaria_promedio": venta_diaria,
+            "dias_inventario": dias_inv,
+            "ultimo_movimiento": ultimo_mov.date().isoformat() if ultimo_mov else None,
+            "dias_sin_movimiento": dias_sin_mov,
+            "estado": estado,
+            "alerta": alerta,
+        })
+
+    # por_deposito summary
+    dep_map: dict = {}
+    for p in productos:
+        k = p["cod_deposito"]
+        if k not in dep_map:
+            dep_map[k] = {"cod_deposito": k, "nombre": p["deposito_nombre"], "total_articulos": 0, "valor_total": 0.0}
+        dep_map[k]["total_articulos"] += 1
+        dep_map[k]["valor_total"] += p["valor_stock"]
+    for d in dep_map.values():
+        d["valor_total"] = round(d["valor_total"], 2)
+
+    return {"productos": productos, "por_deposito": list(dep_map.values())}
+
+
+@router.get("/stock/movimientos")
+async def stock_movimientos(
+    company_id: int = None,
+    cod_articulo: Optional[int] = None,
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+    params = dict(filters.sql_params())
+    ventas_where = _ventas_base_where(filters)
+    compras_where = text_filter_clause("compras", filters)
+
+    articulo_filter_v = ""
+    articulo_filter_c = ""
+    if cod_articulo:
+        articulo_filter_v = f"AND v.producto_id = (SELECT am.producto_id FROM {_ARTICULO_MAP_SQL} WHERE am.cod_articulo = :cod_articulo_val LIMIT 1)"
+        articulo_filter_c = f"AND c.producto_id = (SELECT am.producto_id FROM {_ARTICULO_MAP_SQL} WHERE am.cod_articulo = :cod_articulo_val LIMIT 1)"
+        params["cod_articulo_val"] = cod_articulo
+
+    series_rows = (await db.execute(text(f"""
+        WITH meses AS (
+            SELECT to_char(date_trunc('month', fecha), 'YYYY-MM') AS periodo FROM ventas WHERE {ventas_where}
+            UNION
+            SELECT to_char(date_trunc('month', fecha), 'YYYY-MM') AS periodo FROM compras WHERE {compras_where}
+        ),
+        entradas AS (
+            SELECT to_char(date_trunc('month', fecha), 'YYYY-MM') AS periodo, SUM(cantidad) AS qty
+            FROM compras WHERE {compras_where} {articulo_filter_c}
+            GROUP BY 1
+        ),
+        salidas AS (
+            SELECT to_char(date_trunc('month', fecha), 'YYYY-MM') AS periodo,
+                   SUM(CASE WHEN tipo_comprobante='FA' THEN cantidad ELSE -cantidad END) AS qty
+            FROM ventas v WHERE {ventas_where} {articulo_filter_v}
+            GROUP BY 1
+        )
+        SELECT m.periodo,
+               COALESCE(e.qty, 0) AS entradas,
+               COALESCE(s.qty, 0) AS salidas,
+               COALESCE(e.qty, 0) - COALESCE(s.qty, 0) AS saldo_periodo
+        FROM meses m
+        LEFT JOIN entradas e USING (periodo)
+        LEFT JOIN salidas s USING (periodo)
+        ORDER BY 1
+    """), params)).mappings().all()
+
+    por_articulo_rows = (await db.execute(text(f"""
+        WITH ent AS (
+            SELECT am.cod_articulo, am.nombre, COALESCE(SUM(c.cantidad), 0) AS entradas
+            FROM {_ARTICULO_MAP_SQL}
+            LEFT JOIN compras c ON c.producto_id = am.producto_id AND {compras_where}
+            GROUP BY am.cod_articulo, am.nombre
+        ),
+        sal AS (
+            SELECT am.cod_articulo, COALESCE(SUM(CASE WHEN v.tipo_comprobante='FA' THEN v.cantidad ELSE 0 END), 0) AS salidas
+            FROM {_ARTICULO_MAP_SQL}
+            LEFT JOIN ventas v ON v.producto_id = am.producto_id AND {ventas_where}
+            GROUP BY am.cod_articulo
+        ),
+        stk AS (
+            SELECT cod_articulo, SUM(cantidad) AS stock_actual FROM stock GROUP BY cod_articulo
+        )
+        SELECT e.cod_articulo, e.nombre, e.entradas, s.salidas, COALESCE(st.stock_actual, 0) AS stock_actual
+        FROM ent e
+        LEFT JOIN sal s USING (cod_articulo)
+        LEFT JOIN stk st USING (cod_articulo)
+        ORDER BY e.entradas DESC
+    """), params)).mappings().all()
+
+    return {
+        "series": [dict(r) for r in series_rows],
+        "por_articulo": [dict(r) for r in por_articulo_rows],
+    }
+
+
+@router.get("/stock/rotacion")
+async def stock_rotacion(
+    company_id: int = None,
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+    params = dict(filters.sql_params())
+    ventas_where = _ventas_base_where(filters)
+    dias_periodo = max((filters.hasta - filters.desde).days, 1)
+    params["dias_periodo"] = dias_periodo
+
+    rows = (await db.execute(text(f"""
+        WITH vp AS (
+            SELECT am.cod_articulo, am.nombre,
+                   COALESCE(SUM(CASE WHEN v.tipo_comprobante='FA' THEN v.cantidad ELSE 0 END), 0) AS vendido
+            FROM {_ARTICULO_MAP_SQL}
+            LEFT JOIN ventas v ON v.producto_id = am.producto_id AND {ventas_where}
+            GROUP BY am.cod_articulo, am.nombre
+        ),
+        stk AS (
+            SELECT cod_articulo, SUM(cantidad) AS stock_actual,
+                   SUM(cantidad * COALESCE(precio_compra_actual, 0)) AS valor_stock
+            FROM stock GROUP BY cod_articulo
+        )
+        SELECT vp.cod_articulo, vp.nombre, vp.vendido,
+               COALESCE(stk.stock_actual, 0) AS stock_actual,
+               COALESCE(stk.valor_stock, 0) AS valor_stock
+        FROM vp LEFT JOIN stk USING (cod_articulo)
+        ORDER BY valor_stock DESC
+    """), params)).mappings().all()
+
+    total_valor = sum(float(r["valor_stock"] or 0) for r in rows)
+    ranking = []
+    acum = 0.0
+    for r in rows:
+        v = float(r["valor_stock"] or 0)
+        acum += v
+        pct_acum = (acum / total_valor * 100) if total_valor else 0
+        if pct_acum <= 70:
+            cls = "A"
+        elif pct_acum <= 90:
+            cls = "B"
+        else:
+            cls = "C"
+        vd = float(r["vendido"] or 0)
+        sa = float(r["stock_actual"] or 0)
+        venta_diaria = vd / dias_periodo
+        dias_inv = round(sa / venta_diaria, 1) if venta_diaria > 0 else 999
+        ranking.append({
+            "cod_articulo": r["cod_articulo"],
+            "nombre": r["nombre"],
+            "stock_actual": round(sa),
+            "unidades_vendidas": round(vd),
+            "venta_diaria": round(venta_diaria, 2),
+            "dias_inventario": dias_inv,
+            "clasificacion": cls,
+            "valor_stock": round(v, 2),
+            "pct_valor_total": round(v / total_valor * 100, 1) if total_valor else 0,
+        })
+
+    abc: dict = {"A": {"articulos": 0, "valor": 0.0, "pct_valor": 0.0},
+                 "B": {"articulos": 0, "valor": 0.0, "pct_valor": 0.0},
+                 "C": {"articulos": 0, "valor": 0.0, "pct_valor": 0.0}}
+    for p in ranking:
+        c = p["clasificacion"]
+        abc[c]["articulos"] += 1
+        abc[c]["valor"] += p["valor_stock"]
+    for c in abc:
+        abc[c]["valor"] = round(abc[c]["valor"], 2)
+        abc[c]["pct_valor"] = round(abc[c]["valor"] / total_valor * 100, 1) if total_valor else 0
+
+    return {"ranking": ranking, "abc": abc}
+
+
+@router.get("/stock/alertas")
+async def stock_alertas(
+    company_id: int = None,
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+    params = dict(filters.sql_params())
+    ventas_where = _ventas_base_where(filters)
+    noventa = (filters.hasta - timedelta(days=90)).isoformat()
+    dias_periodo = max((filters.hasta - filters.desde).days, 1)
+    params["dias_periodo"] = dias_periodo
+    params["noventa90"] = noventa
+
+    rows = (await db.execute(text(f"""
+        WITH vp AS (
+            SELECT am.cod_articulo, am.nombre,
+                   COALESCE(SUM(CASE WHEN v.tipo_comprobante='FA' THEN v.cantidad ELSE 0 END), 0) AS vendido,
+                   MAX(CASE WHEN v.tipo_comprobante='FA' THEN v.fecha END) AS ultimo_mov
+            FROM {_ARTICULO_MAP_SQL}
+            LEFT JOIN ventas v ON v.producto_id = am.producto_id AND {ventas_where}
+            GROUP BY am.cod_articulo, am.nombre
+        ),
+        stk AS (
+            SELECT cod_articulo, SUM(cantidad) AS cantidad_total,
+                   MIN(stock_minimo) AS stock_minimo,
+                   AVG(precio_compra_actual) AS precio_compra_actual
+            FROM stock GROUP BY cod_articulo
+        )
+        SELECT vp.cod_articulo, vp.nombre, vp.vendido, vp.ultimo_mov,
+               COALESCE(stk.cantidad_total, 0) AS stock_actual,
+               COALESCE(stk.stock_minimo, 50) AS stock_minimo,
+               COALESCE(stk.precio_compra_actual, 0) AS precio_compra_actual
+        FROM vp LEFT JOIN stk USING (cod_articulo)
+    """), params)).mappings().all()
+
+    hoy = filters.hasta
+    alertas = []
+    for r in rows:
+        cant = float(r["stock_actual"] or 0)
+        sm = float(r["stock_minimo"] or 50)
+        vendido = float(r["vendido"] or 0)
+        vd = vendido / dias_periodo
+        dias_inv = round(cant / vd, 1) if vd > 0 else 999
+        ultimo_mov = r["ultimo_mov"]
+        dias_sin_mov = (hoy - ultimo_mov.date()).days if ultimo_mov else 999
+
+        issues = []
+        if cant <= 0:
+            issues.append(("sin_stock", "critical",
+                           f"Sin stock. Último mov: {ultimo_mov.date() if ultimo_mov else 'nunca'}",
+                           "Realizar pedido urgente"))
+        elif cant < sm:
+            issues.append(("bajo_minimo", "warning",
+                           f"Stock: {int(cant)} un. (mín: {int(sm)}). Cubre {dias_inv:.0f} días",
+                           "Solicitar reposición"))
+        if dias_inv > 180:
+            issues.append(("sobrestock", "info",
+                           f"Días inventario: {dias_inv:.0f}d (>180d). Valor: ${cant * float(r['precio_compra_actual'] or 0):,.0f}",
+                           "Revisar política de compras o realizar promoción"))
+        if dias_sin_mov >= 90 and cant > 0:
+            issues.append(("sin_movimiento", "warning",
+                           f"{dias_sin_mov} días sin ventas. Stock: {int(cant)} un.",
+                           "Investigar demanda o liquidar"))
+
+        for tipo, sev, detalle, accion in issues:
+            alertas.append({
+                "cod_articulo": r["cod_articulo"],
+                "nombre": r["nombre"],
+                "tipo": tipo,
+                "severidad": sev,
+                "detalle": detalle,
+                "accion_sugerida": accion,
+                "stock_actual": int(cant),
+                "stock_minimo": int(sm),
+                "dias_sin_movimiento": dias_sin_mov,
+            })
+
+    # Sort: critical first, then warning, then info
+    orden = {"critical": 0, "warning": 1, "info": 2}
+    alertas.sort(key=lambda a: orden.get(a["severidad"], 3))
+    resumen = {
+        "critical": sum(1 for a in alertas if a["severidad"] == "critical"),
+        "warning": sum(1 for a in alertas if a["severidad"] == "warning"),
+        "info": sum(1 for a in alertas if a["severidad"] == "info"),
+    }
+    return {"alertas": alertas, "resumen": resumen}
+
+
+@router.get("/stock/reposicion")
+async def stock_reposicion(
+    company_id: int = None,
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+    params = dict(filters.sql_params())
+    ventas_where = _ventas_base_where(filters)
+    dias_periodo = max((filters.hasta - filters.desde).days, 1)
+    params["dias_periodo"] = dias_periodo
+
+    rows = (await db.execute(text(f"""
+        WITH vp AS (
+            SELECT am.cod_articulo, am.nombre,
+                   COALESCE(SUM(CASE WHEN v.tipo_comprobante='FA' THEN v.cantidad ELSE 0 END), 0) AS vendido
+            FROM {_ARTICULO_MAP_SQL}
+            LEFT JOIN ventas v ON v.producto_id = am.producto_id AND {ventas_where}
+            GROUP BY am.cod_articulo, am.nombre
+        ),
+        stk AS (
+            SELECT cod_articulo, SUM(cantidad) AS stock_actual,
+                   MIN(stock_minimo) AS stock_minimo,
+                   AVG(precio_compra_actual) AS precio_compra_actual
+            FROM stock GROUP BY cod_articulo
+        ),
+        prov AS (
+            SELECT am.cod_articulo, MAX(c.proveedor_id) AS ultimo_proveedor
+            FROM {_ARTICULO_MAP_SQL}
+            LEFT JOIN compras c ON c.producto_id = am.producto_id
+            GROUP BY am.cod_articulo
+        )
+        SELECT vp.cod_articulo, vp.nombre, vp.vendido,
+               COALESCE(stk.stock_actual, 0) AS stock_actual,
+               COALESCE(stk.stock_minimo, 50) AS stock_minimo,
+               COALESCE(stk.precio_compra_actual, 0) AS precio_compra_actual,
+               COALESCE(prov.ultimo_proveedor, 'Sin proveedor') AS ultimo_proveedor
+        FROM vp
+        LEFT JOIN stk USING (cod_articulo)
+        LEFT JOIN prov USING (cod_articulo)
+        WHERE COALESCE(stk.stock_actual, 0) < COALESCE(stk.stock_minimo, 50) * 2
+        ORDER BY COALESCE(stk.stock_actual, 0) / NULLIF(vp.vendido / :dias_periodo, 0) ASC NULLS LAST
+    """), params)).mappings().all()
+
+    sugerencias = []
+    for r in rows:
+        cant = float(r["stock_actual"] or 0)
+        sm = float(r["stock_minimo"] or 50)
+        vendido = float(r["vendido"] or 0)
+        vd = vendido / dias_periodo
+        dias_cob = round(cant / vd, 1) if vd > 0 else 999
+        # Suggest enough to cover 30 days of sales above minimum
+        cant_sug = max(int((vd * 30 + sm) - cant), 0)
+        costo_est = round(cant_sug * float(r["precio_compra_actual"] or 0), 2)
+        sugerencias.append({
+            "cod_articulo": r["cod_articulo"],
+            "nombre": r["nombre"],
+            "stock_actual": int(cant),
+            "venta_diaria": round(vd, 2),
+            "dias_cobertura": dias_cob,
+            "cantidad_sugerida": cant_sug,
+            "costo_estimado": costo_est,
+            "ultimo_proveedor": r["ultimo_proveedor"],
+        })
+
+    return {"sugerencias": sugerencias}
