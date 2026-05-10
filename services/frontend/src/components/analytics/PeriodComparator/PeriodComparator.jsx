@@ -49,7 +49,9 @@ const PeriodComparator = ({ className }) => {
               )}
             />
           </span>
-          <span className="font-medium text-slate-700">Comparar con:</span>
+          <span className={cn('font-medium', comparar_anterior ? 'text-indigo-600' : 'text-slate-400')}>
+            Comparar con: {comparar_anterior ? 'período anterior' : 'inactivo'}
+          </span>
         </label>
 
         {comparar_anterior && (

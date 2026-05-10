@@ -24,7 +24,7 @@ const normalizeSparkline = (values) => {
   const min = Math.min(...nums), max = Math.max(...nums);
   const range = max - min || 1;
   const step = 80 / (nums.length - 1);
-  return nums.map((v, i) => `${(i * step).toFixed(2)},${(24 - ((v - min) / range) * 20).toFixed(2)}`).join(' ');
+  return nums.map((v, i) => `${(i * step).toFixed(2)},${(44 - ((v - min) / range) * 40).toFixed(2)}`).join(' ');
 };
 
 const VariationBadge = ({ variation }) => {
@@ -71,12 +71,12 @@ const KPICard = ({
 
   return (
     <Card
-      className={cn('min-h-[118px] border-t-[3px] p-5', palette.border, onClick && 'cursor-pointer hover:shadow-md transition-shadow', className)}
+      className={cn('min-h-[136px] border-t-[3px] p-5', palette.border, onClick && 'cursor-pointer hover:shadow-md transition-shadow', className)}
       onClick={onClick}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-slate-500">{label}</p>
+          <p className="truncate text-[10px] font-semibold uppercase tracking-[0.04em] text-slate-500" title={label}>{label}</p>
           <div className={cn('mt-3 inline-flex rounded-lg px-3 py-1', palette.pill)}>
             <span className="text-xl font-bold tabular-nums">{displayValue}</span>
           </div>
@@ -103,7 +103,7 @@ const KPICard = ({
 
       {points && (
         <div className="mt-4 flex items-end justify-end">
-          <svg className="h-7 w-20" viewBox="0 0 80 28" preserveAspectRatio="none" aria-hidden="true">
+          <svg className="h-12 w-24" viewBox="0 0 80 48" preserveAspectRatio="none" aria-hidden="true">
             <polyline fill="none" stroke={palette.spark} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" points={points} />
           </svg>
         </div>

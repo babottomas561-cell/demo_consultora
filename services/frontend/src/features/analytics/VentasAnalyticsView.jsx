@@ -39,6 +39,16 @@ const fmtM = (v) => {
 
 const fmtPct = (v) => `${Number(v ?? 0).toFixed(1)}%`;
 
+const MONTHS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+
+const fmtPeriod = (v) => {
+  if (!v) return '';
+  const raw = String(v);
+  const date = raw.length === 7 ? new Date(`${raw}-01T00:00:00`) : new Date(raw);
+  if (Number.isNaN(date.getTime())) return raw;
+  return `${MONTHS[date.getMonth()]} ${String(date.getFullYear()).slice(-2)}`;
+};
+
 const CONDICION_LABEL = { '1': 'Efectivo', '2': 'Cta Cte', '3': 'Tarjeta', '4': 'Otros' };
 const TIPO_COLORS = { FA: '#4f46e5', NC: '#ef4444', ND: '#f97316', PR: '#8b5cf6' };
 const SEGMENTO_COLORS = { A: '#4f46e5', B: '#eab308', C: '#94a3b8' };
@@ -215,14 +225,14 @@ const VentasKPIs = ({ kpis, loading, comparar }) => {
 
   if (loading) {
     return (
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3 mb-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-5">
         {cards.map((_, i) => <SkeletonKPI key={i} />)}
       </div>
     );
   }
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3 mb-5">
+    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-5">
       {cards.map(({ label, kpi, severity, format, icon }) => (
         <KPICard
           key={label}
@@ -252,6 +262,7 @@ const GRAN_OPTIONS = [
 const TemporalTab = ({ temporal, loading, granularidad, setGranularidad, comparar }) => {
   const { applyFilter } = useCrossFilter();
   const series = temporal?.series ?? [];
+  const hasDevoluciones = series.some((row) => Number(row.devoluciones || 0) > 0);
 
   const GranToggle = () => (
     <div className="flex gap-1">
@@ -278,21 +289,21 @@ const TemporalTab = ({ temporal, loading, granularidad, setGranularidad, compara
         subtitle="Facturado neto y tickets por período"
         loading={loading}
         empty={!loading && !series.length}
-        className="h-[380px]"
-        contentClassName="h-[300px]"
+        className="h-[500px]"
+        contentClassName="h-[400px]"
       >
         <div className="flex justify-end mb-2"><GranToggle /></div>
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={series} onClick={(d) => d?.activePayload && applyFilter('periodo', [d.activeLabel], false)}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-            <XAxis dataKey="periodo" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11 }} />
+            <XAxis dataKey="periodo" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11 }} tickFormatter={fmtPeriod} />
             <YAxis yAxisId="left" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11 }} tickFormatter={fmtM} />
-            <YAxis yAxisId="right" orientation="right" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11 }} />
+            <YAxis yAxisId="right" orientation="right" axisLine={false} tickLine={false} tick={{ fill: '#cbd5e1', fontSize: 11 }} />
             <Tooltip content={<ChartTooltip format="currency" />} />
-            <Legend />
+            <Legend verticalAlign="bottom" iconType="plainline" wrapperStyle={{ fontSize: 12, paddingTop: 12 }} />
             {comparar && <Bar yAxisId="left" dataKey="facturado_anterior" name="Facturado anterior" fill="#e2e8f0" radius={[3, 3, 0, 0]} />}
             <Bar yAxisId="left" dataKey="facturado" name="Facturado neto" fill="#4f46e5" radius={[3, 3, 0, 0]} />
-            <Line yAxisId="right" type="monotone" dataKey="tickets" name="Tickets" stroke="#f97316" strokeWidth={2} dot={false} />
+            <Line yAxisId="right" type="monotone" dataKey="tickets" name="Tickets" stroke="#f97316" strokeWidth={1.5} strokeDasharray="4 2" dot={false} />
           </ComposedChart>
         </ResponsiveContainer>
       </ChartCard>
@@ -304,16 +315,20 @@ const TemporalTab = ({ temporal, loading, granularidad, setGranularidad, compara
         className="h-[280px]"
         contentClassName="h-[210px]"
       >
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={series}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-            <XAxis dataKey="periodo" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11 }} />
-            <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11 }} tickFormatter={fmtM} />
-            <Tooltip content={<ChartTooltip format="currency" />} />
-            <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="4 4" />
-            <Area type="monotone" dataKey="devoluciones" name="Devoluciones" stroke="#ef4444" fill="#fef2f2" strokeWidth={2} />
-          </AreaChart>
-        </ResponsiveContainer>
+        {hasDevoluciones ? (
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={series}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+              <XAxis dataKey="periodo" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11 }} tickFormatter={fmtPeriod} />
+              <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11 }} tickFormatter={fmtM} />
+              <Tooltip content={<ChartTooltip format="currency" />} />
+              <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="4 4" />
+              <Area type="monotone" dataKey="devoluciones" name="Devoluciones" stroke="#ef4444" fill="#fef2f2" strokeWidth={2} />
+            </AreaChart>
+          </ResponsiveContainer>
+        ) : (
+          <EmptyState title="Sin devoluciones en este período" subtitle="No hay notas de crédito o devoluciones registradas para el rango seleccionado." />
+        )}
       </ChartCard>
     </div>
   );
