@@ -3589,3 +3589,170 @@ async def proveedores_detalle(
             for r in vencimientos
         ],
     }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# FASE 7 — Panel Caja
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/caja/kpis")
+async def caja_kpis(
+    company_id: int = None,
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+    params = dict(filters.sql_params())
+    caja_where = text_filter_clause("movimientos_caja", filters)
+
+    row = (await db.execute(text(f"""
+        SELECT
+            COALESCE(SUM(CASE WHEN importe > 0 THEN importe ELSE 0 END), 0)   AS ingresos,
+            COALESCE(SUM(CASE WHEN importe < 0 THEN ABS(importe) ELSE 0 END), 0) AS egresos,
+            COALESCE(SUM(importe), 0)                                           AS flujo_neto,
+            COUNT(*)                                                             AS movimientos,
+            COALESCE(MAX(CASE WHEN importe > 0 THEN importe ELSE 0 END), 0)   AS mayor_ingreso,
+            COALESCE(MAX(CASE WHEN importe < 0 THEN ABS(importe) ELSE 0 END), 0) AS mayor_egreso
+        FROM movimientos_caja WHERE {caja_where}
+    """), params)).mappings().one()
+
+    # Current balance (all time)
+    saldo_row = (await db.execute(text(
+        "SELECT COALESCE(MAX(saldo_acumulado), 0) AS saldo_actual FROM movimientos_caja ORDER BY fecha DESC LIMIT 1"
+    ))).mappings().one()
+
+    ingresos = float(row["ingresos"] or 0)
+    egresos = float(row["egresos"] or 0)
+
+    return {
+        "ingresos":      {"actual": round(ingresos, 2)},
+        "egresos":       {"actual": round(egresos, 2)},
+        "flujo_neto":    {"actual": round(float(row["flujo_neto"] or 0), 2)},
+        "movimientos":   {"actual": int(row["movimientos"] or 0)},
+        "saldo_actual":  {"actual": round(float(saldo_row["saldo_actual"] or 0), 2)},
+        "mayor_ingreso": {"actual": round(float(row["mayor_ingreso"] or 0), 2)},
+        "mayor_egreso":  {"actual": round(float(row["mayor_egreso"] or 0), 2)},
+        "ratio_cobro_pago": {"actual": round(ingresos / egresos, 2) if egresos > 0 else None},
+    }
+
+
+@router.get("/caja/flujo")
+async def caja_flujo(
+    company_id: int = None,
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+    params = dict(filters.sql_params())
+    caja_where = text_filter_clause("movimientos_caja", filters)
+
+    rows = (await db.execute(text(f"""
+        SELECT
+            TO_CHAR(fecha, 'YYYY-MM') AS periodo,
+            COALESCE(SUM(CASE WHEN importe > 0 THEN importe ELSE 0 END), 0)   AS ingresos,
+            COALESCE(SUM(CASE WHEN importe < 0 THEN ABS(importe) ELSE 0 END), 0) AS egresos,
+            COALESCE(SUM(importe), 0)                                           AS flujo_neto,
+            COUNT(*)                                                             AS movimientos
+        FROM movimientos_caja WHERE {caja_where}
+        GROUP BY periodo ORDER BY periodo
+    """), params)).mappings().all()
+
+    saldo_acum = 0.0
+    series = []
+    for r in rows:
+        saldo_acum += float(r["flujo_neto"] or 0)
+        series.append({
+            "periodo": r["periodo"],
+            "ingresos": round(float(r["ingresos"] or 0), 2),
+            "egresos": round(float(r["egresos"] or 0), 2),
+            "flujo_neto": round(float(r["flujo_neto"] or 0), 2),
+            "saldo_acumulado": round(saldo_acum, 2),
+            "movimientos": int(r["movimientos"] or 0),
+        })
+
+    return {"series": series}
+
+
+@router.get("/caja/por-tipo")
+async def caja_por_tipo(
+    company_id: int = None,
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+    params = dict(filters.sql_params())
+    caja_where = text_filter_clause("movimientos_caja", filters)
+
+    rows = (await db.execute(text(f"""
+        SELECT
+            tipo,
+            COALESCE(SUM(CASE WHEN importe > 0 THEN importe ELSE 0 END), 0)   AS ingresos,
+            COALESCE(SUM(CASE WHEN importe < 0 THEN ABS(importe) ELSE 0 END), 0) AS egresos,
+            COALESCE(SUM(importe), 0)                                           AS neto,
+            COUNT(*)                                                             AS movimientos
+        FROM movimientos_caja WHERE {caja_where}
+        GROUP BY tipo ORDER BY ABS(SUM(importe)) DESC
+    """), params)).mappings().all()
+
+    return {
+        "por_tipo": [
+            {
+                "tipo": r["tipo"],
+                "ingresos": round(float(r["ingresos"] or 0), 2),
+                "egresos": round(float(r["egresos"] or 0), 2),
+                "neto": round(float(r["neto"] or 0), 2),
+                "movimientos": int(r["movimientos"] or 0),
+            }
+            for r in rows
+        ]
+    }
+
+
+@router.get("/caja/movimientos")
+async def caja_movimientos(
+    page: int = 1,
+    limit: int = 50,
+    company_id: int = None,
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+    params = dict(filters.sql_params())
+    params["limit"] = limit
+    params["offset"] = (page - 1) * limit
+    caja_where = text_filter_clause("movimientos_caja", filters)
+
+    total_row = (await db.execute(text(f"""
+        SELECT COUNT(*) AS total FROM movimientos_caja WHERE {caja_where}
+    """), params)).mappings().one()
+
+    rows = (await db.execute(text(f"""
+        SELECT fecha, tipo, descripcion, importe, saldo_acumulado
+        FROM movimientos_caja WHERE {caja_where}
+        ORDER BY fecha DESC, id DESC
+        LIMIT :limit OFFSET :offset
+    """), params)).mappings().all()
+
+    return {
+        "total": int(total_row["total"] or 0),
+        "page": page,
+        "limit": limit,
+        "movimientos": [
+            {
+                "fecha": str(r["fecha"]) if r["fecha"] else None,
+                "tipo": r["tipo"],
+                "descripcion": r["descripcion"],
+                "importe": round(float(r["importe"] or 0), 2),
+                "saldo_acumulado": round(float(r["saldo_acumulado"] or 0), 2) if r["saldo_acumulado"] is not None else None,
+            }
+            for r in rows
+        ],
+    }
