@@ -534,21 +534,16 @@ const ResultadoPanelInner = () => {
   const [searchParams] = useSearchParams();
   const activeTab = searchParams.get('tab') || 'temporal';
 
-  const filters = useMemo(() => ({
-    desde: filterStore.desde, hasta: filterStore.hasta,
-    cod_vendedor: filterStore.cod_vendedor, cod_rubro: filterStore.cod_rubro,
-    cod_subrubro: filterStore.cod_subrubro, tipo_comprobante: filterStore.tipo_comprobante,
-    condicion_venta: filterStore.condicion_venta, incluir_anuladas: filterStore.incluir_anuladas,
-    comparar_anterior: filterStore.comparar_anterior,
-  }), [filterStore.desde, filterStore.hasta, filterStore.cod_vendedor, filterStore.cod_rubro,
+  const filters = useMemo(() => filterStore.getApiFilters(), [
+    filterStore.periodo, filterStore.desde, filterStore.hasta,
+    filterStore.comparar_anterior, filterStore.cod_empresa, filterStore.tag,
+    filterStore.punto_de_venta, filterStore.cod_vendedor, filterStore.cod_rubro,
     filterStore.cod_subrubro, filterStore.tipo_comprobante, filterStore.condicion_venta,
-    filterStore.incluir_anuladas, filterStore.comparar_anterior]);
+    filterStore.cod_cliente, filterStore.cod_articulo, filterStore.cod_deposito,
+    filterStore.incluir_anuladas,
+  ]);
 
-  const qs = useMemo(() => {
-    const base = buildQueryParams(filters);
-    const cid = user?.company_id || activeCompany;
-    return cid ? `?${base}&company_id=${cid}` : `?${base}`;
-  }, [filters, user, activeCompany]);
+  const qs = buildQueryParams(user, activeCompany, filters);
 
   const d = useResultadoData(user, activeCompany, filters, qs);
 
@@ -557,6 +552,16 @@ const ResultadoPanelInner = () => {
     if (activeTab === 'clientes') d.fetchClientes();
     if (activeTab === 'descuentos') d.fetchDescuentos();
   }, [activeTab, d.fetchVendedores, d.fetchClientes, d.fetchDescuentos]);
+
+  if (user?.is_admin && !activeCompany) {
+    return (
+      <div className="py-20 text-center">
+        <TrendingUp className="mx-auto text-slate-400" size={40} />
+        <h2 className="mt-4 text-xl font-bold text-slate-900">Seleccioná una empresa</h2>
+        <p className="mt-2 text-slate-500">Los paneles analíticos leen datos del schema tenant activo.</p>
+      </div>
+    );
+  }
 
   const tabContent = {
     temporal: <TemporalTab data={d.temporal} loading={d.loadingTemporal} granularidad={d.granularidad} setGranularidad={d.setGranularidad} />,
