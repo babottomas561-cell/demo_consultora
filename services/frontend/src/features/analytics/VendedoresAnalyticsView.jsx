@@ -135,7 +135,7 @@ const VendedoresKPIs = ({ kpis, loading }) => {
     {
       label: 'Mejor vendedor',
       kpi: kpis?.mejor_vendedor,
-      format: 'text',
+      format: 'custom',
       icon: Award,
       severity: 'success',
     },
@@ -149,7 +149,7 @@ const VendedoresKPIs = ({ kpis, loading }) => {
       label: 'Tasa conversión',
       kpi: kpis?.tasa_conversion_global,
       format: 'percent',
-      severity: kpis?.tasa_conversion_global?.actual < 30 ? 'error'
+      severity: kpis?.tasa_conversion_global?.actual < 30 ? 'danger'
               : kpis?.tasa_conversion_global?.actual < 50 ? 'warning'
               : 'success',
     },
@@ -180,7 +180,7 @@ const VendedoresKPIs = ({ kpis, loading }) => {
         <KPICard
           key={c.label}
           label={c.label}
-          kpi={c.kpi}
+          value={c.kpi?.actual}
           format={c.format}
           icon={c.icon}
           severity={c.severity ?? 'neutral'}

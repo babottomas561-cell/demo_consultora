@@ -2329,6 +2329,19 @@ async def stock_kpis(
         FROM stock
     """))).mappings().one()
 
+    # Valor inventario a precio de venta (avg precio_unitario from ventas por producto)
+    val_pv_row = (await db.execute(text(f"""
+        SELECT COALESCE(SUM(s.cantidad * COALESCE(pv.avg_precio, 0)), 0) AS valor_precio_venta
+        FROM stock s
+        LEFT JOIN (
+            SELECT am.cod_articulo, AVG(v.precio_unitario) AS avg_precio
+            FROM {_ARTICULO_MAP_SQL} am
+            JOIN ventas v ON v.producto_id = am.producto_id
+                         AND v.tipo_comprobante = 'FA' AND v.anulada <> 'S'
+            GROUP BY am.cod_articulo
+        ) pv ON pv.cod_articulo = s.cod_articulo
+    """), params)).mappings().one()
+
     # Ventas diarias por articulo en el período → días inventario
     ventas_mov = (await db.execute(text(f"""
         WITH vperiod AS (
@@ -2367,6 +2380,7 @@ async def stock_kpis(
     sin = int(stock_totals["sin_stock"] or 0)
     bajo = int(stock_totals["stock_bajo"] or 0)
     val_costo = money(stock_totals["valor_costo"])
+    val_pv = money(val_pv_row["valor_precio_venta"])
     dias_inv = round(float(ventas_mov["dias_inv_prom"] or 0), 1)
     sin_mov = int(sin_mov_rows["cnt"] or 0)
 
@@ -2376,6 +2390,7 @@ async def stock_kpis(
         "sin_stock": {"actual": sin},
         "stock_bajo": {"actual": bajo},
         "valor_inventario_costo": {"actual": round(val_costo, 2)},
+        "valor_inventario_precio_venta": {"actual": round(val_pv, 2)},
         "dias_inventario_promedio": {"actual": dias_inv},
         "articulos_sin_movimiento": {"actual": sin_mov},
     }

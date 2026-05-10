@@ -130,7 +130,7 @@ const ProveedoresKPIs = ({ kpis, loading }) => {
     { label: 'Ticket promedio',     kpi: kpis?.ticket_promedio,     format: 'currency' },
   ];
   const row2 = [
-    { label: 'Mejor proveedor',     kpi: kpis?.mejor_proveedor,     format: 'text',     icon: Award,          severity: 'success' },
+    { label: 'Mejor proveedor',     kpi: kpis?.mejor_proveedor,     format: 'custom',   icon: Award,          severity: 'success' },
     {
       label: 'Saldo Cta Cte',
       kpi: kpis?.saldo_cta_cte,
@@ -142,7 +142,7 @@ const ProveedoresKPIs = ({ kpis, loading }) => {
       kpi: kpis?.deuda_vencida,
       format: 'currency',
       icon: AlertTriangle,
-      severity: (kpis?.deuda_vencida?.actual ?? 0) > 0 ? 'error' : 'success',
+      severity: (kpis?.deuda_vencida?.actual ?? 0) > 0 ? 'danger' : 'success',
     },
     {
       label: 'Vence en 30 días',
@@ -172,7 +172,7 @@ const ProveedoresKPIs = ({ kpis, loading }) => {
         <KPICard
           key={c.label}
           label={c.label}
-          kpi={c.kpi}
+          value={c.kpi?.actual}
           format={c.format}
           icon={c.icon}
           severity={c.severity ?? 'neutral'}

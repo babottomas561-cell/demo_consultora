@@ -130,7 +130,7 @@ const ClientesKPIs = ({ kpis, loading }) => {
     { label: 'Clientes nuevos',    kpi: kpis?.clientes_nuevos,   format: 'number',   icon: UserCheck, severity: 'success' },
   ];
   const row2 = [
-    { label: 'Mejor cliente',      kpi: kpis?.mejor_cliente,     format: 'text',     icon: Award,      severity: 'success' },
+    { label: 'Mejor cliente',      kpi: kpis?.mejor_cliente,     format: 'custom',   icon: Award,      severity: 'success' },
     {
       label: 'Saldo Cta Cte',
       kpi: kpis?.saldo_cta_cte,
@@ -142,7 +142,7 @@ const ClientesKPIs = ({ kpis, loading }) => {
       label: 'Deuda vencida',
       kpi: kpis?.deuda_vencida,
       format: 'currency',
-      severity: (kpis?.deuda_vencida?.actual ?? 0) > 0 ? 'error' : 'success',
+      severity: (kpis?.deuda_vencida?.actual ?? 0) > 0 ? 'danger' : 'success',
     },
     {
       label: 'Tasa retención',
@@ -150,7 +150,7 @@ const ClientesKPIs = ({ kpis, loading }) => {
       format: 'percent',
       severity: (kpis?.tasa_retencion?.actual ?? 0) >= 60 ? 'success'
               : (kpis?.tasa_retencion?.actual ?? 0) >= 40 ? 'warning'
-              : 'error',
+              : 'danger',
     },
   ];
 
@@ -173,7 +173,7 @@ const ClientesKPIs = ({ kpis, loading }) => {
         <KPICard
           key={c.label}
           label={c.label}
-          kpi={c.kpi}
+          value={c.kpi?.actual}
           format={c.format}
           icon={c.icon}
           severity={c.severity ?? 'neutral'}

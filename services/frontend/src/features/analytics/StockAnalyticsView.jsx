@@ -141,18 +141,20 @@ const useStockData = (user, activeCompany, filters, qs) => {
 // ── KPIs ─────────────────────────────────────────────────────────────────────
 
 const StockKPIs = ({ kpis, loading }) => {
-  if (loading) return <div className="grid grid-cols-2 md:grid-cols-4 gap-3">{Array(7).fill(0).map((_, i) => <SkeletonKPI key={i} />)}</div>;
+  if (loading) return <div className="grid grid-cols-2 md:grid-cols-4 gap-3">{Array(8).fill(0).map((_, i) => <SkeletonKPI key={i} />)}</div>;
   if (!kpis) return null;
   const k = kpis;
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-      <KPICard label="Total artículos" value={k.total_articulos?.actual ?? 0} icon={Package} color="slate" />
-      <KPICard label="Con stock" value={k.con_stock?.actual ?? 0} icon={TrendingUp} color="green" />
-      <KPICard label="Sin stock" value={k.sin_stock?.actual ?? 0} icon={TrendingDown} color={k.sin_stock?.actual > 0 ? 'red' : 'green'} badge={k.sin_stock?.actual > 0 ? 'ALERTA' : null} />
-      <KPICard label="Stock bajo" value={k.stock_bajo?.actual ?? 0} icon={AlertTriangle} color={k.stock_bajo?.actual > 0 ? 'amber' : 'green'} />
-      <KPICard label="Valor inventario" value={formatCurrency(k.valor_inventario_costo?.actual)} icon={Archive} color="indigo" />
-      <KPICard label="Días inventario prom." value={`${k.dias_inventario_promedio?.actual ?? 0}d`} icon={Package} color="slate" />
-      <KPICard label="Sin movimiento 90d" value={k.articulos_sin_movimiento?.actual ?? 0} icon={AlertTriangle} color={k.articulos_sin_movimiento?.actual > 0 ? 'orange' : 'green'} />
+      <KPICard label="Total artículos" value={k.total_articulos?.actual ?? 0} icon={Package} severity="neutral" />
+      <KPICard label="Con stock" value={k.con_stock?.actual ?? 0} icon={TrendingUp} severity="success" />
+      <KPICard label="Sin stock" value={k.sin_stock?.actual ?? 0} icon={TrendingDown} severity={k.sin_stock?.actual > 0 ? 'danger' : 'success'}
+        alert={k.sin_stock?.actual > 0 ? { severity: 'warning', message: 'Artículos sin stock disponible' } : null} />
+      <KPICard label="Stock bajo" value={k.stock_bajo?.actual ?? 0} icon={AlertTriangle} severity={k.stock_bajo?.actual > 0 ? 'warning' : 'success'} />
+      <KPICard label="Valor inventario (costo)" value={formatCurrency(k.valor_inventario_costo?.actual)} icon={Archive} severity="neutral" format="custom" />
+      <KPICard label="Valor inventario (venta)" value={formatCurrency(k.valor_inventario_precio_venta?.actual)} icon={Archive} severity="neutral" format="custom" />
+      <KPICard label="Días inventario prom." value={`${k.dias_inventario_promedio?.actual ?? 0}d`} icon={Package} severity="neutral" format="custom" />
+      <KPICard label="Sin movimiento 90d" value={k.articulos_sin_movimiento?.actual ?? 0} icon={AlertTriangle} severity={k.articulos_sin_movimiento?.actual > 0 ? 'warning' : 'success'} />
     </div>
   );
 };

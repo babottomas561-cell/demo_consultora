@@ -205,7 +205,7 @@ const VentasKPIs = ({ kpis, loading, comparar }) => {
     {
       label: 'Tasa devolución',
       kpi: kpis?.tasa_devolucion,
-      severity: kpis?.tasa_devolucion?.actual > 5 ? 'warning' : kpis?.tasa_devolucion?.actual < 3 ? 'success' : 'neutral',
+      severity: kpis?.tasa_devolucion?.actual > 10 ? 'danger' : kpis?.tasa_devolucion?.actual > 5 ? 'warning' : 'neutral',
       format: 'percent',
       icon: TrendingDown,
     },

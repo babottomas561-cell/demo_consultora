@@ -62,7 +62,7 @@ const variationTone = (value) => {
   return 'text-slate-500';
 };
 
-const KpiCard = ({ label, metric, tone = 'default', money = false, number = false }) => {
+const KpiCard = ({ label, metric, tone = 'default', money = false, number = false, badge = null }) => {
   const palette = {
     default: 'border-t-indigo-600 bg-indigo-50 text-indigo-700',
     slate: 'border-t-slate-500 bg-slate-50 text-slate-700',
@@ -76,7 +76,12 @@ const KpiCard = ({ label, metric, tone = 'default', money = false, number = fals
 
   return (
     <Card className={`min-h-[136px] border-t-[3px] p-5 ${palette?.split(' ')[0] || 'border-t-indigo-600'}`}>
-      <p className="truncate text-[10px] font-semibold uppercase tracking-[0.04em] text-slate-500" title={label}>{label}</p>
+      <div className="flex items-start justify-between gap-2">
+        <p className="truncate text-[10px] font-semibold uppercase tracking-[0.04em] text-slate-500" title={label}>{label}</p>
+        {badge && (
+          <span className="shrink-0 rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-bold text-white">{badge}</span>
+        )}
+      </div>
       <div className={`mt-3 inline-flex rounded-lg px-3 py-1 ${palette?.split(' ').slice(1).join(' ')}`}>
         <span className="text-xl font-bold tabular-nums">{value}</span>
       </div>
@@ -284,7 +289,7 @@ const ComprasContent = () => {
         <KpiCard label="Órdenes de compra" metric={data.kpis?.ordenes} number />
         <KpiCard label="Ticket promedio compra" metric={data.kpis?.ticket_promedio_compra} tone="success" money />
         <KpiCard label="Proveedores activos" metric={data.kpis?.proveedores_activos} tone="warning" number />
-        <KpiCard label="Deuda vencida a proveedores" metric={data.kpis?.deuda_vencida} tone={(data.kpis?.deuda_vencida?.actual || 0) > 0 ? 'danger' : 'success'} money />
+        <KpiCard label="Deuda vencida a proveedores" metric={data.kpis?.deuda_vencida} tone={(data.kpis?.deuda_vencida?.actual || 0) > 0 ? 'danger' : 'success'} money badge={(data.kpis?.deuda_vencida?.actual || 0) > 0 ? 'CRÍTICO' : null} />
         <KpiCard label="Próximos vencimientos 30d" metric={data.kpis?.proximos_vencimientos_30d} tone="orange" money />
         <KpiCard label="Unidades compradas" metric={data.kpis?.unidades_compradas} tone="slate" number />
       </div>

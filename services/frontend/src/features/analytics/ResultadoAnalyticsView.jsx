@@ -145,8 +145,8 @@ const ResultadoKPIs = ({ kpis, loading, comparar }) => {
         <KPICard label="Ticket prom. margen" value={formatCurrency(k.ticket_margen?.actual)} icon={ShoppingCart} color="indigo"
           variacion={comparar ? k.ticket_margen?.variacion_pct : null} anterior={comparar ? k.ticket_margen?.anterior : null} formatAnterior={formatCurrency} />
         <KPICard label="Productos bajo costo" value={k.productos_bajo_costo?.actual ?? 0} icon={AlertTriangle}
-          color={k.productos_bajo_costo?.actual > 0 ? 'red' : 'green'}
-          badge={k.productos_bajo_costo?.actual > 0 ? 'ALERTA' : null} />
+          severity={k.productos_bajo_costo?.actual > 0 ? 'danger' : 'success'}
+          alert={k.productos_bajo_costo?.actual > 0 ? { severity: 'critical', message: 'Hay artículos vendidos por debajo de su costo de compra' } : null} />
         <KPICard label="Descuento total" value={formatCurrency(k.descuento_total?.actual)} icon={Tag} color="orange"
           variacion={comparar ? k.descuento_total?.variacion_pct : null} anterior={comparar ? k.descuento_total?.anterior : null} formatAnterior={formatCurrency} invertVariation />
         <KPICard label="Descuento prom. %" value={fmtPct(k.descuento_pct?.actual)} icon={Percent} color="amber" />

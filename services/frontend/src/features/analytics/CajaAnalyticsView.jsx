@@ -137,7 +137,7 @@ const CajaKPIs = ({ kpis, loading }) => {
       kpi: kpis?.flujo_neto,
       format: 'currency',
       icon: flujoNeto >= 0 ? TrendingUp : TrendingDown,
-      severity: flujoNeto >= 0 ? 'success' : 'error',
+      severity: flujoNeto >= 0 ? 'success' : 'danger',
     },
     { label: 'Movimientos',       kpi: kpis?.movimientos, format: 'number',  icon: RefreshCw },
   ];
@@ -147,7 +147,7 @@ const CajaKPIs = ({ kpis, loading }) => {
       kpi: kpis?.saldo_actual,
       format: 'currency',
       icon: DollarSign,
-      severity: (kpis?.saldo_actual?.actual ?? 0) >= 0 ? 'success' : 'error',
+      severity: (kpis?.saldo_actual?.actual ?? 0) >= 0 ? 'success' : 'danger',
     },
     { label: 'Mayor ingreso',  kpi: kpis?.mayor_ingreso,    format: 'currency', severity: 'success' },
     { label: 'Mayor egreso',   kpi: kpis?.mayor_egreso,     format: 'currency', severity: 'error' },
@@ -178,7 +178,7 @@ const CajaKPIs = ({ kpis, loading }) => {
         <KPICard
           key={c.label}
           label={c.label}
-          kpi={c.kpi}
+          value={c.kpi?.actual}
           format={c.format}
           icon={c.icon}
           severity={c.severity ?? 'neutral'}
