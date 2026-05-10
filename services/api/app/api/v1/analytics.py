@@ -2309,8 +2309,12 @@ async def stock_kpis(
 ):
     tenant_schema = await get_tenant_schema(current_user, db, company_id)
     await set_tenant_search_path(db, tenant_schema)
-    params = filters.sql_params()
+    params = dict(filters.sql_params())
     ventas_where = _ventas_base_where(filters)
+    dias_periodo = max((filters.hasta - filters.desde).days, 1)
+    params["dias_periodo"] = dias_periodo
+    noventa = (filters.hasta - timedelta(days=90)).isoformat()
+    params["noventa90"] = noventa
 
     # Aggregate from stock table grouped by cod_articulo (each article can span multiple depositos)
     stock_totals = (await db.execute(text("""
@@ -2326,8 +2330,6 @@ async def stock_kpis(
     """))).mappings().one()
 
     # Ventas diarias por articulo en el período → días inventario
-    dias_90_ago = (filters.hasta - timedelta(days=90)).isoformat() if hasattr(filters, 'hasta') else None
-
     ventas_mov = (await db.execute(text(f"""
         WITH vperiod AS (
             SELECT am.cod_articulo, COALESCE(SUM(v.cantidad),0) AS vendido_periodo
@@ -2342,9 +2344,7 @@ async def stock_kpis(
         SELECT
             COALESCE(AVG(
                 CASE WHEN vp.vendido_periodo > 0
-                     THEN sa.cantidad_total / (vp.vendido_periodo / GREATEST(
-                         (:hasta::date - :desde::date), 1
-                     ))
+                     THEN sa.cantidad_total / (vp.vendido_periodo / GREATEST(:dias_periodo, 1))
                 END
             ), 0) AS dias_inv_prom
         FROM stock_agg sa
@@ -2352,7 +2352,6 @@ async def stock_kpis(
     """), params)).mappings().one()
 
     # Articles with no ventas in last 90 days
-    noventa = (filters.hasta - timedelta(days=90)).isoformat() if hasattr(filters, 'hasta') else str(filters.desde)
     sin_mov_rows = (await db.execute(text(f"""
         SELECT COUNT(DISTINCT am.cod_articulo) AS cnt
         FROM {_ARTICULO_MAP_SQL}
@@ -2361,7 +2360,7 @@ async def stock_kpis(
             SELECT DISTINCT producto_id FROM ventas
             WHERE fecha >= :noventa90 AND tipo_comprobante='FA'
         )
-    """), {"noventa90": noventa})).mappings().one()
+    """), params)).mappings().one()
 
     total = int(stock_totals["total_articulos"] or 0)
     con = int(stock_totals["con_stock"] or 0)
