@@ -1730,8 +1730,7 @@ async def resultado_kpis(
             COALESCE(SUM(CASE WHEN precio_compra_actual IS NOT NULL
                          THEN cantidad * precio_compra_actual::float ELSE 0 END), 0) AS cogs,
             COALESCE(SUM(CASE WHEN precio_compra_actual IS NOT NULL THEN total ELSE 0 END), 0) AS total_con_costo,
-            COUNT(DISTINCT CASE WHEN tipo_comprobante='FA' THEN
-                COALESCE(punto_de_venta::text,'') || '-' || COALESCE(numero_comprobante::text,'') END) AS tickets_fa,
+            COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END) AS tickets_fa,
             COALESCE(SUM(
                 CASE WHEN descuento_porc IS NOT NULL AND descuento_porc::float > 0
                      THEN cantidad * precio_unitario * descuento_porc::float / 100.0
@@ -1772,8 +1771,7 @@ async def resultado_kpis(
                   - COALESCE(SUM(CASE WHEN tipo_comprobante='NC' THEN ABS(total) ELSE 0 END), 0) AS facturado_neto,
                 COALESCE(SUM(CASE WHEN precio_compra_actual IS NOT NULL
                              THEN cantidad * precio_compra_actual::float ELSE 0 END), 0) AS cogs,
-                COUNT(DISTINCT CASE WHEN tipo_comprobante='FA' THEN
-                    COALESCE(punto_de_venta::text,'') || '-' || COALESCE(numero_comprobante::text,'') END) AS tickets_fa,
+                COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END) AS tickets_fa,
                 COALESCE(SUM(
                     CASE WHEN descuento_porc IS NOT NULL AND descuento_porc::float > 0
                          THEN cantidad * precio_unitario * descuento_porc::float / 100.0
@@ -1895,7 +1893,6 @@ async def resultado_por_producto(
             producto_id,
             COALESCE(MAX(producto_nombre), producto_id) AS nombre,
             MAX(cod_rubro) AS cod_rubro,
-            MAX(rubro_nombre) AS rubro_nombre,
             SUM(cantidad) AS unidades,
             COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN total ELSE 0 END), 0)
               - COALESCE(SUM(CASE WHEN tipo_comprobante='NC' THEN ABS(total) ELSE 0 END), 0) AS facturado,
@@ -1925,7 +1922,6 @@ async def resultado_por_producto(
             "producto_id": r["producto_id"],
             "nombre": r["nombre"],
             "cod_rubro": r["cod_rubro"],
-            "rubro_nombre": r["rubro_nombre"],
             "unidades": int(r["unidades"] or 0),
             "facturado": round(f, 2),
             "cogs": round(c, 2),

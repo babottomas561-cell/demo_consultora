@@ -180,7 +180,7 @@ export const useFilterStore = create(
     }),
     {
       name: 'bi-filters',
-      version: 2,
+      version: 3,
       partialize: (state) => ({
         ...pickFilterState(state),
         savedViews: state.savedViews,
@@ -188,8 +188,9 @@ export const useFilterStore = create(
       }),
       migrate: (persistedState) => ({
         ...createDefaultState(),
-        ...persistedState,
         ...Object.fromEntries(arrayFilters.map((key) => [key, normalizeArray(persistedState?.[key])])),
+        comparar_anterior: persistedState?.comparar_anterior ?? false,
+        incluir_anuladas: persistedState?.incluir_anuladas ?? false,
         savedViews: persistedState?.savedViews || [],
         activeViewId: persistedState?.activeViewId || null,
       }),
