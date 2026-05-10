@@ -4,9 +4,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text, select
 from app.core.database import get_db
 from app.core.tenant import run_tenant_migrations
-from app.models.central import Company
+from app.models.central import Company, CompanyConnector
 from app.schemas.company import CompanyCreate, CompanyResponse
 from app.api.deps import get_current_admin
+from app.api.v1.connectors import dispatch_infomanager_sync
 from typing import List
 import re
 
@@ -52,6 +53,20 @@ async def create_company(
     new_company.is_provisioned = True
     await db.commit()
     await db.refresh(new_company)
+
+    if company_in.erp_type == "infomanager" and company_in.infomanager_connector:
+        connector = CompanyConnector(
+            company_id=new_company.id,
+            connector_type="INFOMANAGER",
+            client_id=company_in.infomanager_connector.client_id,
+            client_secret=company_in.infomanager_connector.client_secret,
+            base_url=company_in.infomanager_connector.base_url,
+            sync_status="pending",
+        )
+        db.add(connector)
+        await db.commit()
+        await db.refresh(connector)
+        dispatch_infomanager_sync(new_company.id, connector.id)
     
     if company_in.erp_type == "infomanager_demo":
         from celery import Celery

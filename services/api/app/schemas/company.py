@@ -1,10 +1,13 @@
 from pydantic import BaseModel, ConfigDict
 from typing import Optional, Any
 
+from app.schemas.connectors import CompanyInfomanagerConnectorCreate
+
 class CompanyCreate(BaseModel):
     name: str
     erp_type: str
     erp_config: Optional[dict[str, Any]] = None
+    infomanager_connector: Optional[CompanyInfomanagerConnectorCreate] = None
 
 class CompanyResponse(BaseModel):
     id: int

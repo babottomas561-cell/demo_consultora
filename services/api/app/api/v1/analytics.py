@@ -3028,9 +3028,9 @@ async def vendedores_temporal(
     }
 
 
-@router.get("/vendedores/detalle/{cod_vendedor}")
+@router.get("/vendedores/detalle/{vendedor_id}")
 async def vendedores_detalle(
-    cod_vendedor: int,
+    vendedor_id: int,
     company_id: int = None,
     filters: GlobalFilters = Depends(get_global_filters),
     current_user=Depends(get_current_user),
@@ -3040,13 +3040,13 @@ async def vendedores_detalle(
     tenant_schema = await get_tenant_schema(current_user, db, company_id)
     await set_tenant_search_path(db, tenant_schema)
     params = dict(filters.sql_params())
-    params["cod_v"] = cod_vendedor
+    params["cod_v"] = vendedor_id
     # Always filter by path cod_vendedor (ignore filter's cod_vendedor for detalle)
     where_v = "fecha >= :desde AND fecha < :hasta AND anulada <> 'S' AND cod_vendedor = :cod_v"
 
     vinfo = (await db.execute(text(
         "SELECT cod_vendedor, nombre, cuota_mensual FROM vendedores WHERE cod_vendedor = :cod_v"
-    ), {"cod_v": cod_vendedor})).mappings().one_or_none()
+    ), {"cod_v": vendedor_id})).mappings().one_or_none()
 
     if not vinfo:
         raise _HTTPException(status_code=404, detail="Vendedor no encontrado")
