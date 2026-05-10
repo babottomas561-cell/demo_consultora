@@ -1,9 +1,11 @@
-from datetime import date, timedelta
-from typing import Optional, Literal
 import io
+from datetime import date, timedelta
+from io import BytesIO
+from typing import Optional, Literal
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
+from openpyxl import Workbook
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -85,6 +87,297 @@ def resolve_dates(desde: Optional[str], hasta: Optional[str]):
     hasta_d = date.fromisoformat(hasta) if hasta else date.today()
     desde_d = date.fromisoformat(desde) if desde else date.today() - timedelta(days=365)
     return desde_d, hasta_d + timedelta(days=1)
+
+
+def previous_period_params(filters: GlobalFilters) -> dict:
+    current_days = (filters.hasta_exclusive - filters.desde).days
+    prev_hasta = filters.desde
+    prev_desde = prev_hasta - timedelta(days=current_days)
+    return {"prev_desde": prev_desde, "prev_hasta": prev_hasta, "offset_days": current_days}
+
+
+def variation_payload(actual, anterior=None) -> dict:
+    actual_value = money(actual)
+    anterior_value = money(anterior)
+    payload = {"actual": actual_value, "anterior": anterior_value}
+    payload["variacion_pct"] = ((actual_value - anterior_value) / abs(anterior_value) * 100) if anterior_value else None
+    return payload
+
+
+def compra_filters_clause(
+    filters: GlobalFilters,
+    start_param: str = "desde",
+    end_param: str = "hasta",
+    include_provider: bool = False,
+) -> str:
+    clauses = [f"fecha >= :{start_param}", f"fecha < :{end_param}"]
+    if filters.cod_articulo:
+        clauses.append("producto_id = ANY(:cod_articulo_text)")
+    if include_provider and filters.cod_cliente:
+        clauses.append("proveedor_id = ANY(:proveedor_id_text)")
+    return " AND ".join(clauses)
+
+
+def compra_params(filters: GlobalFilters) -> dict:
+    params = filters.sql_params()
+    params["cod_articulo_text"] = [str(item) for item in filters.cod_articulo or []]
+    params["proveedor_id_text"] = [str(item) for item in filters.cod_cliente or []]
+    return params
+
+
+def granularity_sql(granularidad: str) -> str:
+    return {
+        "dia": "day",
+        "semana": "week",
+        "mes": "month",
+        "trimestre": "quarter",
+    }.get(granularidad, "month")
+
+
+async def query_compras_kpis(db: AsyncSession, filters: GlobalFilters) -> dict:
+    params = {**compra_params(filters), **previous_period_params(filters), "today": date.today(), "today_30": date.today() + timedelta(days=30)}
+    current_where = compra_filters_clause(filters)
+    previous_where = compra_filters_clause(filters, "prev_desde", "prev_hasta")
+
+    totals = (await db.execute(text(f"""
+        WITH actual AS (
+            SELECT
+                COALESCE(SUM(total), 0) AS total_comprado,
+                COALESCE(SUM(total * 0.21 / 1.21), 0) AS iva_credito_fiscal,
+                COUNT(*) AS ordenes,
+                COALESCE(SUM(cantidad), 0) AS unidades_compradas,
+                COUNT(DISTINCT proveedor_id) AS proveedores_activos,
+                CASE WHEN COUNT(*) > 0 THEN COALESCE(SUM(total), 0) / COUNT(*) ELSE 0 END AS ticket_promedio_compra
+            FROM compras
+            WHERE {current_where}
+        ),
+        anterior AS (
+            SELECT
+                COALESCE(SUM(total), 0) AS total_comprado,
+                COALESCE(SUM(total * 0.21 / 1.21), 0) AS iva_credito_fiscal,
+                COUNT(*) AS ordenes,
+                COALESCE(SUM(cantidad), 0) AS unidades_compradas,
+                COUNT(DISTINCT proveedor_id) AS proveedores_activos,
+                CASE WHEN COUNT(*) > 0 THEN COALESCE(SUM(total), 0) / COUNT(*) ELSE 0 END AS ticket_promedio_compra
+            FROM compras
+            WHERE {previous_where}
+        )
+        SELECT actual.*, anterior.total_comprado AS total_comprado_anterior,
+               anterior.iva_credito_fiscal AS iva_credito_fiscal_anterior,
+               anterior.ordenes AS ordenes_anterior,
+               anterior.unidades_compradas AS unidades_compradas_anterior,
+               anterior.proveedores_activos AS proveedores_activos_anterior,
+               anterior.ticket_promedio_compra AS ticket_promedio_compra_anterior
+        FROM actual, anterior
+    """), params)).mappings().one()
+
+    deuda = (await db.execute(text("""
+        SELECT COALESCE(SUM(GREATEST(saldo_acumulado, importe, 0)), 0) AS deuda_vencida
+        FROM cuentas_corrientes_proveedores
+        WHERE lower(tipo) IN ('factura', 'fc')
+          AND fecha_vencimiento < :today
+          AND saldo_acumulado > 0
+    """), params)).mappings().one()
+
+    proximos = (await db.execute(text("""
+        SELECT COALESCE(SUM(GREATEST(saldo_acumulado, importe, 0)), 0) AS proximos_vencimientos_30d
+        FROM cuentas_corrientes_proveedores
+        WHERE lower(tipo) IN ('factura', 'fc')
+          AND fecha_vencimiento >= :today
+          AND fecha_vencimiento < :today_30
+          AND saldo_acumulado > 0
+    """), params)).mappings().one()
+
+    return {
+        "total_comprado": variation_payload(totals["total_comprado"], totals["total_comprado_anterior"]),
+        "iva_credito_fiscal": variation_payload(totals["iva_credito_fiscal"], totals["iva_credito_fiscal_anterior"]),
+        "ordenes": variation_payload(totals["ordenes"], totals["ordenes_anterior"]),
+        "unidades_compradas": variation_payload(totals["unidades_compradas"], totals["unidades_compradas_anterior"]),
+        "proveedores_activos": variation_payload(totals["proveedores_activos"], totals["proveedores_activos_anterior"]),
+        "ticket_promedio_compra": variation_payload(totals["ticket_promedio_compra"], totals["ticket_promedio_compra_anterior"]),
+        "deuda_vencida": {"actual": money(deuda["deuda_vencida"])},
+        "proximos_vencimientos_30d": {"actual": money(proximos["proximos_vencimientos_30d"])},
+    }
+
+
+async def query_compras_temporal(db: AsyncSession, filters: GlobalFilters, granularidad: str = "mes") -> list[dict]:
+    params = {**compra_params(filters), **previous_period_params(filters)}
+    period = granularity_sql(granularidad)
+    current_where = compra_filters_clause(filters)
+    previous_where = compra_filters_clause(filters, "prev_desde", "prev_hasta")
+    rows = (await db.execute(text(f"""
+        WITH actual AS (
+            SELECT date_trunc('{period}', fecha)::date AS periodo,
+                   COALESCE(SUM(total), 0) AS total_comprado,
+                   COUNT(*) AS ordenes
+            FROM compras
+            WHERE {current_where}
+            GROUP BY 1
+        ),
+        anterior AS (
+            SELECT date_trunc('{period}', fecha + (:offset_days * interval '1 day'))::date AS periodo,
+                   COALESCE(SUM(total), 0) AS total_comprado_anterior
+            FROM compras
+            WHERE {previous_where}
+            GROUP BY 1
+        )
+        SELECT actual.periodo,
+               actual.total_comprado,
+               actual.ordenes,
+               COALESCE(anterior.total_comprado_anterior, 0) AS total_comprado_anterior
+        FROM actual
+        LEFT JOIN anterior USING (periodo)
+        ORDER BY actual.periodo
+    """), params)).mappings().all()
+    return [{**dict(row), "periodo": row["periodo"].isoformat()} for row in rows]
+
+
+async def query_compras_por_producto(db: AsyncSession, filters: GlobalFilters) -> list[dict]:
+    params = compra_params(filters)
+    where = compra_filters_clause(filters)
+    total_row = (await db.execute(text(f"SELECT COALESCE(SUM(total), 0) AS total FROM compras WHERE {where}"), params)).mappings().one()
+    total_compras = money(total_row["total"])
+    rows = (await db.execute(text(f"""
+        SELECT producto_id AS cod_articulo,
+               COALESCE(MAX(producto_nombre), producto_id) AS nombre,
+               COALESCE(SUM(cantidad), 0) AS unidades,
+               COALESCE(SUM(total), 0) AS total_comprado,
+               CASE WHEN SUM(cantidad) > 0 THEN SUM(total) / SUM(cantidad) ELSE 0 END AS precio_promedio,
+               (ARRAY_AGG(precio_unitario ORDER BY fecha DESC))[1] AS ultimo_precio,
+               (ARRAY_AGG(precio_unitario ORDER BY fecha ASC))[1] AS primer_precio,
+               COUNT(DISTINCT proveedor_id) AS proveedores_distintos
+        FROM compras
+        WHERE {where}
+        GROUP BY producto_id
+        ORDER BY total_comprado DESC
+        LIMIT 50
+    """), params)).mappings().all()
+    result = []
+    for row in rows:
+        primer = money(row["primer_precio"])
+        ultimo = money(row["ultimo_precio"])
+        result.append({
+            **dict(row),
+            "pct_total": (money(row["total_comprado"]) / total_compras * 100) if total_compras else 0,
+            "variacion_precio_pct": ((ultimo - primer) / abs(primer) * 100) if primer else None,
+        })
+    return result
+
+
+async def query_compras_por_proveedor(db: AsyncSession, filters: GlobalFilters) -> list[dict]:
+    params = compra_params(filters)
+    where = compra_filters_clause(filters)
+    total_row = (await db.execute(text(f"SELECT COALESCE(SUM(total), 0) AS total FROM compras WHERE {where}"), params)).mappings().one()
+    total_compras = money(total_row["total"])
+    rows = (await db.execute(text(f"""
+        SELECT proveedor_id,
+               COALESCE(MAX(proveedor_nombre), proveedor_id) AS proveedor_nombre,
+               COALESCE(SUM(total), 0) AS total_comprado,
+               COUNT(*) AS ordenes,
+               CASE WHEN SUM(cantidad) > 0 THEN SUM(total) / SUM(cantidad) ELSE 0 END AS precio_promedio,
+               MAX(fecha)::date AS ultimo_pedido,
+               (CURRENT_DATE - MAX(fecha)::date) AS dias_desde_ultimo_pedido,
+               AVG(precio_unitario) FILTER (WHERE fecha >= :desde AND fecha < (:desde + ((:hasta - :desde) / 2))) AS precio_promedio_inicio,
+               AVG(precio_unitario) FILTER (WHERE fecha >= (:desde + ((:hasta - :desde) / 2)) AND fecha < :hasta) AS precio_promedio_fin
+        FROM compras
+        WHERE {where}
+        GROUP BY proveedor_id
+        ORDER BY total_comprado DESC
+        LIMIT 30
+    """), params)).mappings().all()
+    result = []
+    for row in rows:
+        inicio = money(row["precio_promedio_inicio"])
+        fin = money(row["precio_promedio_fin"])
+        result.append({
+            **dict(row),
+            "ultimo_pedido": row["ultimo_pedido"].isoformat() if row["ultimo_pedido"] else None,
+            "pct_total": (money(row["total_comprado"]) / total_compras * 100) if total_compras else 0,
+            "precio_promedio_variacion": ((fin - inicio) / abs(inicio) * 100) if inicio else None,
+        })
+    return result
+
+
+async def query_compras_calendario_pagos(db: AsyncSession) -> list[dict]:
+    today = date.today()
+    rows = (await db.execute(text("""
+        SELECT proveedor_nombre,
+               fecha_vencimiento::date AS fecha_vencimiento,
+               GREATEST(saldo_acumulado, importe, 0) AS importe,
+               (fecha_vencimiento::date - :today) AS dias_para_vencer
+        FROM cuentas_corrientes_proveedores
+        WHERE lower(tipo) IN ('factura', 'fc')
+          AND fecha_vencimiento >= :today
+          AND fecha_vencimiento <= :today_90
+          AND saldo_acumulado > 0
+        ORDER BY fecha_vencimiento ASC
+        LIMIT 200
+    """), {"today": today, "today_90": today + timedelta(days=90)})).mappings().all()
+    result = []
+    for row in rows:
+        days = int(row["dias_para_vencer"] or 0)
+        if days <= 0:
+            urgencia = "hoy"
+        elif days <= 7:
+            urgencia = "semana"
+        elif days <= 30:
+            urgencia = "mes"
+        else:
+            urgencia = "futuro"
+        result.append({
+            **dict(row),
+            "fecha_vencimiento": row["fecha_vencimiento"].isoformat() if row["fecha_vencimiento"] else None,
+            "urgencia": urgencia,
+        })
+    return result
+
+
+async def query_compras_variacion_precios(db: AsyncSession, filters: GlobalFilters) -> list[dict]:
+    params = compra_params(filters)
+    where = compra_filters_clause(filters)
+    rows = (await db.execute(text(f"""
+        SELECT producto_id,
+               COALESCE(MAX(producto_nombre), producto_id) AS nombre,
+               (ARRAY_AGG(precio_unitario ORDER BY fecha ASC))[1] AS precio_inicio_periodo,
+               (ARRAY_AGG(precio_unitario ORDER BY fecha DESC))[1] AS precio_fin_periodo,
+               (ARRAY_AGG(proveedor_nombre ORDER BY fecha ASC))[1] AS proveedor_nombre,
+               (ARRAY_AGG(proveedor_nombre ORDER BY fecha DESC))[1] AS ultimo_proveedor
+        FROM compras
+        WHERE {where}
+        GROUP BY producto_id
+        ORDER BY producto_id
+    """), params)).mappings().all()
+    result = []
+    for row in rows:
+        inicio = money(row["precio_inicio_periodo"])
+        fin = money(row["precio_fin_periodo"])
+        variacion = ((fin - inicio) / abs(inicio) * 100) if inicio else None
+        result.append({**dict(row), "variacion_pct": variacion})
+    return sorted(result, key=lambda item: item["variacion_pct"] or 0, reverse=True)
+
+
+async def query_compras_transacciones(db: AsyncSession, filters: GlobalFilters, page: int = 1, limit: int = 50) -> dict:
+    params = compra_params(filters)
+    where = compra_filters_clause(filters)
+    total = (await db.execute(text(f"SELECT COUNT(*) AS total FROM compras WHERE {where}"), params)).mappings().one()["total"]
+    safe_page = max(page, 1)
+    safe_limit = min(max(limit, 1), 500)
+    params.update({"offset": (safe_page - 1) * safe_limit, "limit": safe_limit})
+    rows = (await db.execute(text(f"""
+        SELECT id, fecha::date AS fecha, proveedor_id, proveedor_nombre, producto_id, producto_nombre,
+               cantidad, precio_unitario, total, total * 0.21 / 1.21 AS iva
+        FROM compras
+        WHERE {where}
+        ORDER BY fecha DESC, id DESC
+        OFFSET :offset
+        LIMIT :limit
+    """), params)).mappings().all()
+    return {
+        "page": safe_page,
+        "limit": safe_limit,
+        "total": total,
+        "data": [{**dict(row), "fecha": row["fecha"].isoformat() if row["fecha"] else None} for row in rows],
+    }
 
 
 @router.get("/ventas/resumen")
@@ -239,6 +532,139 @@ async def compras_resumen(
         ],
         "top_productos": [dict(row) for row in top_productos],
     }
+
+
+@router.get("/compras/kpis")
+async def compras_kpis(
+    company_id: int = None,
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+    return await query_compras_kpis(db, filters)
+
+
+@router.get("/compras/temporal")
+async def compras_temporal(
+    company_id: int = None,
+    granularidad: str = "mes",
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+    return {"series": await query_compras_temporal(db, filters, granularidad)}
+
+
+@router.get("/compras/por-producto")
+async def compras_por_producto(
+    company_id: int = None,
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+    return {"productos": await query_compras_por_producto(db, filters)}
+
+
+@router.get("/compras/por-proveedor")
+async def compras_por_proveedor(
+    company_id: int = None,
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+    return {"proveedores": await query_compras_por_proveedor(db, filters)}
+
+
+@router.get("/compras/calendario-pagos")
+async def compras_calendario_pagos(
+    company_id: int = None,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+    return {"vencimientos": await query_compras_calendario_pagos(db)}
+
+
+@router.get("/compras/variacion-precios")
+async def compras_variacion_precios(
+    company_id: int = None,
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+    return {"productos": await query_compras_variacion_precios(db, filters)}
+
+
+@router.get("/compras/transacciones")
+async def compras_transacciones(
+    company_id: int = None,
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=50, ge=1, le=500),
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+    return await query_compras_transacciones(db, filters, page, limit)
+
+
+@router.get("/compras/exportar")
+async def compras_exportar(
+    company_id: int = None,
+    granularidad: str = "mes",
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+
+    workbook = Workbook()
+    workbook.remove(workbook.active)
+
+    def add_sheet(title: str, rows: list[dict]):
+        sheet = workbook.create_sheet(title)
+        if not rows:
+            sheet.append(["Sin datos"])
+            return
+        headers = list(rows[0].keys())
+        sheet.append(headers)
+        for row in rows:
+            sheet.append([row.get(header) for header in headers])
+
+    kpis = await query_compras_kpis(db, filters)
+    add_sheet("KPIs", [
+        {"kpi": key, **value}
+        for key, value in kpis.items()
+    ])
+    add_sheet("Temporal", await query_compras_temporal(db, filters, granularidad))
+    add_sheet("Productos", await query_compras_por_producto(db, filters))
+    add_sheet("Proveedores", await query_compras_por_proveedor(db, filters))
+    add_sheet("Calendario Pagos", await query_compras_calendario_pagos(db))
+    add_sheet("Variacion Precios", await query_compras_variacion_precios(db, filters))
+    add_sheet("Transacciones", (await query_compras_transacciones(db, filters, 1, 500))["data"])
+
+    output = BytesIO()
+    workbook.save(output)
+    output.seek(0)
+    headers = {"Content-Disposition": 'attachment; filename="compras_analytics.xlsx"'}
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers=headers,
+    )
 
 
 @router.get("/resultado/resumen")
