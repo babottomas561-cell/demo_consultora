@@ -2361,7 +2361,7 @@ async def stock_kpis(
             SELECT DISTINCT producto_id FROM ventas
             WHERE fecha >= :noventa90 AND tipo_comprobante='FA'
         )
-    """), {"noventa90": noventa}))).mappings().one()
+    """), {"noventa90": noventa})).mappings().one()
 
     total = int(stock_totals["total_articulos"] or 0)
     con = int(stock_totals["con_stock"] or 0)
