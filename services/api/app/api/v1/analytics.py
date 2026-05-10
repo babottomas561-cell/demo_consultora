@@ -3346,3 +3346,246 @@ async def clientes_detalle(
             for r in evolucion
         ],
     }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# FASE 7 — Panel Proveedores
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/proveedores/kpis")
+async def proveedores_kpis(
+    company_id: int = None,
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+    params = dict(filters.sql_params())
+    compras_where = text_filter_clause("compras", filters)
+
+    # Global compras summary
+    crow = (await db.execute(text(f"""
+        SELECT
+            COUNT(DISTINCT proveedor_id)   AS proveedores_activos,
+            COALESCE(SUM(total), 0)         AS total_comprado,
+            COUNT(*)                         AS ordenes,
+            COALESCE(AVG(total), 0)          AS ticket_prom
+        FROM compras WHERE {compras_where}
+    """), params)).mappings().one()
+
+    # Best supplier by total
+    best = (await db.execute(text(f"""
+        SELECT proveedor_id, proveedor_nombre, COALESCE(SUM(total), 0) AS total
+        FROM compras WHERE {compras_where}
+        GROUP BY proveedor_id, proveedor_nombre ORDER BY total DESC LIMIT 1
+    """), params)).mappings().one_or_none()
+
+    # Cuenta corriente proveedores: saldo total y deuda vencida
+    ccrow = (await db.execute(text("""
+        SELECT
+            COALESCE(SUM(importe), 0) AS saldo_total,
+            COALESCE(SUM(CASE WHEN fecha_vencimiento < now() AND importe > 0 THEN importe ELSE 0 END), 0) AS deuda_vencida
+        FROM cuentas_corrientes_proveedores
+    """))).mappings().one()
+
+    # Próximos vencimientos (30 días)
+    proximos = (await db.execute(text("""
+        SELECT COALESCE(SUM(importe), 0) AS total
+        FROM cuentas_corrientes_proveedores
+        WHERE tipo = 'factura' AND fecha_vencimiento IS NOT NULL
+              AND fecha_vencimiento >= now()
+              AND fecha_vencimiento <= now() + interval '30 days'
+    """))).mappings().one()
+
+    return {
+        "proveedores_activos":  {"actual": int(crow["proveedores_activos"] or 0)},
+        "total_comprado":       {"actual": round(float(crow["total_comprado"] or 0), 2)},
+        "ordenes":              {"actual": int(crow["ordenes"] or 0)},
+        "ticket_promedio":      {"actual": round(float(crow["ticket_prom"] or 0), 2)},
+        "mejor_proveedor":      {"actual": best["proveedor_nombre"] if best else ""},
+        "saldo_cta_cte":        {"actual": round(float(ccrow["saldo_total"] or 0), 2)},
+        "deuda_vencida":        {"actual": round(float(ccrow["deuda_vencida"] or 0), 2)},
+        "proximos_30d":         {"actual": round(float(proximos["total"] or 0), 2)},
+    }
+
+
+@router.get("/proveedores/ranking")
+async def proveedores_ranking(
+    company_id: int = None,
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+    params = dict(filters.sql_params())
+    compras_where = text_filter_clause("compras", filters)
+
+    rows = (await db.execute(text(f"""
+        SELECT
+            proveedor_id,
+            MAX(proveedor_nombre) AS nombre,
+            COALESCE(SUM(total), 0)      AS total_comprado,
+            COUNT(*)                      AS ordenes,
+            COALESCE(AVG(total), 0)       AS ticket_promedio,
+            COALESCE(SUM(cantidad), 0)    AS unidades,
+            MAX(fecha)                    AS ultima_compra
+        FROM compras WHERE {compras_where}
+        GROUP BY proveedor_id ORDER BY total_comprado DESC
+    """), params)).mappings().all()
+
+    # Saldo por proveedor
+    saldos = (await db.execute(text("""
+        SELECT proveedor_id, COALESCE(SUM(importe), 0) AS saldo
+        FROM cuentas_corrientes_proveedores
+        GROUP BY proveedor_id
+    """))).mappings().all()
+    saldo_map = {r["proveedor_id"]: float(r["saldo"] or 0) for r in saldos}
+
+    total_comprado = sum(float(r["total_comprado"] or 0) for r in rows)
+    cumsum = 0.0
+    resultado = []
+
+    for r in rows:
+        tc = float(r["total_comprado"] or 0)
+        pct = (tc / total_comprado * 100) if total_comprado > 0 else 0
+        cumsum += pct
+        segmento = "A" if cumsum <= 80 else "B" if cumsum <= 95 else "C"
+
+        resultado.append({
+            "proveedor_id": r["proveedor_id"],
+            "nombre": r["nombre"],
+            "total_comprado": round(tc, 2),
+            "ordenes": int(r["ordenes"] or 0),
+            "ticket_promedio": round(float(r["ticket_promedio"] or 0), 2),
+            "unidades": int(r["unidades"] or 0),
+            "ultima_compra": str(r["ultima_compra"]) if r["ultima_compra"] else None,
+            "saldo_cta_cte": round(saldo_map.get(r["proveedor_id"], 0.0), 2),
+            "pct_del_total": round(pct, 1),
+            "pct_acumulado": round(cumsum, 1),
+            "segmento": segmento,
+        })
+
+    return {"proveedores": resultado}
+
+
+@router.get("/proveedores/temporal")
+async def proveedores_temporal(
+    company_id: int = None,
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+    params = dict(filters.sql_params())
+    compras_where = text_filter_clause("compras", filters)
+
+    rows = (await db.execute(text(f"""
+        SELECT
+            TO_CHAR(fecha, 'YYYY-MM') AS periodo,
+            COALESCE(SUM(total), 0)    AS total_comprado,
+            COUNT(DISTINCT proveedor_id) AS proveedores_activos,
+            COUNT(*)                    AS ordenes
+        FROM compras WHERE {compras_where}
+        GROUP BY periodo ORDER BY periodo
+    """), params)).mappings().all()
+
+    return {
+        "series": [
+            {
+                "periodo": r["periodo"],
+                "total_comprado": round(float(r["total_comprado"] or 0), 2),
+                "proveedores_activos": int(r["proveedores_activos"] or 0),
+                "ordenes": int(r["ordenes"] or 0),
+            }
+            for r in rows
+        ]
+    }
+
+
+@router.get("/proveedores/detalle/{proveedor_id}")
+async def proveedores_detalle(
+    proveedor_id: str,
+    company_id: int = None,
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from fastapi import HTTPException as _HTTPException
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+    params = dict(filters.sql_params())
+    params["prov_id"] = proveedor_id
+    where_p = "fecha >= :desde AND fecha < :hasta AND proveedor_id = :prov_id"
+
+    # Provider info
+    pinfo = (await db.execute(text(f"""
+        SELECT proveedor_id, MAX(proveedor_nombre) AS nombre,
+               COALESCE(SUM(total), 0) AS total_comprado,
+               COUNT(*) AS ordenes,
+               MAX(fecha) AS ultima_compra
+        FROM compras WHERE {where_p}
+        GROUP BY proveedor_id
+    """), params)).mappings().one_or_none()
+
+    if not pinfo:
+        raise _HTTPException(status_code=404, detail="Proveedor no encontrado")
+
+    # Top products from this supplier
+    productos = (await db.execute(text(f"""
+        SELECT producto_id, MAX(producto_nombre) AS nombre,
+               COALESCE(SUM(total), 0) AS total,
+               COALESCE(SUM(cantidad), 0) AS unidades
+        FROM compras WHERE {where_p}
+        GROUP BY producto_id ORDER BY total DESC LIMIT 10
+    """), params)).mappings().all()
+
+    # Monthly evolution
+    evolucion = (await db.execute(text(f"""
+        SELECT TO_CHAR(fecha, 'YYYY-MM') AS periodo,
+               COALESCE(SUM(total), 0) AS total_comprado,
+               COUNT(*) AS ordenes
+        FROM compras WHERE {where_p}
+        GROUP BY periodo ORDER BY periodo
+    """), params)).mappings().all()
+
+    # Saldo cuenta corriente
+    cc = (await db.execute(text(
+        "SELECT COALESCE(SUM(importe), 0) AS saldo FROM cuentas_corrientes_proveedores WHERE proveedor_id = :prov_id"
+    ), {"prov_id": proveedor_id})).mappings().one()
+
+    # Next due payments
+    vencimientos = (await db.execute(text(
+        "SELECT comprobante_id, fecha_vencimiento, importe FROM cuentas_corrientes_proveedores "
+        "WHERE proveedor_id = :prov_id AND tipo = 'factura' AND fecha_vencimiento IS NOT NULL "
+        "AND fecha_vencimiento >= now() ORDER BY fecha_vencimiento LIMIT 10"
+    ), {"prov_id": proveedor_id})).mappings().all()
+
+    return {
+        "proveedor": {
+            "proveedor_id": pinfo["proveedor_id"],
+            "nombre": pinfo["nombre"],
+            "total_comprado": round(float(pinfo["total_comprado"] or 0), 2),
+            "ordenes": int(pinfo["ordenes"] or 0),
+            "ultima_compra": str(pinfo["ultima_compra"]) if pinfo["ultima_compra"] else None,
+            "saldo_cta_cte": round(float(cc["saldo"] or 0), 2),
+        },
+        "top_productos": [
+            {"producto_id": r["producto_id"], "nombre": r["nombre"],
+             "total": round(float(r["total"] or 0), 2), "unidades": int(r["unidades"] or 0)}
+            for r in productos
+        ],
+        "evolucion": [
+            {"periodo": r["periodo"], "total_comprado": round(float(r["total_comprado"] or 0), 2),
+             "ordenes": int(r["ordenes"] or 0)}
+            for r in evolucion
+        ],
+        "proximos_vencimientos": [
+            {"comprobante_id": r["comprobante_id"],
+             "fecha_vencimiento": str(r["fecha_vencimiento"]) if r["fecha_vencimiento"] else None,
+             "importe": round(float(r["importe"] or 0), 2)}
+            for r in vencimientos
+        ],
+    }
