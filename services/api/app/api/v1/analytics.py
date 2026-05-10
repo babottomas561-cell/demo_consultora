@@ -1705,3 +1705,574 @@ async def ventas_exportar(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": "attachment; filename=ventas.xlsx"},
     )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# FASE 5: Panel Resultado — endpoints dedicados
+# ══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/resultado/kpis")
+async def resultado_kpis(
+    company_id: int = None,
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+    params = filters.sql_params()
+    where = _ventas_base_where(filters)
+
+    row = (await db.execute(text(f"""
+        SELECT
+            COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN total ELSE 0 END), 0)
+              - COALESCE(SUM(CASE WHEN tipo_comprobante='NC' THEN ABS(total) ELSE 0 END), 0) AS facturado_neto,
+            COALESCE(SUM(CASE WHEN precio_compra_actual IS NOT NULL
+                         THEN cantidad * precio_compra_actual::float ELSE 0 END), 0) AS cogs,
+            COALESCE(SUM(CASE WHEN precio_compra_actual IS NOT NULL THEN total ELSE 0 END), 0) AS total_con_costo,
+            COUNT(DISTINCT CASE WHEN tipo_comprobante='FA' THEN
+                COALESCE(punto_de_venta::text,'') || '-' || COALESCE(numero_comprobante::text,'') END) AS tickets_fa,
+            COALESCE(SUM(
+                CASE WHEN descuento_porc IS NOT NULL AND descuento_porc::float > 0
+                     THEN cantidad * precio_unitario * descuento_porc::float / 100.0
+                ELSE 0 END), 0) AS descuento_total,
+            COUNT(*) AS total_items,
+            SUM(CASE WHEN precio_compra_actual IS NOT NULL THEN 1 ELSE 0 END) AS items_con_costo
+        FROM ventas WHERE {where}
+    """), params)).mappings().one()
+
+    facturado_neto = money(row["facturado_neto"])
+    cogs = money(row["cogs"])
+    margen_bruto = facturado_neto - cogs
+    margen_pct = (margen_bruto / facturado_neto * 100) if facturado_neto else 0
+    tickets_fa = int(row["tickets_fa"] or 0) or 1
+    ticket_margen = margen_bruto / tickets_fa
+    descuento_total = money(row["descuento_total"])
+    descuento_pct = (descuento_total / (facturado_neto + descuento_total) * 100) if (facturado_neto + descuento_total) else 0
+    items_con_costo = int(row["items_con_costo"] or 0)
+    total_items = int(row["total_items"] or 0)
+    cobertura_costo_pct = round(items_con_costo / total_items * 100, 1) if total_items else 0
+
+    bajo_costo_rows = (await db.execute(text(f"""
+        SELECT COUNT(DISTINCT producto_id) AS cnt
+        FROM ventas
+        WHERE {where} AND precio_compra_actual IS NOT NULL
+          AND precio_unitario < precio_compra_actual::float
+          AND tipo_comprobante = 'FA'
+    """), params)).mappings().one()
+    productos_bajo_costo = int(bajo_costo_rows["cnt"] or 0)
+
+    anterior = None
+    if filters.comparar_anterior:
+        prev_desde, prev_hasta = _prev_period(filters)
+        pp = dict(params); pp["desde"] = prev_desde; pp["hasta"] = prev_hasta
+        prev = (await db.execute(text(f"""
+            SELECT
+                COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN total ELSE 0 END), 0)
+                  - COALESCE(SUM(CASE WHEN tipo_comprobante='NC' THEN ABS(total) ELSE 0 END), 0) AS facturado_neto,
+                COALESCE(SUM(CASE WHEN precio_compra_actual IS NOT NULL
+                             THEN cantidad * precio_compra_actual::float ELSE 0 END), 0) AS cogs,
+                COUNT(DISTINCT CASE WHEN tipo_comprobante='FA' THEN
+                    COALESCE(punto_de_venta::text,'') || '-' || COALESCE(numero_comprobante::text,'') END) AS tickets_fa,
+                COALESCE(SUM(
+                    CASE WHEN descuento_porc IS NOT NULL AND descuento_porc::float > 0
+                         THEN cantidad * precio_unitario * descuento_porc::float / 100.0
+                    ELSE 0 END), 0) AS descuento_total
+            FROM ventas WHERE {where}
+        """), pp)).mappings().one()
+        pfn = money(prev["facturado_neto"])
+        pcogs = money(prev["cogs"])
+        pmb = pfn - pcogs
+        pmp = (pmb / pfn * 100) if pfn else 0
+        ptk = int(prev["tickets_fa"] or 0) or 1
+        ptm = pmb / ptk
+        pdt = money(prev["descuento_total"])
+        pdp = (pdt / (pfn + pdt) * 100) if (pfn + pdt) else 0
+        anterior = {
+            "facturado_neto": pfn, "cogs": pcogs, "margen_bruto": pmb,
+            "margen_pct": pmp, "ticket_margen": ptm, "descuento_total": pdt, "descuento_pct": pdp,
+        }
+
+    def kpi(key, val):
+        ant = anterior[key] if anterior else None
+        return _kpi_obj(val, ant)
+
+    return {
+        "facturado_neto": kpi("facturado_neto", facturado_neto),
+        "cogs": kpi("cogs", cogs),
+        "margen_bruto": kpi("margen_bruto", margen_bruto),
+        "margen_pct": kpi("margen_pct", margen_pct),
+        "ticket_margen": kpi("ticket_margen", ticket_margen),
+        "productos_bajo_costo": {"actual": productos_bajo_costo},
+        "descuento_total": kpi("descuento_total", descuento_total),
+        "descuento_pct": {"actual": round(descuento_pct, 2)},
+        "cobertura_costo_pct": cobertura_costo_pct,
+    }
+
+
+@router.get("/resultado/temporal")
+async def resultado_temporal(
+    company_id: int = None,
+    granularidad: Literal["dia", "semana", "mes", "trimestre"] = "mes",
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+    trunc = {"dia": "day", "semana": "week", "mes": "month", "trimestre": "quarter"}.get(granularidad, "month")
+    params = filters.sql_params()
+    where = _ventas_base_where(filters)
+
+    series = (await db.execute(text(f"""
+        SELECT
+            to_char(date_trunc('{trunc}', fecha), 'YYYY-MM-DD') AS periodo,
+            COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN total ELSE 0 END), 0)
+              - COALESCE(SUM(CASE WHEN tipo_comprobante='NC' THEN ABS(total) ELSE 0 END), 0) AS facturado_neto,
+            COALESCE(SUM(CASE WHEN precio_compra_actual IS NOT NULL
+                         THEN cantidad * precio_compra_actual::float ELSE 0 END), 0) AS cogs,
+            COALESCE(SUM(
+                CASE WHEN descuento_porc IS NOT NULL AND descuento_porc::float > 0
+                     THEN cantidad * precio_unitario * descuento_porc::float / 100.0
+                ELSE 0 END), 0) AS descuento_total
+        FROM ventas WHERE {where}
+        GROUP BY 1 ORDER BY 1
+    """), params)).mappings().all()
+
+    result = []
+    for r in series:
+        fn = money(r["facturado_neto"])
+        c = money(r["cogs"])
+        mb = fn - c
+        mp = (mb / fn * 100) if fn else 0
+        result.append({
+            "periodo": r["periodo"],
+            "facturado_neto": round(fn, 2),
+            "cogs": round(c, 2),
+            "margen_bruto": round(mb, 2),
+            "margen_pct": round(mp, 2),
+            "descuento_total": round(money(r["descuento_total"]), 2),
+        })
+
+    if filters.comparar_anterior:
+        prev_desde, prev_hasta = _prev_period(filters)
+        pp = dict(params); pp["desde"] = prev_desde; pp["hasta"] = prev_hasta
+        prev = (await db.execute(text(f"""
+            SELECT
+                to_char(date_trunc('{trunc}', fecha), 'YYYY-MM-DD') AS periodo,
+                COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN total ELSE 0 END), 0)
+                  - COALESCE(SUM(CASE WHEN tipo_comprobante='NC' THEN ABS(total) ELSE 0 END), 0) AS facturado_neto,
+                COALESCE(SUM(CASE WHEN precio_compra_actual IS NOT NULL
+                             THEN cantidad * precio_compra_actual::float ELSE 0 END), 0) AS cogs
+            FROM ventas WHERE {where}
+            GROUP BY 1 ORDER BY 1
+        """), pp)).mappings().all()
+        prev_list = list(prev)
+        for i, row in enumerate(result):
+            if i < len(prev_list):
+                pfn = money(prev_list[i]["facturado_neto"])
+                pc = money(prev_list[i]["cogs"])
+                row["facturado_anterior"] = round(pfn, 2)
+                row["margen_anterior"] = round(pfn - pc, 2)
+
+    return {"series": result}
+
+
+@router.get("/resultado/por-producto")
+async def resultado_por_producto(
+    company_id: int = None,
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+    params = filters.sql_params()
+    where = _ventas_base_where(filters)
+
+    rows = (await db.execute(text(f"""
+        SELECT
+            producto_id,
+            COALESCE(MAX(producto_nombre), producto_id) AS nombre,
+            MAX(cod_rubro) AS cod_rubro,
+            MAX(rubro_nombre) AS rubro_nombre,
+            SUM(cantidad) AS unidades,
+            COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN total ELSE 0 END), 0)
+              - COALESCE(SUM(CASE WHEN tipo_comprobante='NC' THEN ABS(total) ELSE 0 END), 0) AS facturado,
+            COALESCE(SUM(CASE WHEN precio_compra_actual IS NOT NULL
+                         THEN cantidad * precio_compra_actual::float ELSE 0 END), 0) AS cogs,
+            COALESCE(SUM(
+                CASE WHEN descuento_porc IS NOT NULL AND descuento_porc::float > 0
+                     THEN cantidad * precio_unitario * descuento_porc::float / 100.0
+                ELSE 0 END), 0) AS descuento_total
+        FROM ventas WHERE {where}
+        GROUP BY producto_id
+        ORDER BY facturado DESC
+        LIMIT 200
+    """), params)).mappings().all()
+
+    ranking = []
+    facturados = []
+    margenes = []
+    for r in rows:
+        f = money(r["facturado"])
+        c = money(r["cogs"])
+        mb = f - c
+        mp = (mb / f * 100) if f else 0
+        facturados.append(f)
+        margenes.append(mp)
+        ranking.append({
+            "producto_id": r["producto_id"],
+            "nombre": r["nombre"],
+            "cod_rubro": r["cod_rubro"],
+            "rubro_nombre": r["rubro_nombre"],
+            "unidades": int(r["unidades"] or 0),
+            "facturado": round(f, 2),
+            "cogs": round(c, 2),
+            "margen_dolares": round(mb, 2),
+            "margen_pct": round(mp, 2),
+            "descuento_total": round(money(r["descuento_total"]), 2),
+        })
+
+    med_fact = sorted(facturados)[len(facturados) // 2] if facturados else 0
+    med_marg = sorted(margenes)[len(margenes) // 2] if margenes else 0
+
+    cuadrantes = {"estrellas": [], "vacas": [], "diamantes": [], "perros": []}
+    q_key = {"estrella": "estrellas", "vaca": "vacas", "diamante": "diamantes", "perro": "perros"}
+    for p in ranking:
+        if p["margen_pct"] >= med_marg and p["facturado"] >= med_fact:
+            q = "estrella"
+        elif p["margen_pct"] < med_marg and p["facturado"] >= med_fact:
+            q = "vaca"
+        elif p["margen_pct"] >= med_marg and p["facturado"] < med_fact:
+            q = "diamante"
+        else:
+            q = "perro"
+        p["cuadrante"] = q
+        cuadrantes[q_key[q]].append(p)
+
+    return {
+        "ranking": ranking,
+        "por_cuadrante": cuadrantes,
+        "medianas": {"facturado": round(med_fact, 2), "margen_pct": round(med_marg, 2)},
+    }
+
+
+@router.get("/resultado/por-vendedor")
+async def resultado_por_vendedor(
+    company_id: int = None,
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+    params = filters.sql_params()
+    where = _ventas_base_where(filters)
+
+    vendedor_names = {}
+    try:
+        vd_rows = (await db.execute(text(
+            "SELECT cod_vendedor, nombre FROM vendedores"
+        ))).mappings().all()
+        for r in vd_rows:
+            vendedor_names[r["cod_vendedor"]] = r["nombre"]
+    except Exception:
+        pass
+
+    rows = (await db.execute(text(f"""
+        SELECT
+            cod_vendedor,
+            COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN total ELSE 0 END), 0)
+              - COALESCE(SUM(CASE WHEN tipo_comprobante='NC' THEN ABS(total) ELSE 0 END), 0) AS facturado,
+            COALESCE(SUM(CASE WHEN precio_compra_actual IS NOT NULL
+                         THEN cantidad * precio_compra_actual::float ELSE 0 END), 0) AS cogs,
+            COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END) AS tickets,
+            COALESCE(SUM(
+                CASE WHEN descuento_porc IS NOT NULL AND descuento_porc::float > 0
+                     THEN cantidad * precio_unitario * descuento_porc::float / 100.0
+                ELSE 0 END), 0) AS descuento_total,
+            COALESCE(AVG(CASE WHEN descuento_porc IS NOT NULL AND descuento_porc::float > 0
+                         THEN descuento_porc::float END), 0) AS descuento_promedio_pct
+        FROM ventas
+        WHERE {where} AND cod_vendedor IS NOT NULL
+        GROUP BY cod_vendedor
+        ORDER BY facturado DESC
+    """), params)).mappings().all()
+
+    ranking = []
+    for r in rows:
+        f = money(r["facturado"])
+        c = money(r["cogs"])
+        mb = f - c
+        mp = (mb / f * 100) if f else 0
+        ranking.append({
+            "cod_vendedor": r["cod_vendedor"],
+            "nombre": vendedor_names.get(r["cod_vendedor"], r["cod_vendedor"]),
+            "facturado": round(f, 2),
+            "cogs": round(c, 2),
+            "margen_dolares": round(mb, 2),
+            "margen_pct": round(mp, 2),
+            "descuento_promedio_pct": round(money(r["descuento_promedio_pct"]), 2),
+            "descuento_total": round(money(r["descuento_total"]), 2),
+            "tickets": int(r["tickets"] or 0),
+        })
+
+    return {"ranking": ranking}
+
+
+@router.get("/resultado/por-cliente")
+async def resultado_por_cliente(
+    company_id: int = None,
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+    params = filters.sql_params()
+    where = _ventas_base_where(filters)
+
+    rows = (await db.execute(text(f"""
+        SELECT
+            cliente_id,
+            COALESCE(MAX(cliente_nombre), cliente_id) AS cliente_nombre,
+            COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN total ELSE 0 END), 0)
+              - COALESCE(SUM(CASE WHEN tipo_comprobante='NC' THEN ABS(total) ELSE 0 END), 0) AS facturado,
+            COALESCE(SUM(CASE WHEN precio_compra_actual IS NOT NULL
+                         THEN cantidad * precio_compra_actual::float ELSE 0 END), 0) AS cogs,
+            COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END) AS tickets,
+            COALESCE(SUM(
+                CASE WHEN descuento_porc IS NOT NULL AND descuento_porc::float > 0
+                     THEN cantidad * precio_unitario * descuento_porc::float / 100.0
+                ELSE 0 END), 0) AS descuento_total,
+            COALESCE(AVG(CASE WHEN descuento_porc IS NOT NULL AND descuento_porc::float > 0
+                         THEN descuento_porc::float END), 0) AS descuento_promedio_pct
+        FROM ventas WHERE {where}
+        GROUP BY cliente_id
+        ORDER BY facturado DESC
+        LIMIT 200
+    """), params)).mappings().all()
+
+    ranking = []
+    for r in rows:
+        f = money(r["facturado"])
+        c = money(r["cogs"])
+        mb = f - c
+        mp = (mb / f * 100) if f else 0
+        ranking.append({
+            "cliente_id": r["cliente_id"],
+            "cliente_nombre": r["cliente_nombre"],
+            "facturado": round(f, 2),
+            "cogs": round(c, 2),
+            "margen_dolares": round(mb, 2),
+            "margen_pct": round(mp, 2),
+            "descuento_promedio_pct": round(money(r["descuento_promedio_pct"]), 2),
+            "descuento_total": round(money(r["descuento_total"]), 2),
+            "tickets": int(r["tickets"] or 0),
+        })
+
+    return {"ranking": ranking}
+
+
+@router.get("/resultado/descuentos")
+async def resultado_descuentos(
+    company_id: int = None,
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+    params = filters.sql_params()
+    where = _ventas_base_where(filters)
+
+    totals = (await db.execute(text(f"""
+        SELECT
+            COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN total ELSE 0 END), 0) AS facturado_bruto,
+            COALESCE(SUM(
+                CASE WHEN descuento_porc IS NOT NULL AND descuento_porc::float > 0
+                     THEN cantidad * precio_unitario * descuento_porc::float / 100.0
+                ELSE 0 END), 0) AS total_descontado
+        FROM ventas WHERE {where}
+    """), params)).mappings().one()
+
+    total_desc = money(totals["total_descontado"])
+    fact_bruto = money(totals["facturado_bruto"])
+    pct = (total_desc / (fact_bruto + total_desc) * 100) if (fact_bruto + total_desc) else 0
+
+    vendedor_names = {}
+    try:
+        for r in (await db.execute(text("SELECT cod_vendedor, nombre FROM vendedores"))).mappings().all():
+            vendedor_names[r["cod_vendedor"]] = r["nombre"]
+    except Exception:
+        pass
+
+    por_vendedor = (await db.execute(text(f"""
+        SELECT cod_vendedor,
+            COALESCE(SUM(
+                CASE WHEN descuento_porc IS NOT NULL AND descuento_porc::float > 0
+                     THEN cantidad * precio_unitario * descuento_porc::float / 100.0
+                ELSE 0 END), 0) AS descuento_total,
+            COALESCE(AVG(CASE WHEN descuento_porc IS NOT NULL AND descuento_porc::float > 0
+                         THEN descuento_porc::float END), 0) AS descuento_pct_promedio,
+            COUNT(CASE WHEN descuento_porc IS NOT NULL AND descuento_porc::float > 0 THEN 1 END) AS tickets_con_descuento
+        FROM ventas WHERE {where} AND cod_vendedor IS NOT NULL
+        GROUP BY cod_vendedor ORDER BY descuento_total DESC
+    """), params)).mappings().all()
+
+    por_producto = (await db.execute(text(f"""
+        SELECT producto_id, COALESCE(MAX(producto_nombre), producto_id) AS nombre,
+            COALESCE(SUM(
+                CASE WHEN descuento_porc IS NOT NULL AND descuento_porc::float > 0
+                     THEN cantidad * precio_unitario * descuento_porc::float / 100.0
+                ELSE 0 END), 0) AS descuento_total,
+            COALESCE(AVG(CASE WHEN descuento_porc IS NOT NULL AND descuento_porc::float > 0
+                         THEN descuento_porc::float END), 0) AS descuento_pct_promedio,
+            COUNT(CASE WHEN descuento_porc IS NOT NULL AND descuento_porc::float > 0 THEN 1 END) AS tickets_con_descuento
+        FROM ventas WHERE {where}
+        GROUP BY producto_id
+        HAVING COUNT(CASE WHEN descuento_porc IS NOT NULL AND descuento_porc::float > 0 THEN 1 END) > 0
+        ORDER BY descuento_total DESC LIMIT 50
+    """), params)).mappings().all()
+
+    por_cliente = (await db.execute(text(f"""
+        SELECT cliente_id, COALESCE(MAX(cliente_nombre), cliente_id) AS nombre,
+            COALESCE(SUM(
+                CASE WHEN descuento_porc IS NOT NULL AND descuento_porc::float > 0
+                     THEN cantidad * precio_unitario * descuento_porc::float / 100.0
+                ELSE 0 END), 0) AS descuento_total,
+            COALESCE(AVG(CASE WHEN descuento_porc IS NOT NULL AND descuento_porc::float > 0
+                         THEN descuento_porc::float END), 0) AS descuento_pct_promedio
+        FROM ventas WHERE {where}
+        GROUP BY cliente_id
+        HAVING COUNT(CASE WHEN descuento_porc IS NOT NULL AND descuento_porc::float > 0 THEN 1 END) > 0
+        ORDER BY descuento_total DESC LIMIT 50
+    """), params)).mappings().all()
+
+    mayores = (await db.execute(text(f"""
+        SELECT fecha, cliente_nombre, producto_nombre, cod_vendedor,
+            descuento_porc::float AS descuento_pct,
+            cantidad * precio_unitario * descuento_porc::float / 100.0 AS descuento_dolares
+        FROM ventas
+        WHERE {where} AND descuento_porc IS NOT NULL AND descuento_porc::float > 0
+        ORDER BY descuento_dolares DESC
+        LIMIT 10
+    """), params)).mappings().all()
+
+    return {
+        "total_descontado": round(total_desc, 2),
+        "pct_sobre_facturacion": round(pct, 2),
+        "facturacion_perdida": round(total_desc, 2),
+        "por_vendedor": [
+            {"nombre": vendedor_names.get(r["cod_vendedor"], r["cod_vendedor"]),
+             "descuento_total": round(money(r["descuento_total"]), 2),
+             "descuento_pct_promedio": round(money(r["descuento_pct_promedio"]), 2),
+             "tickets_con_descuento": int(r["tickets_con_descuento"])}
+            for r in por_vendedor
+        ],
+        "por_producto": [
+            {"nombre": r["nombre"],
+             "descuento_total": round(money(r["descuento_total"]), 2),
+             "descuento_pct_promedio": round(money(r["descuento_pct_promedio"]), 2),
+             "tickets_con_descuento": int(r["tickets_con_descuento"])}
+            for r in por_producto
+        ],
+        "por_cliente": [
+            {"nombre": r["nombre"],
+             "descuento_total": round(money(r["descuento_total"]), 2),
+             "descuento_pct_promedio": round(money(r["descuento_pct_promedio"]), 2)}
+            for r in por_cliente
+        ],
+        "mayores_descuentos": [
+            {"fecha": str(r["fecha"]),
+             "cliente": r["cliente_nombre"],
+             "vendedor": vendedor_names.get(r["cod_vendedor"], r["cod_vendedor"]),
+             "producto": r["producto_nombre"],
+             "descuento_pct": round(money(r["descuento_pct"]), 2),
+             "descuento_dolares": round(money(r["descuento_dolares"]), 2)}
+            for r in mayores
+        ],
+    }
+
+
+@router.get("/resultado/exportar")
+async def resultado_exportar(
+    company_id: int = None,
+    formato: Literal["excel", "csv"] = "excel",
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+    params = filters.sql_params()
+    where = _ventas_base_where(filters)
+
+    if formato == "csv":
+        import csv
+        rows = (await db.execute(text(f"""
+            SELECT producto_id, COALESCE(MAX(producto_nombre), producto_id) AS nombre,
+                SUM(cantidad) AS unidades,
+                COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN total ELSE 0 END), 0) AS facturado,
+                COALESCE(SUM(CASE WHEN precio_compra_actual IS NOT NULL
+                             THEN cantidad * precio_compra_actual::float ELSE 0 END), 0) AS cogs
+            FROM ventas WHERE {where} GROUP BY producto_id ORDER BY facturado DESC
+        """), params)).mappings().all()
+        buf = io.StringIO()
+        buf.write('﻿')
+        w = csv.writer(buf)
+        w.writerow(["Producto", "Unidades", "Facturado", "COGS", "Margen $", "Margen %"])
+        for r in rows:
+            f, c = money(r["facturado"]), money(r["cogs"])
+            mb = f - c
+            w.writerow([r["nombre"], int(r["unidades"] or 0), round(f, 2), round(c, 2),
+                         round(mb, 2), round((mb/f*100) if f else 0, 2)])
+        return StreamingResponse(
+            iter([buf.getvalue()]),
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": "attachment; filename=resultado.csv"},
+        )
+
+    from openpyxl import Workbook
+    wb = Workbook()
+
+    ws_kpi = wb.active
+    ws_kpi.title = "KPIs"
+    kpi_data = await resultado_kpis(company_id, filters, current_user, db)
+    for key, val in kpi_data.items():
+        if isinstance(val, dict) and "actual" in val:
+            ws_kpi.append([key, val["actual"]])
+        elif not isinstance(val, dict):
+            ws_kpi.append([key, val])
+
+    ws_prod = wb.create_sheet("Por Producto")
+    ws_prod.append(["Producto", "Rubro", "Unidades", "Facturado", "COGS", "Margen $", "Margen %", "Descuento", "Cuadrante"])
+    prod_data = await resultado_por_producto(company_id, filters, current_user, db)
+    for p in prod_data["ranking"]:
+        ws_prod.append([p["nombre"], p["rubro_nombre"], p["unidades"], p["facturado"],
+                        p["cogs"], p["margen_dolares"], p["margen_pct"],
+                        p["descuento_total"], p.get("cuadrante", "")])
+
+    ws_vend = wb.create_sheet("Por Vendedor")
+    ws_vend.append(["Vendedor", "Facturado", "COGS", "Margen $", "Margen %", "Desc. Prom %", "Tickets"])
+    vend_data = await resultado_por_vendedor(company_id, filters, current_user, db)
+    for v in vend_data["ranking"]:
+        ws_vend.append([v["nombre"], v["facturado"], v["cogs"], v["margen_dolares"],
+                        v["margen_pct"], v["descuento_promedio_pct"], v["tickets"]])
+
+    ws_cli = wb.create_sheet("Por Cliente")
+    ws_cli.append(["Cliente", "Facturado", "COGS", "Margen $", "Margen %", "Desc. Prom %", "Tickets"])
+    cli_data = await resultado_por_cliente(company_id, filters, current_user, db)
+    for c in cli_data["ranking"]:
+        ws_cli.append([c["cliente_nombre"], c["facturado"], c["cogs"], c["margen_dolares"],
+                       c["margen_pct"], c["descuento_promedio_pct"], c["tickets"]])
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=resultado.xlsx"},
+    )
