@@ -12,4 +12,5 @@ openpyxl
 pandas
 psycopg2-binary
 sqlalchemy
+requests
 pydantic
