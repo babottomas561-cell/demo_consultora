@@ -108,7 +108,7 @@ def compra_filters_clause(
     filters: GlobalFilters,
     start_param: str = "desde",
     end_param: str = "hasta",
-    include_provider: bool = False,
+    include_provider: bool = True,
 ) -> str:
     clauses = [f"fecha >= :{start_param}", f"fecha < :{end_param}"]
     if filters.cod_articulo:

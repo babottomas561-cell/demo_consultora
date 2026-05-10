@@ -12,7 +12,7 @@ const tones = {
 };
 
 const formatters = {
-  currency: (v) => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(v ?? 0),
+  currency: (v) => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(v ?? 0),
   number:   (v) => new Intl.NumberFormat('es-AR', { maximumFractionDigits: 0 }).format(v ?? 0),
   percent:  (v) => `${Number(v ?? 0).toFixed(1)}%`,
   custom:   (v) => v,
@@ -74,11 +74,11 @@ const KPICard = ({
       className={cn('min-h-[136px] border-t-[3px] p-5', palette.border, onClick && 'cursor-pointer hover:shadow-md transition-shadow', className)}
       onClick={onClick}
     >
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
           <p className="truncate text-[10px] font-semibold uppercase tracking-[0.04em] text-slate-500" title={label}>{label}</p>
-          <div className={cn('mt-3 inline-flex rounded-lg px-3 py-1', palette.pill)}>
-            <span className="text-xl font-bold tabular-nums">{displayValue}</span>
+          <div className={cn('mt-3 inline-flex max-w-full rounded-lg px-3 py-1', palette.pill)}>
+            <span className="truncate text-lg font-bold tracking-tight tabular-nums">{displayValue}</span>
           </div>
           {subtitle && <p className="mt-1 text-xs text-slate-400">{subtitle}</p>}
           {compareValue != null && (
