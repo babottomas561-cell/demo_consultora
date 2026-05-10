@@ -2307,87 +2307,78 @@ async def stock_kpis(
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    import traceback as _tb
     tenant_schema = await get_tenant_schema(current_user, db, company_id)
     await set_tenant_search_path(db, tenant_schema)
     params = dict(filters.sql_params())
     ventas_where = _ventas_base_where(filters)
     dias_periodo = max((filters.hasta - filters.desde).days, 1)
     params["dias_periodo"] = dias_periodo
-    noventa = (filters.hasta - timedelta(days=90)).isoformat()
-    params["noventa90"] = noventa
+    # Pass date objects (not strings) — asyncpg requires datetime.date for date columns
+    params["noventa90"] = filters.hasta - timedelta(days=90)
 
-    step = "setup"
-    try:
-        step = "stock_totals"
-        stock_totals = (await db.execute(text("""
-            SELECT
-                COUNT(DISTINCT cod_articulo)                           AS total_articulos,
-                COUNT(DISTINCT CASE WHEN cantidad > 0 THEN cod_articulo END) AS con_stock,
-                COUNT(DISTINCT CASE WHEN cantidad <= 0 THEN cod_articulo END) AS sin_stock,
-                COUNT(DISTINCT CASE WHEN cantidad > 0 AND cantidad < COALESCE(stock_minimo, 50)
-                                    THEN cod_articulo END)              AS stock_bajo,
-                COALESCE(SUM(cantidad * COALESCE(precio_compra_actual, 0)), 0)  AS valor_costo,
-                COALESCE(SUM(cantidad), 0)                             AS total_unidades
-            FROM stock
-        """))).mappings().one()
+    # Aggregate from stock table grouped by cod_articulo (each article can span multiple depositos)
+    stock_totals = (await db.execute(text("""
+        SELECT
+            COUNT(DISTINCT cod_articulo)                           AS total_articulos,
+            COUNT(DISTINCT CASE WHEN cantidad > 0 THEN cod_articulo END) AS con_stock,
+            COUNT(DISTINCT CASE WHEN cantidad <= 0 THEN cod_articulo END) AS sin_stock,
+            COUNT(DISTINCT CASE WHEN cantidad > 0 AND cantidad < COALESCE(stock_minimo, 50)
+                                THEN cod_articulo END)              AS stock_bajo,
+            COALESCE(SUM(cantidad * COALESCE(precio_compra_actual, 0)), 0)  AS valor_costo,
+            COALESCE(SUM(cantidad), 0)                             AS total_unidades
+        FROM stock
+    """))).mappings().one()
 
-        step = "ventas_mov"
-        ventas_mov = (await db.execute(text(f"""
-            WITH vperiod AS (
-                SELECT am.cod_articulo, COALESCE(SUM(v.cantidad),0) AS vendido_periodo
-                FROM {_ARTICULO_MAP_SQL}
-                LEFT JOIN ventas v ON v.producto_id = am.producto_id AND {ventas_where}
-                GROUP BY am.cod_articulo
-            ),
-            stock_agg AS (
-                SELECT cod_articulo, SUM(cantidad) AS cantidad_total
-                FROM stock GROUP BY cod_articulo
-            )
-            SELECT
-                COALESCE(AVG(
-                    CASE WHEN vp.vendido_periodo > 0
-                         THEN sa.cantidad_total / (vp.vendido_periodo / GREATEST(:dias_periodo, 1))
-                    END
-                ), 0) AS dias_inv_prom
-            FROM stock_agg sa
-            LEFT JOIN vperiod vp USING (cod_articulo)
-        """), params)).mappings().one()
-
-        step = "sin_mov_rows"
-        sin_mov_rows = (await db.execute(text(f"""
-            SELECT COUNT(DISTINCT am.cod_articulo) AS cnt
+    # Ventas diarias por articulo en el período → días inventario
+    ventas_mov = (await db.execute(text(f"""
+        WITH vperiod AS (
+            SELECT am.cod_articulo, COALESCE(SUM(v.cantidad),0) AS vendido_periodo
             FROM {_ARTICULO_MAP_SQL}
-            JOIN stock s ON s.cod_articulo = am.cod_articulo AND s.cantidad > 0
-            WHERE am.producto_id NOT IN (
-                SELECT DISTINCT producto_id FROM ventas
-                WHERE fecha >= :noventa90 AND tipo_comprobante='FA'
-            )
-        """), params)).mappings().one()
+            LEFT JOIN ventas v ON v.producto_id = am.producto_id AND {ventas_where}
+            GROUP BY am.cod_articulo
+        ),
+        stock_agg AS (
+            SELECT cod_articulo, SUM(cantidad) AS cantidad_total
+            FROM stock GROUP BY cod_articulo
+        )
+        SELECT
+            COALESCE(AVG(
+                CASE WHEN vp.vendido_periodo > 0
+                     THEN sa.cantidad_total / (vp.vendido_periodo / GREATEST(:dias_periodo, 1))
+                END
+            ), 0) AS dias_inv_prom
+        FROM stock_agg sa
+        LEFT JOIN vperiod vp USING (cod_articulo)
+    """), params)).mappings().one()
 
-        total = int(stock_totals["total_articulos"] or 0)
-        con = int(stock_totals["con_stock"] or 0)
-        sin = int(stock_totals["sin_stock"] or 0)
-        bajo = int(stock_totals["stock_bajo"] or 0)
-        val_costo = money(stock_totals["valor_costo"])
-        dias_inv = round(float(ventas_mov["dias_inv_prom"] or 0), 1)
-        sin_mov = int(sin_mov_rows["cnt"] or 0)
+    # Articles with no ventas in last 90 days
+    sin_mov_rows = (await db.execute(text(f"""
+        SELECT COUNT(DISTINCT am.cod_articulo) AS cnt
+        FROM {_ARTICULO_MAP_SQL}
+        JOIN stock s ON s.cod_articulo = am.cod_articulo AND s.cantidad > 0
+        WHERE am.producto_id NOT IN (
+            SELECT DISTINCT producto_id FROM ventas
+            WHERE fecha >= :noventa90 AND tipo_comprobante='FA'
+        )
+    """), params)).mappings().one()
 
-        return {
-            "total_articulos": {"actual": total},
-            "con_stock": {"actual": con},
-            "sin_stock": {"actual": sin},
-            "stock_bajo": {"actual": bajo},
-            "valor_inventario_costo": {"actual": round(val_costo, 2)},
-            "dias_inventario_promedio": {"actual": dias_inv},
-            "articulos_sin_movimiento": {"actual": sin_mov},
-        }
-    except Exception as exc:
-        return {
-            "_step": step,
-            "_error": type(exc).__name__ + ": " + str(exc)[:400],
-            "_tb": _tb.format_exc()[-800:],
-        }
+    total = int(stock_totals["total_articulos"] or 0)
+    con = int(stock_totals["con_stock"] or 0)
+    sin = int(stock_totals["sin_stock"] or 0)
+    bajo = int(stock_totals["stock_bajo"] or 0)
+    val_costo = money(stock_totals["valor_costo"])
+    dias_inv = round(float(ventas_mov["dias_inv_prom"] or 0), 1)
+    sin_mov = int(sin_mov_rows["cnt"] or 0)
+
+    return {
+        "total_articulos": {"actual": total},
+        "con_stock": {"actual": con},
+        "sin_stock": {"actual": sin},
+        "stock_bajo": {"actual": bajo},
+        "valor_inventario_costo": {"actual": round(val_costo, 2)},
+        "dias_inventario_promedio": {"actual": dias_inv},
+        "articulos_sin_movimiento": {"actual": sin_mov},
+    }
 
 
 @router.get("/stock/por-producto")
