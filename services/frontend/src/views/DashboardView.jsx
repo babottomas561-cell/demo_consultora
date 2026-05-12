@@ -1,104 +1,55 @@
-import { useState, useEffect } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { Users, DollarSign, Activity, ShoppingCart, Loader2, RefreshCcw } from 'lucide-react';
+import { ResponsiveGridLayout, useContainerWidth } from 'react-grid-layout';
+import { Activity, Plus, Pencil, RotateCcw, ShoppingCart, RefreshCcw, X, Lock } from 'lucide-react';
 import useAuthStore from '../store/authStore';
-import apiClient from '../api/client';
+import useDashboardStore from '../store/dashboardStore';
+import { getWidgetDef } from '../features/dashboard/widgets';
+import AddWidgetModal from '../features/dashboard/AddWidgetModal';
+import { useDashboardData } from '../features/dashboard/useDashboardData';
+import 'react-grid-layout/css/styles.css';
 
-const formatCurrency = (value) => {
-  return new Intl.NumberFormat('es-AR', {
-    style: 'currency',
-    currency: 'ARS',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(value);
+const WidgetWrapper = ({ widget, editing, onRemove, children }) => {
+  const def = getWidgetDef(widget.type);
+  if (!def) return null;
+
+  return (
+    <div className="h-full rounded-xl border border-slate-200 bg-white shadow-sm flex flex-col overflow-hidden group">
+      <div className={`flex items-center justify-between px-4 py-2.5 border-b border-slate-100 shrink-0 ${editing ? 'cursor-grab active:cursor-grabbing bg-slate-50' : ''}`}>
+        <div className="flex items-center gap-2 min-w-0">
+          <def.icon size={14} className="text-slate-400 shrink-0" />
+          <span className="text-sm font-semibold text-slate-700 truncate">{def.name}</span>
+        </div>
+        {editing && (
+          <button
+            onMouseDown={e => e.stopPropagation()}
+            onClick={() => onRemove(widget.id)}
+            className="p-1 rounded-md text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+          >
+            <X size={14} />
+          </button>
+        )}
+      </div>
+      <div className="flex-1 min-h-0 overflow-hidden">
+        {children}
+      </div>
+    </div>
+  );
 };
-
-const formatYAxisCurrency = (value) => {
-  const numeric = Number(value || 0);
-  if (Math.abs(numeric) >= 1000000) return `$${(numeric / 1000000).toFixed(1)}M`;
-  if (Math.abs(numeric) >= 1000) return `$${(numeric / 1000).toFixed(0)}K`;
-  return `$${numeric}`;
-};
-
-const formatDate = (isoString) => {
-  if (!isoString) return 'Nunca';
-  const date = new Date(isoString);
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const target = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  const diffDays = Math.round((today - target) / 86400000);
-  const time = date.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false });
-
-  if (diffDays === 0) return `Hoy ${time}`;
-  if (diffDays === 1) return `Ayer ${time}`;
-  return `${date.toLocaleDateString('es-AR')} ${time}`;
-};
-
-const StatCard = ({ title, metric, icon: Icon, loading }) => (
-  <div className="flex min-h-40 flex-col gap-3 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-    <div className="flex items-start justify-between gap-3">
-    <div>
-      <p className="mb-1 text-xs font-semibold uppercase tracking-[0.05em] text-slate-500">{title}</p>
-      {loading ? (
-        <div className="h-8 w-24 bg-slate-200 animate-pulse rounded mt-2"></div>
-      ) : (
-        <h3 className="text-3xl font-bold tracking-[-0.02em] text-slate-900 tabular-nums">{metric}</h3>
-      )}
-    </div>
-    <div className="rounded-[10px] bg-indigo-50 p-3 text-indigo-600">
-      <Icon size={18} />
-    </div>
-    </div>
-    <div className="mt-auto flex h-9 items-end gap-1">
-      {[35, 50, 42, 60, 55, 68, 74, 62, 80, 72, 88, 95].map((height, index) => (
-        <span
-          key={index}
-          className={`flex-1 rounded-t-sm ${index === 11 ? 'bg-indigo-600' : 'bg-indigo-100'}`}
-          style={{ height: `${height}%` }}
-        />
-      ))}
-    </div>
-  </div>
-);
 
 const DashboardView = () => {
-  const user = useAuthStore(state => state.user);
-  const activeCompany = useAuthStore(state => state.activeCompany);
-  
-  const [kpis, setKpis] = useState(null);
-  const [topClientes, setTopClientes] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const user = useAuthStore(s => s.user);
+  const activeCompany = useAuthStore(s => s.activeCompany);
+  const { widgets, layouts, editing, toggleEditing, updateLayouts, removeWidget, resetToDefault } = useDashboardStore();
+  const { kpis, loading: dataLoading } = useDashboardData();
+  const [showAddModal, setShowAddModal] = useState(false);
+  const containerRef = useRef(null);
+  const [containerWidth] = useContainerWidth(containerRef);
 
-  const fetchData = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const queryParam = (user?.is_admin && activeCompany) ? `?company_id=${activeCompany.id}` : '';
-      const [kpiRes, topRes] = await Promise.all([
-        apiClient.get(`/dashboard/kpis${queryParam}`),
-        apiClient.get(`/dashboard/top-clientes${queryParam}`)
-      ]);
-      setKpis(kpiRes.data);
-      setTopClientes(topRes.data);
-    } catch (err) {
-      console.error(err);
-      setError('Error al cargar los datos del dashboard.');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const handleLayoutChange = useCallback((_, allLayouts) => {
+    if (editing) updateLayouts(allLayouts);
+  }, [editing, updateLayouts]);
 
-  useEffect(() => {
-    if ((user && user.company_id) || (user?.is_admin && activeCompany)) {
-      fetchData();
-    } else {
-      setLoading(false);
-    }
-  }, [user, activeCompany]);
-
-  // If user has no company yet
   if (!user?.company_id && !user?.is_admin) {
     return (
       <div className="text-center py-20">
@@ -108,7 +59,6 @@ const DashboardView = () => {
     );
   }
 
-  // Admin without active company warning
   if (user?.is_admin && !activeCompany) {
     return (
       <div className="text-center py-20 space-y-4">
@@ -117,7 +67,7 @@ const DashboardView = () => {
         </div>
         <div>
           <h2 className="text-xl font-bold text-slate-900">Hola Administrador</h2>
-          <p className="text-slate-500 mt-2">Para ver métricas, ingresa como un usuario de inquilino o selecciona una empresa.</p>
+          <p className="text-slate-500 mt-2">Seleccioná una empresa para ver métricas.</p>
         </div>
         <div className="pt-4">
           <Link to="/admin/companies" className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
@@ -128,20 +78,7 @@ const DashboardView = () => {
     );
   }
 
-  // Error State
-  if (error) {
-    return (
-      <div className="p-4 bg-red-50 text-red-800 rounded-lg border border-red-100 flex items-center justify-between">
-        <span>{error}</span>
-        <button onClick={fetchData} className="px-3 py-1 bg-white text-red-600 rounded text-sm hover:bg-red-50 border border-red-200">
-          Reintentar
-        </button>
-      </div>
-    );
-  }
-
-  // Empty State (no transactions)
-  if (!loading && kpis?.total_transacciones === 0) {
+  if (!dataLoading && kpis?.total_transacciones === 0) {
     return (
       <div className="py-20 flex flex-col items-center justify-center text-center space-y-6">
         <div className="h-24 w-24 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-600">
@@ -149,128 +86,89 @@ const DashboardView = () => {
         </div>
         <div>
           <h2 className="text-3xl font-bold text-slate-900">Aún no hay datos</h2>
-          <p className="text-slate-500 mt-2 max-w-md mx-auto">
-            Sincronizá tu primer archivo Excel para comenzar a visualizar los KPIs y reportes financieros.
-          </p>
+          <p className="text-slate-500 mt-2 max-w-md mx-auto">Sincronizá tu primer archivo para comenzar.</p>
         </div>
-        <Link 
-          to="/dashboard/sync"
-          className="inline-flex items-center px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors shadow-sm font-medium"
-        >
-          <RefreshCcw size={18} className="mr-2" />
-          Sincronizar Excel
+        <Link to="/dashboard/sync" className="inline-flex items-center px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors shadow-sm font-medium">
+          <RefreshCcw size={18} className="mr-2" /> Sincronizar
         </Link>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-[-0.02em] text-slate-900">Hola, {user?.email}</h1>
+          <h1 className="text-2xl font-bold tracking-[-0.02em] text-slate-900">
+            Hola, {user?.email}
+          </h1>
           <p className="mt-1 text-sm text-slate-500">
-            Aquí tienes el resumen financiero de {activeCompany ? activeCompany.name : 'tu empresa'}.
+            {activeCompany ? activeCompany.name : 'Tu empresa'} — Dashboard personalizable
           </p>
         </div>
-      </div>
-
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <StatCard 
-          title="Ventas del Mes" 
-          metric={formatCurrency(kpis?.total_ventas_mes || 0)} 
-          icon={DollarSign} 
-          loading={loading} 
-        />
-        <StatCard 
-          title="Clientes Activos" 
-          metric={kpis?.total_clientes || 0} 
-          icon={Users} 
-          loading={loading} 
-        />
-        <StatCard 
-          title="Transacciones" 
-          metric={kpis?.total_transacciones || 0} 
-          icon={ShoppingCart} 
-          loading={loading} 
-        />
-        <StatCard 
-          title="Última Sincronización" 
-          metric={formatDate(kpis?.ultimo_sync)} 
-          icon={Activity} 
-          loading={loading} 
-        />
-      </div>
-
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* Main Chart */}
-        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm lg:col-span-2">
-          <h3 className="text-lg font-semibold text-slate-900 mb-6">Ventas últimos 6 meses</h3>
-          {loading ? (
-            <div className="h-80 w-full bg-slate-50 animate-pulse rounded-lg border border-slate-100"></div>
-          ) : (
-            <div className="h-80 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={kpis?.ventas_por_mes || []}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                  <XAxis dataKey="mes" axisLine={false} tickLine={false} tick={{ fill: '#64748b' }} dy={10} />
-                  <YAxis 
-                    axisLine={false} 
-                    tickLine={false} 
-                    tick={{ fill: '#64748b' }} 
-                    dx={-10}
-                    tickFormatter={formatYAxisCurrency}
-                  />
-                  <Tooltip 
-                    cursor={{ fill: '#f1f5f9' }}
-                    contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(15 23 42 / 0.10)', background: '#fff' }}
-                    formatter={(value) => formatCurrency(value)}
-                    labelStyle={{ color: '#64748b', marginBottom: '4px' }}
-                  />
-                  <Bar dataKey="total" fill="#4f46e5" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+        <div className="flex items-center gap-2">
+          {editing && (
+            <>
+              <button onClick={() => setShowAddModal(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-white px-3 py-2 text-sm font-medium text-indigo-600 hover:bg-indigo-50 transition-colors">
+                <Plus size={16} /> Agregar widget
+              </button>
+              <button onClick={resetToDefault} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors">
+                <RotateCcw size={16} /> Resetear
+              </button>
+            </>
           )}
+          <button
+            onClick={toggleEditing}
+            className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+              editing
+                ? 'bg-indigo-600 text-white hover:bg-indigo-700'
+                : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            {editing ? <><Lock size={16} /> Guardar</> : <><Pencil size={16} /> Editar</>}
+          </button>
         </div>
+      </div>
 
-        {/* Top Clientes Table */}
-        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h3 className="text-lg font-semibold text-slate-900 mb-4">Top Clientes del Mes</h3>
-          {loading ? (
-            <div className="space-y-4">
-              {[1, 2, 3, 4, 5].map(i => (
-                <div key={i} className="flex justify-between items-center">
-                  <div className="h-4 w-32 bg-slate-200 animate-pulse rounded"></div>
-                  <div className="h-4 w-16 bg-slate-200 animate-pulse rounded"></div>
+      {editing && (
+        <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2.5 text-sm text-indigo-700">
+          Modo edición: arrastrá y redimensioná los widgets. Hacé clic en <strong>Guardar</strong> cuando termines.
+        </div>
+      )}
+
+      <div ref={containerRef}>
+        {containerWidth > 0 && (
+          <ResponsiveGridLayout
+            className="layout"
+            width={containerWidth}
+            layouts={layouts}
+            breakpoints={{ lg: 1200, md: 996, sm: 768 }}
+            cols={{ lg: 12, md: 12, sm: 6 }}
+            rowHeight={80}
+            onLayoutChange={handleLayoutChange}
+            isDraggable={editing}
+            isResizable={editing}
+            draggableHandle=".cursor-grab"
+            margin={[16, 16]}
+            containerPadding={[0, 0]}
+          >
+            {widgets.map(widget => {
+              const def = getWidgetDef(widget.type);
+              if (!def) return <div key={widget.id} />;
+              const Component = def.component;
+              return (
+                <div key={widget.id}>
+                  <WidgetWrapper widget={widget} editing={editing} onRemove={removeWidget}>
+                    <Component />
+                  </WidgetWrapper>
                 </div>
-              ))}
-            </div>
-          ) : topClientes.length === 0 ? (
-            <p className="text-slate-500 text-sm">No hay ventas registradas este mes.</p>
-          ) : (
-            <ul className="divide-y divide-slate-100">
-              {topClientes.map((cliente, idx) => (
-                <li key={cliente.cliente_id} className="py-3 flex justify-between items-center">
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs font-bold text-slate-400 w-4">{idx + 1}.</span>
-                    <div>
-                      <p className="text-sm font-semibold text-slate-900 truncate max-w-[150px]">
-                        {cliente.cliente_nombre}
-                      </p>
-                      <p className="text-xs text-slate-500">{cliente.transacciones} compras</p>
-                    </div>
-                  </div>
-                  <span className="text-sm font-bold text-indigo-600">
-                    {formatCurrency(cliente.total)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+              );
+            })}
+          </ResponsiveGridLayout>
+        )}
       </div>
+
+      {showAddModal && <AddWidgetModal onClose={() => setShowAddModal(false)} />}
     </div>
   );
 };
