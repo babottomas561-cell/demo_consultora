@@ -1114,7 +1114,7 @@ async def ventas_kpis(
     total_con_costo = money(row["total_con_costo"])
     facturado_neto = fa - nc
     ticket_prom = facturado_neto / tickets if tickets else 0
-    tasa_dev = (nc / fa * 100) if fa else 0
+    tasa_dev = min((nc / fa * 100) if fa else 0, 100.0)
     margen_pct = (margen_d / total_con_costo * 100) if total_con_costo else 0
 
     # previous period
@@ -1134,7 +1134,7 @@ async def ventas_kpis(
         ant["tickets"] = int(prev_row["tickets"] or 0)
         ant["ticket_promedio"] = ant["facturado_neto"] / ant["tickets"] if ant["tickets"] else 0
         ant["unidades"] = money(prev_row["unidades"])
-        ant["tasa_devolucion"] = (ant_nc / ant_fa * 100) if ant_fa else 0
+        ant["tasa_devolucion"] = min((ant_nc / ant_fa * 100) if ant_fa else 0, 100.0)
         ant["clientes_unicos"] = int(prev_row["clientes_unicos"] or 0)
         ant_margen_d = money(prev_row["margen_dolares"])
         ant_total_con_costo = money(prev_row["total_con_costo"])
