@@ -5,6 +5,18 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str
 
+class UserCreateAdmin(BaseModel):
+    email: EmailStr
+    password: str
+    company_id: int
+    is_admin: bool = False
+
+class UserUpdate(BaseModel):
+    email: Optional[EmailStr] = None
+    password: Optional[str] = None
+    is_admin: Optional[bool] = None
+    company_id: Optional[int] = None
+
 class UserLogin(BaseModel):
     email: EmailStr
     password: str

@@ -37,7 +37,7 @@ class InfomanagerConnector:
 
     def authenticate(self) -> None:
         response = requests.post(
-            f"{self.base_url}/api/v1/auth",
+            f"{self.base_url}/api/v1/auth/login",
             json={
                 "client_id": self.client_id,
                 "client_secret": self.client_secret,
@@ -46,7 +46,10 @@ class InfomanagerConnector:
         )
         response.raise_for_status()
         data = response.json()
-        self.token = data["access_token"]
+        # API returns token under different keys depending on version
+        self.token = data.get("access_token") or data.get("token") or data.get("accessToken")
+        if not self.token:
+            raise ValueError(f"No token in auth response. Keys: {list(data.keys())}")
         self.token_expires = datetime.now(timezone.utc) + timedelta(hours=23)
 
     def ensure_token(self) -> None:
@@ -62,7 +65,7 @@ class InfomanagerConnector:
         if isinstance(payload, list):
             return payload
         if isinstance(payload, dict):
-            for key in ("data", "items", "results"):
+            for key in ("data", "items", "results", "lComprasItems", "lVentasItems"):
                 value = payload.get(key)
                 if isinstance(value, list):
                     return value
@@ -140,116 +143,149 @@ class InfomanagerConnector:
             {
                 "cod_articulo": _as_int(s.get("cod_articulo")),
                 "cod_deposito": _as_int(s.get("cod_deposito"), 1),
-                "cantidad": _as_float(s.get("cantidad")),
+                # API returns current stock in "existencia", not "cantidad"
+                "cantidad": _as_float(s.get("existencia") or s.get("cantidad")),
                 "precio_compra_actual": _as_float(s.get("precio_compra")),
             }
             for s in data
         ]
 
     def sync_ventas(self, fecha_desde, fecha_hasta) -> list[dict[str, Any]]:
-        data = self.fetch_paginated(
-            "/api/v1/ventas",
-            {
-                "fechaDesde": fecha_desde.strftime("%Y%m%d"),
-                "fechaHasta": fecha_hasta.strftime("%Y%m%d"),
-            },
-        )
+        # Items endpoint lacks header fields (fecha, cod_cliente, etc.) — must join.
+        # Headers are indexed by id; items reference them via id_comprobante.
+        params = {
+            "fechaDesde": fecha_desde.strftime("%Y%m%d"),
+            "fechaHasta": fecha_hasta.strftime("%Y%m%d"),
+        }
+        headers_raw = self.fetch_paginated("/api/v1/ventas", params)
+        headers = {h["id"]: h for h in headers_raw if "id" in h}
+
+        items_raw = self.fetch_paginated("/api/v1/ventas/items", params)
+
         ventas: list[dict[str, Any]] = []
-        for v in data:
-            cab = v.get("venta", v)
-            items = v.get("items", [])
-            for item in items:
-                ventas.append(
-                    {
-                        "fecha": cab["fecha"],
-                        "cliente_id": str(cab.get("cod_cliente", 0)),
-                        "cliente_nombre": cab.get("cliente_nombre") or cab.get("razon_social") or "",
-                        "producto_id": str(item.get("cod_articulo", "")),
-                        "producto_nombre": item.get("detalle") or item.get("descripcion") or "",
-                        "cantidad": _as_float(item.get("cantidad")),
-                        "precio_unitario": _as_float(item.get("precio")),
-                        "total": _as_float(item.get("importe")),
-                        "tipo_comprobante": cab.get("tipo_comprobante", "FA"),
-                        "tipo_factura": cab.get("tipo_factura"),
-                        "punto_de_venta": _as_int(cab.get("punto_de_venta")),
-                        "cod_vendedor": _as_int(cab.get("cod_vendedor")),
-                        "cod_empresa": _as_int(cab.get("cod_empresa"), 1),
-                        "tag": cab.get("tag", "S"),
-                        "condicion_venta_tipo": _as_int(cab.get("condicion_venta_tipo"), 1),
-                        "neto": _as_float(cab.get("neto")),
-                        "iva_importe": _as_float(cab.get("iva_importe")),
-                        "anulada": cab.get("anulada", "N"),
-                        "cod_deposito": _as_int(cab.get("cod_deposito"), 1),
-                        "cod_rubro": _as_int(item.get("cod_rubro")) if "cod_rubro" in item else None,
-                        "precio_compra_actual": _as_float(item.get("precio_compra_actual")),
-                        "descuento_porc": _as_float(item.get("descuento_porc")),
-                    }
-                )
+        for item in items_raw:
+            cab = headers.get(_as_int(item.get("id_comprobante")), {})
+            ventas.append(
+                {
+                    "fecha": cab.get("fecha"),
+                    "cliente_id": str(cab.get("cod_cliente") or 0),
+                    "cliente_nombre": cab.get("cliente_nombre") or cab.get("razon_social") or "",
+                    "producto_id": str(item.get("cod_articulo") or ""),
+                    "producto_nombre": item.get("detalle") or item.get("descripcion") or "",
+                    "cantidad": _as_float(item.get("cantidad")),
+                    "precio_unitario": _as_float(item.get("precio")),
+                    "total": _as_float(item.get("importe")),
+                    "tipo_comprobante": cab.get("tipo_comprobante") or "FA",
+                    "tipo_factura": cab.get("tipo_factura"),
+                    "punto_de_venta": _as_int(cab.get("punto_de_venta")),
+                    "cod_vendedor": _as_int(cab.get("cod_vendedor") or item.get("cod_vendedor")),
+                    "cod_empresa": _as_int(cab.get("cod_empresa"), 1),
+                    "tag": cab.get("tag", "S"),
+                    "condicion_venta_tipo": _as_int(cab.get("condicion_venta_tipo"), 1),
+                    "neto": _as_float(cab.get("neto")),
+                    "iva_importe": _as_float(cab.get("iva_importe")),
+                    "anulada": cab.get("anulada", "N"),
+                    "cod_deposito": _as_int(cab.get("cod_deposito"), 1),
+                    "cod_rubro": _as_int(item.get("cod_rubro")) if item.get("cod_rubro") is not None else None,
+                    "precio_compra_actual": _as_float(item.get("precio_compra_actual")),
+                    "descuento_porc": _as_float(item.get("descuento_porc") or item.get("descuento")),
+                }
+            )
         return ventas
 
     def sync_compras(self, fecha_desde, fecha_hasta) -> list[dict[str, Any]]:
-        data = self.fetch_paginated(
-            "/api/v1/compras",
-            {
-                "fechaDesde": fecha_desde.strftime("%Y%m%d"),
-                "fechaHasta": fecha_hasta.strftime("%Y%m%d"),
-            },
-        )
+        # Items endpoint lacks header fields (fecha, cod_proveedor) — must join.
+        params = {
+            "fechaDesde": fecha_desde.strftime("%Y%m%d"),
+            "fechaHasta": fecha_hasta.strftime("%Y%m%d"),
+        }
+        headers_raw = self.fetch_paginated("/api/v1/compras", params)
+        headers = {h["id"]: h for h in headers_raw if "id" in h}
+
+        items_raw = self.fetch_paginated("/api/v1/compras/items", params)
+
         compras: list[dict[str, Any]] = []
-        for c in data:
-            cab = c.get("compra", c)
-            items = c.get("items", [])
-            for item in items:
-                compras.append(
-                    {
-                        "fecha": cab["fecha"],
-                        "proveedor_id": str(cab.get("cod_proveedor", 0)),
-                        "proveedor_nombre": cab.get("proveedor_nombre") or cab.get("razon_social") or "",
-                        "producto_id": str(item.get("cod_articulo", "")),
-                        "producto_nombre": item.get("detalle") or item.get("descripcion") or "",
-                        "cantidad": _as_float(item.get("cantidad")),
-                        "precio_unitario": _as_float(item.get("precio")),
-                        "total": _as_float(item.get("importe")),
-                    }
-                )
+        for item in items_raw:
+            cab = headers.get(_as_int(item.get("id_comprobante")), {})
+            compras.append(
+                {
+                    "fecha": cab.get("fecha"),
+                    "proveedor_id": str(cab.get("cod_proveedor") or 0),
+                    "proveedor_nombre": cab.get("proveedor") or cab.get("proveedor_nombre") or "",
+                    "producto_id": str(item.get("cod_articulo") or ""),
+                    "producto_nombre": item.get("detalle") or item.get("descripcion") or "",
+                    "cantidad": _as_float(item.get("cantidad")),
+                    "precio_unitario": _as_float(item.get("precio")),
+                    "total": _as_float(item.get("importe")),
+                }
+            )
         return compras
 
     def sync_saldos_clientes(self) -> list[dict[str, Any]]:
+        # Returns one summary row per client: {cod_cliente, nombre, tot_saldo, tot_entrada, tot_salida, dias_deuda}
         data = self.fetch_paginated(
             "/api/v1/reportes/saldos_clientes",
             {"TAG": "T", "codcliente": 0, "codEmpresa": 0},
         )
-        return data
+        results = []
+        for row in data:
+            cod_cliente = str(row.get("cod_cliente") or 0)
+            tot_saldo = _as_float(row.get("tot_saldo"))
+            results.append({
+                "cliente_id": cod_cliente,
+                "cliente_nombre": row.get("nombre") or f"Cliente {cod_cliente}",
+                "comprobante_id": f"saldo-{cod_cliente}",
+                "tipo": "saldo",
+                "fecha": row.get("fecha") or None,
+                "importe": tot_saldo,
+                "saldo_acumulado": tot_saldo,
+                "fecha_vencimiento": None,
+            })
+        return results
 
     def sync_saldos_proveedores(self) -> list[dict[str, Any]]:
-        data = self.fetch_paginated(
-            "/api/v1/reportes/saldos_proveedores",
-            {"TAG": "T", "codProveedor": 0, "codEmpresa": 0},
-        )
-        return data
+        # Infomanager v2 API has no saldos_proveedores report endpoint.
+        # Proveedores balances must be derived from compras data.
+        return []
 
     def sync_presupuestos(self, fecha_desde, fecha_hasta) -> list[dict[str, Any]]:
-        data = self.fetch_paginated(
-            "/api/v1/presupuestos",
-            {
-                "fechaDesde": fecha_desde.strftime("%Y%m%d"),
-                "fechaHasta": fecha_hasta.strftime("%Y%m%d"),
-            },
-        )
+        # API has /confirmados and /no_confirmados — no base /presupuestos endpoint.
+        # Confirmed ones return {"venta": {...}} since they converted to sales.
+        params = {
+            "fechaDesde": fecha_desde.strftime("%Y%m%d"),
+            "fechaHasta": fecha_hasta.strftime("%Y%m%d"),
+        }
+        confirmados = self.fetch_paginated("/api/v1/presupuestos/confirmados", params)
+        no_confirmados = self.fetch_paginated("/api/v1/presupuestos/no_confirmados", params)
+
         presupuestos: list[dict[str, Any]] = []
-        for p in data:
-            cab = p.get("presupuesto", p)
-            presupuestos.append(
-                {
-                    "id": _as_int(cab.get("id") or cab.get("numero") or cab.get("nro_comprobante")),
-                    "fecha": cab.get("fecha"),
-                    "cod_cliente": _as_int(cab.get("cod_cliente")),
-                    "cliente_nombre": cab.get("cliente_nombre") or cab.get("razon_social"),
-                    "cod_vendedor": _as_int(cab.get("cod_vendedor")),
-                    "total": _as_float(cab.get("total") or cab.get("importe")),
-                    "confirmado": str(cab.get("confirmado", "N")) in {"S", "1", "true", "True"},
-                    "fecha_conversion": cab.get("fecha_conversion"),
-                    "venta_id": _as_int(cab.get("venta_id")) or None,
-                }
-            )
-        return [p for p in presupuestos if p["id"]]
+
+        def _map_presupuesto(p: dict, confirmado: bool) -> dict | None:
+            # Both endpoints return {"venta": {...}} — no "presupuesto" key, no "total" field
+            cab = p.get("venta") or p
+            pid = _as_int(cab.get("id") or cab.get("numero") or cab.get("nro_comprobante"))
+            if not pid:
+                return None
+            return {
+                "id": pid,
+                "fecha": cab.get("fecha"),
+                "cod_cliente": _as_int(cab.get("cod_cliente")),
+                "cliente_nombre": cab.get("cliente") or cab.get("cliente_nombre") or cab.get("razon_social"),
+                "cod_vendedor": _as_int(cab.get("cod_vendedor")),
+                "total": _as_float(cab.get("total") or cab.get("importe")),
+                "confirmado": confirmado,
+                "fecha_conversion": cab.get("fecha_conversion") or (cab.get("fecha") if confirmado else None),
+                "venta_id": _as_int(cab.get("venta_id") or (cab.get("id") if confirmado else None)) or None,
+            }
+
+        for p in confirmados:
+            row = _map_presupuesto(p, True)
+            if row:
+                presupuestos.append(row)
+
+        for p in no_confirmados:
+            row = _map_presupuesto(p, False)
+            if row:
+                presupuestos.append(row)
+
+        return presupuestos

@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from app.api.v1 import companies, auth, sync, dashboard, analytics, views, connectors
+from app.api.v1 import companies, auth, sync, dashboard, analytics, views, connectors, users
 
 import os
 from fastapi.middleware.cors import CORSMiddleware
@@ -30,3 +30,4 @@ app.include_router(sync.router, prefix="/api/v1/sync", tags=["sync"])
 app.include_router(dashboard.router, prefix="/api/v1/dashboard", tags=["dashboard"])
 app.include_router(analytics.router, prefix="/api/v1/analytics", tags=["analytics"])
 app.include_router(views.router, prefix="/api/v1/views", tags=["views"])
+app.include_router(users.router, prefix="/api/v1/users", tags=["users"])

@@ -5,6 +5,7 @@ import LoginView from './views/LoginView';
 import DashboardView from './views/DashboardView';
 import CompanyListView from './views/CompanyListView';
 import CompanyCreateView from './views/CompanyCreateView';
+import CompanyUsersView from './views/CompanyUsersView';
 import SyncExcelView from './views/SyncExcelView';
 import VentasAnalyticsView from './features/analytics/VentasAnalyticsView';
 import ComprasAnalyticsView from './features/analytics/ComprasAnalyticsView';
@@ -40,6 +41,7 @@ function App() {
           <Route element={<AdminRoute />}>
             <Route path="/admin/companies" element={<CompanyListView />} />
             <Route path="/admin/companies/new" element={<CompanyCreateView />} />
+            <Route path="/admin/companies/:companyId/users" element={<CompanyUsersView />} />
           </Route>
         </Route>
       </Route>

@@ -13,6 +13,8 @@ const useAuthStore = create(
       logout: () => set({ user: null, token: null, activeCompany: null }),
       
       setActiveCompany: (company) => set({ activeCompany: company }),
+
+      clearActiveCompany: () => set({ activeCompany: null }),
     }),
     {
       name: 'auth-storage', // key in localStorage
