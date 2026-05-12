@@ -51,7 +51,7 @@ def _kpi_obj(actual: float, anterior: Optional[float] = None):
 async def _fetch_kpi_row(db: AsyncSession, where: str, params: dict) -> dict:
     row = (await db.execute(text(f"""
         SELECT
-            COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN total ELSE 0 END),0)            AS fa_bruto,
+            COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN ABS(total) ELSE 0 END),0)            AS fa_bruto,
             COALESCE(SUM(CASE WHEN tipo_comprobante IN ('NC','ND') THEN ABS(total) ELSE 0 END),0) AS nc_total,
             COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN COALESCE(neto::float, total/1.21) ELSE 0 END),0) AS neto_fa,
             COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN COALESCE(iva_importe::float,0) ELSE 0 END),0) AS iva_debito,
@@ -63,7 +63,7 @@ async def _fetch_kpi_row(db: AsyncSession, where: str, params: dict) -> dict:
                    THEN (precio_unitario - precio_compra_actual::float) * cantidad
               ELSE 0 END),0)                                                                   AS margen_dolares,
             COALESCE(SUM(
-              CASE WHEN precio_compra_actual IS NOT NULL THEN total ELSE 0 END),0)             AS total_con_costo
+              CASE WHEN precio_compra_actual IS NOT NULL THEN ABS(total) ELSE 0 END),0)             AS total_con_costo
         FROM ventas
         WHERE {where}
     """), params)).mappings().one()
@@ -1174,7 +1174,7 @@ async def ventas_temporal(
     series = (await db.execute(text(f"""
         SELECT
             to_char(date_trunc('{trunc}', fecha), 'YYYY-MM-DD') AS periodo,
-            COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN total ELSE 0 END),0)
+            COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN ABS(total) ELSE 0 END),0)
               - COALESCE(SUM(CASE WHEN tipo_comprobante IN ('NC','ND') THEN ABS(total) ELSE 0 END),0) AS facturado,
             COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END)                                         AS tickets,
             COALESCE(SUM(CASE WHEN tipo_comprobante IN ('NC','ND') THEN ABS(total) ELSE 0 END),0)    AS devoluciones
@@ -1194,7 +1194,7 @@ async def ventas_temporal(
         prev_series = (await db.execute(text(f"""
             SELECT
                 to_char(date_trunc('{trunc}', fecha), 'YYYY-MM-DD') AS periodo,
-                COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN total ELSE 0 END),0)
+                COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN ABS(total) ELSE 0 END),0)
                   - COALESCE(SUM(CASE WHEN tipo_comprobante IN ('NC','ND') THEN ABS(total) ELSE 0 END),0) AS facturado,
                 COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END) AS tickets
             FROM ventas
@@ -1227,7 +1227,7 @@ async def ventas_productos(
     where = _ventas_base_where(filters)
 
     total_row = (await db.execute(text(f"""
-        SELECT COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN total ELSE 0 END),0) AS total_fa
+        SELECT COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN ABS(total) ELSE 0 END),0) AS total_fa
         FROM ventas WHERE {where}
     """), params)).mappings().one()
     total_fa = money(total_row["total_fa"]) or 1
@@ -1238,14 +1238,14 @@ async def ventas_productos(
             COALESCE(MAX(producto_nombre), producto_id)                                    AS nombre,
             COALESCE(MAX(cod_rubro), 0)                                                    AS cod_rubro,
             COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN cantidad ELSE 0 END), 0)    AS unidades,
-            COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN total ELSE 0 END), 0)       AS facturado,
+            COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN ABS(total) ELSE 0 END), 0)       AS facturado,
             COUNT(DISTINCT CASE WHEN tipo_comprobante='FA' THEN cliente_id END)           AS clientes_unicos,
             COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END)                             AS tickets,
             COALESCE(SUM(
               CASE WHEN precio_compra_actual IS NOT NULL
                    THEN (precio_unitario - precio_compra_actual::float) * cantidad
               ELSE 0 END), 0)                                                              AS margen_dolares,
-            COALESCE(SUM(CASE WHEN precio_compra_actual IS NOT NULL THEN total ELSE 0 END), 0) AS total_con_costo
+            COALESCE(SUM(CASE WHEN precio_compra_actual IS NOT NULL THEN ABS(total) ELSE 0 END), 0) AS total_con_costo
         FROM ventas
         WHERE {where}
         GROUP BY producto_id
@@ -1271,7 +1271,7 @@ async def ventas_productos(
     rubros_rows = (await db.execute(text(f"""
         SELECT
             cod_rubro,
-            COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN total ELSE 0 END), 0) AS facturado,
+            COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN ABS(total) ELSE 0 END), 0) AS facturado,
             COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END)                        AS tickets
         FROM ventas
         WHERE {where} AND cod_rubro IS NOT NULL
@@ -1330,7 +1330,7 @@ async def ventas_por_vendedor(
     ventas_rows = (await db.execute(text(f"""
         SELECT
             cod_vendedor,
-            COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN total ELSE 0 END)
+            COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN ABS(total) ELSE 0 END)
               - SUM(CASE WHEN tipo_comprobante IN ('NC','ND') THEN ABS(total) ELSE 0 END), 0) AS facturado_neto,
             COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END)                                  AS tickets,
             COUNT(DISTINCT CASE WHEN tipo_comprobante='FA' THEN cliente_id END)               AS clientes_unicos,
@@ -1338,7 +1338,7 @@ async def ventas_por_vendedor(
               CASE WHEN precio_compra_actual IS NOT NULL
                    THEN (precio_unitario - precio_compra_actual::float) * cantidad
               ELSE 0 END), 0)                                                                  AS margen_dolares,
-            COALESCE(SUM(CASE WHEN precio_compra_actual IS NOT NULL THEN total ELSE 0 END), 0) AS total_con_costo
+            COALESCE(SUM(CASE WHEN precio_compra_actual IS NOT NULL THEN ABS(total) ELSE 0 END), 0) AS total_con_costo
         FROM ventas
         WHERE {where} AND cod_vendedor IS NOT NULL
         GROUP BY cod_vendedor
@@ -1411,7 +1411,7 @@ async def ventas_por_cliente(
         SELECT
             cliente_id,
             COALESCE(MAX(cliente_nombre), cliente_id)                                        AS cliente_nombre,
-            COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN total ELSE 0 END)
+            COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN ABS(total) ELSE 0 END)
               - SUM(CASE WHEN tipo_comprobante IN ('NC','ND') THEN ABS(total) ELSE 0 END),0) AS facturado_neto,
             COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END)                                AS tickets,
             MAX(fecha)                                                                        AS ultima_compra,
@@ -1420,7 +1420,7 @@ async def ventas_por_cliente(
               CASE WHEN precio_compra_actual IS NOT NULL
                    THEN (precio_unitario - precio_compra_actual::float) * cantidad
               ELSE 0 END),0)                                                                 AS margen_dolares,
-            COALESCE(SUM(CASE WHEN precio_compra_actual IS NOT NULL THEN total ELSE 0 END),0) AS total_con_costo,
+            COALESCE(SUM(CASE WHEN precio_compra_actual IS NOT NULL THEN ABS(total) ELSE 0 END),0) AS total_con_costo,
             MODE() WITHIN GROUP (ORDER BY condicion_venta_tipo)                               AS condicion_predominante
         FROM ventas
         WHERE {where} AND tipo_comprobante='FA'
@@ -1526,7 +1526,7 @@ async def ventas_por_comprobante(
     condicion_rows = (await db.execute(text(f"""
         SELECT COALESCE(condicion_venta_tipo::text,'?') AS condicion,
                COUNT(*)                               AS cantidad,
-               COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN total ELSE 0 END),0) AS importe
+               COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN ABS(total) ELSE 0 END),0) AS importe
         FROM ventas WHERE {where}
         GROUP BY condicion ORDER BY importe DESC
     """), params)).mappings().all()
@@ -1534,7 +1534,7 @@ async def ventas_por_comprobante(
     pdv_rows = (await db.execute(text(f"""
         SELECT COALESCE(punto_de_venta::text,'?') AS punto_de_venta,
                COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END) AS tickets,
-               COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN total ELSE 0 END),0) AS facturado
+               COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN ABS(total) ELSE 0 END),0) AS facturado
         FROM ventas WHERE {where}
         GROUP BY punto_de_venta ORDER BY facturado DESC
     """), params)).mappings().all()
@@ -1725,11 +1725,11 @@ async def resultado_kpis(
 
     row = (await db.execute(text(f"""
         SELECT
-            COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN total ELSE 0 END), 0)
+            COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN ABS(total) ELSE 0 END), 0)
               - COALESCE(SUM(CASE WHEN tipo_comprobante='NC' THEN ABS(total) ELSE 0 END), 0) AS facturado_neto,
             COALESCE(SUM(CASE WHEN precio_compra_actual IS NOT NULL
                          THEN cantidad * precio_compra_actual::float ELSE 0 END), 0) AS cogs,
-            COALESCE(SUM(CASE WHEN precio_compra_actual IS NOT NULL THEN total ELSE 0 END), 0) AS total_con_costo,
+            COALESCE(SUM(CASE WHEN precio_compra_actual IS NOT NULL THEN ABS(total) ELSE 0 END), 0) AS total_con_costo,
             COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END) AS tickets_fa,
             COALESCE(SUM(
                 CASE WHEN descuento_porc IS NOT NULL AND descuento_porc::float > 0
@@ -1767,7 +1767,7 @@ async def resultado_kpis(
         pp = dict(params); pp["desde"] = prev_desde; pp["hasta"] = prev_hasta
         prev = (await db.execute(text(f"""
             SELECT
-                COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN total ELSE 0 END), 0)
+                COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN ABS(total) ELSE 0 END), 0)
                   - COALESCE(SUM(CASE WHEN tipo_comprobante='NC' THEN ABS(total) ELSE 0 END), 0) AS facturado_neto,
                 COALESCE(SUM(CASE WHEN precio_compra_actual IS NOT NULL
                              THEN cantidad * precio_compra_actual::float ELSE 0 END), 0) AS cogs,
@@ -1825,7 +1825,7 @@ async def resultado_temporal(
     series = (await db.execute(text(f"""
         SELECT
             to_char(date_trunc('{trunc}', fecha), 'YYYY-MM-DD') AS periodo,
-            COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN total ELSE 0 END), 0)
+            COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN ABS(total) ELSE 0 END), 0)
               - COALESCE(SUM(CASE WHEN tipo_comprobante='NC' THEN ABS(total) ELSE 0 END), 0) AS facturado_neto,
             COALESCE(SUM(CASE WHEN precio_compra_actual IS NOT NULL
                          THEN cantidad * precio_compra_actual::float ELSE 0 END), 0) AS cogs,
@@ -1858,7 +1858,7 @@ async def resultado_temporal(
         prev = (await db.execute(text(f"""
             SELECT
                 to_char(date_trunc('{trunc}', fecha), 'YYYY-MM-DD') AS periodo,
-                COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN total ELSE 0 END), 0)
+                COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN ABS(total) ELSE 0 END), 0)
                   - COALESCE(SUM(CASE WHEN tipo_comprobante='NC' THEN ABS(total) ELSE 0 END), 0) AS facturado_neto,
                 COALESCE(SUM(CASE WHEN precio_compra_actual IS NOT NULL
                              THEN cantidad * precio_compra_actual::float ELSE 0 END), 0) AS cogs
@@ -1894,7 +1894,7 @@ async def resultado_por_producto(
             COALESCE(MAX(producto_nombre), producto_id) AS nombre,
             MAX(cod_rubro) AS cod_rubro,
             SUM(cantidad) AS unidades,
-            COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN total ELSE 0 END), 0)
+            COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN ABS(total) ELSE 0 END), 0)
               - COALESCE(SUM(CASE WHEN tipo_comprobante='NC' THEN ABS(total) ELSE 0 END), 0) AS facturado,
             COALESCE(SUM(CASE WHEN precio_compra_actual IS NOT NULL
                          THEN cantidad * precio_compra_actual::float ELSE 0 END), 0) AS cogs,
@@ -1979,7 +1979,7 @@ async def resultado_por_vendedor(
     rows = (await db.execute(text(f"""
         SELECT
             cod_vendedor,
-            COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN total ELSE 0 END), 0)
+            COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN ABS(total) ELSE 0 END), 0)
               - COALESCE(SUM(CASE WHEN tipo_comprobante='NC' THEN ABS(total) ELSE 0 END), 0) AS facturado,
             COALESCE(SUM(CASE WHEN precio_compra_actual IS NOT NULL
                          THEN cantidad * precio_compra_actual::float ELSE 0 END), 0) AS cogs,
@@ -2033,7 +2033,7 @@ async def resultado_por_cliente(
         SELECT
             cliente_id,
             COALESCE(MAX(cliente_nombre), cliente_id) AS cliente_nombre,
-            COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN total ELSE 0 END), 0)
+            COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN ABS(total) ELSE 0 END), 0)
               - COALESCE(SUM(CASE WHEN tipo_comprobante='NC' THEN ABS(total) ELSE 0 END), 0) AS facturado,
             COALESCE(SUM(CASE WHEN precio_compra_actual IS NOT NULL
                          THEN cantidad * precio_compra_actual::float ELSE 0 END), 0) AS cogs,
@@ -2085,7 +2085,7 @@ async def resultado_descuentos(
 
     totals = (await db.execute(text(f"""
         SELECT
-            COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN total ELSE 0 END), 0) AS facturado_bruto,
+            COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN ABS(total) ELSE 0 END), 0) AS facturado_bruto,
             COALESCE(SUM(
                 CASE WHEN descuento_porc IS NOT NULL AND descuento_porc::float > 0
                      THEN cantidad * precio_unitario * descuento_porc::float / 100.0
@@ -2210,7 +2210,7 @@ async def resultado_exportar(
         rows = (await db.execute(text(f"""
             SELECT producto_id, COALESCE(MAX(producto_nombre), producto_id) AS nombre,
                 SUM(cantidad) AS unidades,
-                COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN total ELSE 0 END), 0) AS facturado,
+                COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN ABS(total) ELSE 0 END), 0) AS facturado,
                 COALESCE(SUM(CASE WHEN precio_compra_actual IS NOT NULL
                              THEN cantidad * precio_compra_actual::float ELSE 0 END), 0) AS cogs
             FROM ventas WHERE {where} GROUP BY producto_id ORDER BY facturado DESC
@@ -2839,13 +2839,13 @@ async def vendedores_kpis(
     # Global ventas KPIs
     vrow = (await db.execute(text(f"""
         SELECT
-            COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN total ELSE 0 END), 0)          AS fa_bruto,
+            COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN ABS(total) ELSE 0 END), 0)          AS fa_bruto,
             COALESCE(SUM(CASE WHEN tipo_comprobante='NC' THEN ABS(total) ELSE 0 END), 0)     AS nc_total,
             COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END)                                 AS tickets,
             COALESCE(SUM(CASE WHEN precio_compra_actual IS NOT NULL
                          THEN (precio_unitario - precio_compra_actual::float) * cantidad
                     ELSE 0 END), 0)                                                           AS margen_dolares,
-            COALESCE(SUM(CASE WHEN precio_compra_actual IS NOT NULL THEN total ELSE 0 END), 0) AS total_con_costo,
+            COALESCE(SUM(CASE WHEN precio_compra_actual IS NOT NULL THEN ABS(total) ELSE 0 END), 0) AS total_con_costo,
             COALESCE(AVG(CASE WHEN descuento_porc IS NOT NULL AND descuento_porc::float > 0
                          THEN descuento_porc::float END), 0)                                  AS descuento_prom
         FROM ventas WHERE {ventas_where}
@@ -3053,7 +3053,7 @@ async def vendedores_detalle(
 
     clientes = (await db.execute(text(f"""
         SELECT cliente_id, MAX(cliente_nombre) AS nombre,
-               COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN total ELSE 0 END), 0) AS facturado,
+               COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN ABS(total) ELSE 0 END), 0) AS facturado,
                COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END) AS tickets
         FROM ventas WHERE {where_v}
         GROUP BY cliente_id ORDER BY facturado DESC LIMIT 10
@@ -3061,7 +3061,7 @@ async def vendedores_detalle(
 
     productos = (await db.execute(text(f"""
         SELECT producto_id, MAX(producto_nombre) AS nombre,
-               COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN total ELSE 0 END), 0) AS facturado,
+               COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN ABS(total) ELSE 0 END), 0) AS facturado,
                COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN cantidad ELSE 0 END), 0) AS unidades
         FROM ventas WHERE {where_v}
         GROUP BY producto_id ORDER BY facturado DESC LIMIT 10
@@ -3069,7 +3069,7 @@ async def vendedores_detalle(
 
     evolucion = (await db.execute(text(f"""
         SELECT TO_CHAR(fecha, 'YYYY-MM') AS periodo,
-               COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN total ELSE 0 END), 0) AS facturado,
+               COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN ABS(total) ELSE 0 END), 0) AS facturado,
                COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END) AS tickets
         FROM ventas WHERE {where_v}
         GROUP BY periodo ORDER BY periodo
@@ -3129,7 +3129,7 @@ async def clientes_kpis(
     vrow = (await db.execute(text(f"""
         SELECT
             COUNT(DISTINCT CASE WHEN tipo_comprobante='FA' THEN cliente_id END)     AS clientes_activos,
-            COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN total ELSE 0 END), 0) AS fa_bruto,
+            COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN ABS(total) ELSE 0 END), 0) AS fa_bruto,
             COALESCE(SUM(CASE WHEN tipo_comprobante='NC' THEN ABS(total) ELSE 0 END), 0) AS nc_total,
             COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END)                        AS tickets,
             COUNT(DISTINCT CASE WHEN tipo_comprobante='FA' AND primera_compra THEN cliente_id END) AS clientes_nuevos
@@ -3149,7 +3149,7 @@ async def clientes_kpis(
     # Best client
     best = (await db.execute(text(f"""
         SELECT cliente_id, MAX(cliente_nombre) AS nombre,
-               COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN total ELSE 0 END), 0) AS facturado
+               COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN ABS(total) ELSE 0 END), 0) AS facturado
         FROM ventas WHERE {ventas_where}
         GROUP BY cliente_id ORDER BY facturado DESC LIMIT 1
     """), params)).mappings().one_or_none()
@@ -3209,7 +3209,7 @@ async def clientes_ranking(
         SELECT
             cliente_id,
             MAX(cliente_nombre) AS nombre,
-            COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN total ELSE 0 END), 0)          AS fa_bruto,
+            COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN ABS(total) ELSE 0 END), 0)          AS fa_bruto,
             COALESCE(SUM(CASE WHEN tipo_comprobante='NC' THEN ABS(total) ELSE 0 END), 0)     AS nc_total,
             COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END)                                 AS tickets,
             COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN cantidad ELSE 0 END), 0)        AS unidades,
@@ -3217,7 +3217,7 @@ async def clientes_ranking(
             COALESCE(SUM(CASE WHEN precio_compra_actual IS NOT NULL
                          THEN (precio_unitario - precio_compra_actual::float) * cantidad
                     ELSE 0 END), 0)                                                           AS margen_dolares,
-            COALESCE(SUM(CASE WHEN precio_compra_actual IS NOT NULL THEN total ELSE 0 END), 0) AS total_con_costo
+            COALESCE(SUM(CASE WHEN precio_compra_actual IS NOT NULL THEN ABS(total) ELSE 0 END), 0) AS total_con_costo
         FROM ventas WHERE {ventas_where}
         GROUP BY cliente_id ORDER BY fa_bruto DESC
     """), params)).mappings().all()
@@ -3270,7 +3270,7 @@ async def clientes_temporal(
     rows = (await db.execute(text(f"""
         SELECT
             TO_CHAR(fecha, 'YYYY-MM') AS periodo,
-            COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN total ELSE 0 END)
+            COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN ABS(total) ELSE 0 END)
                      - SUM(CASE WHEN tipo_comprobante='NC' THEN ABS(total) ELSE 0 END), 0) AS facturado,
             COUNT(DISTINCT CASE WHEN tipo_comprobante='FA' THEN cliente_id END)             AS clientes_activos,
             COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END)                               AS tickets
@@ -3309,7 +3309,7 @@ async def clientes_detalle(
     # Client info
     cinfo = (await db.execute(text(f"""
         SELECT cliente_id, MAX(cliente_nombre) AS nombre,
-               COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN total ELSE 0 END), 0) AS facturado,
+               COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN ABS(total) ELSE 0 END), 0) AS facturado,
                COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END) AS tickets,
                MAX(CASE WHEN tipo_comprobante='FA' THEN fecha END) AS ultima_compra
         FROM ventas WHERE {where_c}
@@ -3322,7 +3322,7 @@ async def clientes_detalle(
     # Top products
     productos = (await db.execute(text(f"""
         SELECT producto_id, MAX(producto_nombre) AS nombre,
-               COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN total ELSE 0 END), 0) AS facturado,
+               COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN ABS(total) ELSE 0 END), 0) AS facturado,
                COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN cantidad ELSE 0 END), 0) AS unidades
         FROM ventas WHERE {where_c}
         GROUP BY producto_id ORDER BY facturado DESC LIMIT 10
@@ -3331,7 +3331,7 @@ async def clientes_detalle(
     # Monthly evolution
     evolucion = (await db.execute(text(f"""
         SELECT TO_CHAR(fecha, 'YYYY-MM') AS periodo,
-               COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN total ELSE 0 END), 0) AS facturado,
+               COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN ABS(total) ELSE 0 END), 0) AS facturado,
                COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END) AS tickets
         FROM ventas WHERE {where_c}
         GROUP BY periodo ORDER BY periodo

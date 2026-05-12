@@ -183,9 +183,22 @@ class InfomanagerConnector:
 
         items_raw = self.fetch_paginated("/api/v1/ventas/items", params)
 
+        # Valid tipos for the ventas analytics table — the items endpoint returns documents
+        # from ALL modules (presupuestos→PR, recibos→RE, interdepósito→IR, etc.).
+        # Only FA/NC/ND belong in ventas; the rest would corrupt KPIs.
+        _VALID_TIPOS = {"FA", "NC", "ND"}
+
         ventas: list[dict[str, Any]] = []
         for item in items_raw:
             cab = headers.get(_as_int(item.get("id_comprobante")), {})
+            tipo = _normalize_tipo_comprobante(cab.get("tipo_comprobante"))
+
+            # Skip non-sales document types contaminating the items endpoint
+            if tipo not in _VALID_TIPOS:
+                continue
+
+            # Normalize sign: Infomanager may return negative importe for FA (debit convention).
+            # Store all amounts as absolute values; tipo_comprobante carries the semantic sign.
             ventas.append(
                 {
                     "fecha": cab.get("fecha"),
@@ -193,18 +206,18 @@ class InfomanagerConnector:
                     "cliente_nombre": cab.get("cliente_nombre") or cab.get("razon_social") or "",
                     "producto_id": str(item.get("cod_articulo") or ""),
                     "producto_nombre": item.get("detalle") or item.get("descripcion") or "",
-                    "cantidad": _as_float(item.get("cantidad")),
-                    "precio_unitario": _as_float(item.get("precio")),
-                    "total": _as_float(item.get("importe")),
-                    "tipo_comprobante": _normalize_tipo_comprobante(cab.get("tipo_comprobante")),
+                    "cantidad": abs(_as_float(item.get("cantidad"))),
+                    "precio_unitario": abs(_as_float(item.get("precio"))),
+                    "total": abs(_as_float(item.get("importe"))),
+                    "tipo_comprobante": tipo,
                     "tipo_factura": cab.get("tipo_factura"),
                     "punto_de_venta": _as_int(cab.get("punto_de_venta")),
                     "cod_vendedor": _as_int(cab.get("cod_vendedor") or item.get("cod_vendedor")),
                     "cod_empresa": _as_int(cab.get("cod_empresa"), 1),
                     "tag": cab.get("tag", "S"),
                     "condicion_venta_tipo": _as_int(cab.get("condicion_venta_tipo"), 1),
-                    "neto": _as_float(cab.get("neto")),
-                    "iva_importe": _as_float(cab.get("iva_importe")),
+                    "neto": abs(_as_float(cab.get("neto"))),
+                    "iva_importe": abs(_as_float(cab.get("iva_importe"))),
                     "anulada": cab.get("anulada", "N"),
                     "cod_deposito": _as_int(cab.get("cod_deposito"), 1),
                     "cod_rubro": _as_int(item.get("cod_rubro")) if item.get("cod_rubro") is not None else None,
