@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { ResponsiveGridLayout, useContainerWidth } from 'react-grid-layout';
+import { Responsive, WidthProvider } from 'react-grid-layout/legacy';
 import { Activity, Plus, Pencil, RotateCcw, ShoppingCart, RefreshCcw, X, Lock } from 'lucide-react';
 import useAuthStore from '../store/authStore';
 import useDashboardStore from '../store/dashboardStore';
@@ -8,6 +8,8 @@ import { getWidgetDef } from '../features/dashboard/widgets';
 import AddWidgetModal from '../features/dashboard/AddWidgetModal';
 import { useDashboardData } from '../features/dashboard/useDashboardData';
 import 'react-grid-layout/css/styles.css';
+
+const ResponsiveGridLayout = WidthProvider(Responsive);
 
 const WidgetWrapper = ({ widget, editing, onRemove, children }) => {
   const def = getWidgetDef(widget.type);
@@ -43,7 +45,6 @@ const DashboardView = () => {
   const { widgets, layouts, editing, toggleEditing, updateLayouts, removeWidget, resetToDefault } = useDashboardStore();
   const { kpis, loading: dataLoading } = useDashboardData();
   const [showAddModal, setShowAddModal] = useState(false);
-  const { width: containerWidth, containerRef, mounted: containerMounted } = useContainerWidth();
 
   const handleLayoutChange = useCallback((_, allLayouts) => {
     if (editing) updateLayouts(allLayouts);
@@ -135,37 +136,32 @@ const DashboardView = () => {
         </div>
       )}
 
-      <div ref={containerRef}>
-        {containerMounted && containerWidth > 0 && (
-          <ResponsiveGridLayout
-            className="layout"
-            width={containerWidth}
-            layouts={layouts}
-            breakpoints={{ lg: 1200, md: 996, sm: 768 }}
-            cols={{ lg: 12, md: 12, sm: 6 }}
-            rowHeight={80}
-            onLayoutChange={handleLayoutChange}
-            isDraggable={editing}
-            isResizable={editing}
-            draggableHandle=".cursor-grab"
-            margin={[16, 16]}
-            containerPadding={[0, 0]}
-          >
-            {widgets.map(widget => {
-              const def = getWidgetDef(widget.type);
-              if (!def) return <div key={widget.id} />;
-              const Component = def.component;
-              return (
-                <div key={widget.id}>
-                  <WidgetWrapper widget={widget} editing={editing} onRemove={removeWidget}>
-                    <Component />
-                  </WidgetWrapper>
-                </div>
-              );
-            })}
-          </ResponsiveGridLayout>
-        )}
-      </div>
+      <ResponsiveGridLayout
+        className="layout"
+        layouts={layouts}
+        breakpoints={{ lg: 1200, md: 996, sm: 768 }}
+        cols={{ lg: 12, md: 12, sm: 6 }}
+        rowHeight={80}
+        onLayoutChange={handleLayoutChange}
+        isDraggable={editing}
+        isResizable={editing}
+        draggableHandle=".cursor-grab"
+        margin={[16, 16]}
+        containerPadding={[0, 0]}
+      >
+        {widgets.map(widget => {
+          const def = getWidgetDef(widget.type);
+          if (!def) return <div key={widget.id} />;
+          const Component = def.component;
+          return (
+            <div key={widget.id}>
+              <WidgetWrapper widget={widget} editing={editing} onRemove={removeWidget}>
+                <Component />
+              </WidgetWrapper>
+            </div>
+          );
+        })}
+      </ResponsiveGridLayout>
 
       {showAddModal && <AddWidgetModal onClose={() => setShowAddModal(false)} />}
     </div>
