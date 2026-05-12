@@ -205,13 +205,12 @@ def sync_company(self, company_id: int, connector_id: int):
                   %(anulada)s, %(cod_deposito)s, %(cod_rubro)s,
                   %(precio_compra_actual)s, %(descuento_porc)s
                 )
-                ON CONFLICT (fecha, cliente_id, producto_id) DO UPDATE SET
+                ON CONFLICT (fecha, cliente_id, producto_id, tipo_comprobante) DO UPDATE SET
                   cliente_nombre=EXCLUDED.cliente_nombre,
                   producto_nombre=EXCLUDED.producto_nombre,
                   total=EXCLUDED.total,
                   cantidad=EXCLUDED.cantidad,
                   precio_unitario=EXCLUDED.precio_unitario,
-                  tipo_comprobante=EXCLUDED.tipo_comprobante,
                   neto=EXCLUDED.neto,
                   iva_importe=EXCLUDED.iva_importe,
                   precio_compra_actual=EXCLUDED.precio_compra_actual,
