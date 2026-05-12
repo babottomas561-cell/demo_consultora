@@ -187,7 +187,7 @@ const CompanyListView = () => {
                         e.stopPropagation();
                         navigate(`/admin/companies/${company.id}/users`);
                       }}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors opacity-0 group-hover:opacity-100"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
                       title="Gestionar usuarios"
                     >
                       <Users size={13} /> Usuarios
@@ -197,7 +197,7 @@ const CompanyListView = () => {
                         e.stopPropagation();
                         setToDelete(company);
                       }}
-                      className="p-2 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100"
+                      className="p-2 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors"
                       title="Eliminar empresa"
                     >
                       <Trash2 size={16} />
