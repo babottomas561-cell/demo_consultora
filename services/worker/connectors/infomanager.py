@@ -71,11 +71,11 @@ class InfomanagerConnector:
                     return value
         return []
 
-    def fetch_paginated(self, endpoint: str, params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    def fetch_paginated(self, endpoint: str, params: dict[str, Any] | None = None, max_pages: int = 500) -> list[dict[str, Any]]:
         self.ensure_token()
         all_items: list[dict[str, Any]] = []
         page = 1
-        while True:
+        while page <= max_pages:
             request_params = {**(params or {}), "page": page, "limit": 100}
             resp = requests.get(
                 f"{self.base_url}{endpoint}",
@@ -86,6 +86,9 @@ class InfomanagerConnector:
             resp.raise_for_status()
             items = self._extract_items(resp.json())
             if not items:
+                break
+            # Detect APIs that ignore pagination params (return same data on every page)
+            if page > 1 and all_items and items[0] == all_items[0]:
                 break
             all_items.extend(items)
             if len(items) < 100:

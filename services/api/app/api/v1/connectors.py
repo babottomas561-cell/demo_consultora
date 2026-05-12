@@ -101,11 +101,12 @@ async def get_connector(
 @router.post("/{company_id}/sync", response_model=ConnectorResponse)
 async def sync_connector(
     company_id: int,
+    force: bool = False,
     db: AsyncSession = Depends(get_db),
     admin=Depends(get_current_admin),
 ):
     connector = await _get_connector(db, company_id)
-    if connector.sync_status == "running":
+    if connector.sync_status == "running" and not force:
         return connector
 
     connector.sync_status = "pending"
