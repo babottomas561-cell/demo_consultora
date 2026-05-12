@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { ResponsiveGridLayout, useContainerWidth } from 'react-grid-layout';
 import { Activity, Plus, Pencil, RotateCcw, ShoppingCart, RefreshCcw, X, Lock } from 'lucide-react';
@@ -43,8 +43,7 @@ const DashboardView = () => {
   const { widgets, layouts, editing, toggleEditing, updateLayouts, removeWidget, resetToDefault } = useDashboardStore();
   const { kpis, loading: dataLoading } = useDashboardData();
   const [showAddModal, setShowAddModal] = useState(false);
-  const containerRef = useRef(null);
-  const [containerWidth] = useContainerWidth(containerRef);
+  const { width: containerWidth, containerRef, mounted: containerMounted } = useContainerWidth();
 
   const handleLayoutChange = useCallback((_, allLayouts) => {
     if (editing) updateLayouts(allLayouts);
@@ -137,7 +136,7 @@ const DashboardView = () => {
       )}
 
       <div ref={containerRef}>
-        {containerWidth > 0 && (
+        {containerMounted && containerWidth > 0 && (
           <ResponsiveGridLayout
             className="layout"
             width={containerWidth}
