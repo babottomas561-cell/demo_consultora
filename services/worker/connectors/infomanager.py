@@ -8,6 +8,24 @@ import requests
 
 DEFAULT_BASE_URL = "https://impedidos.infomanager.com.ar"
 
+_TIPO_COMPROBANTE_MAP = {
+    "1": "FA", "2": "ND", "3": "NC",
+    "6": "FA", "7": "ND", "8": "NC",
+    "11": "FA", "12": "ND", "13": "NC",
+    "factura": "FA", "nota de credito": "NC", "nota de debito": "ND",
+    "nota credito": "NC", "nota debito": "ND",
+    "notacredito": "NC", "notadebito": "ND",
+    "fa": "FA", "nc": "NC", "nd": "ND",
+    "fac": "FA", "n/c": "NC", "n/d": "ND",
+}
+
+
+def _normalize_tipo_comprobante(raw: Any) -> str:
+    if not raw:
+        return "FA"
+    key = str(raw).strip().lower()
+    return _TIPO_COMPROBANTE_MAP.get(key, str(raw).upper()[:2])
+
 
 def _as_int(value: Any, default: int = 0) -> int:
     if value in (None, ""):
@@ -178,7 +196,7 @@ class InfomanagerConnector:
                     "cantidad": _as_float(item.get("cantidad")),
                     "precio_unitario": _as_float(item.get("precio")),
                     "total": _as_float(item.get("importe")),
-                    "tipo_comprobante": cab.get("tipo_comprobante") or "FA",
+                    "tipo_comprobante": _normalize_tipo_comprobante(cab.get("tipo_comprobante")),
                     "tipo_factura": cab.get("tipo_factura"),
                     "punto_de_venta": _as_int(cab.get("punto_de_venta")),
                     "cod_vendedor": _as_int(cab.get("cod_vendedor") or item.get("cod_vendedor")),
@@ -292,3 +310,31 @@ class InfomanagerConnector:
                 presupuestos.append(row)
 
         return presupuestos
+
+    def sync_recibos(self, fecha_desde, fecha_hasta) -> list[dict[str, Any]]:
+        data = self.fetch_paginated(
+            "/api/v1/recibo",
+            {
+                "fechaDesde": fecha_desde.strftime("%Y%m%d"),
+                "fechaHasta": fecha_hasta.strftime("%Y%m%d"),
+            },
+        )
+        recibos: list[dict[str, Any]] = []
+        for r in data:
+            recibo_id = _as_int(r.get("id") or r.get("numero"))
+            if not recibo_id:
+                continue
+            recibos.append(
+                {
+                    "id": recibo_id,
+                    "fecha": r.get("fecha"),
+                    "cod_cliente": _as_int(r.get("cod_cliente")),
+                    "cliente_nombre": r.get("cliente_nombre") or r.get("razon_social") or "",
+                    "forma_pago": r.get("forma_pago") or "efectivo",
+                    "importe": _as_float(r.get("importe")),
+                    "factura_id": _as_int(r.get("factura_id")) or None,
+                    "tarjeta_numero": r.get("tarjeta_numero"),
+                    "tarjeta_cupon": r.get("tarjeta_cupon"),
+                }
+            )
+        return recibos

@@ -310,6 +310,50 @@ def sync_company(self, company_id: int, connector_id: int):
                 presupuesto,
             )
 
+        recibos = im.sync_recibos(desde, hasta)
+        saldo_acum = 0.0
+        for recibo in recibos:
+            cur.execute(
+                """
+                INSERT INTO recibos (
+                  id, fecha, cod_cliente, cliente_nombre, forma_pago,
+                  importe, factura_id, tarjeta_numero, tarjeta_cupon
+                )
+                VALUES (
+                  %(id)s, %(fecha)s, %(cod_cliente)s, %(cliente_nombre)s,
+                  %(forma_pago)s, %(importe)s, %(factura_id)s,
+                  %(tarjeta_numero)s, %(tarjeta_cupon)s
+                )
+                ON CONFLICT (id) DO UPDATE SET
+                  fecha=EXCLUDED.fecha,
+                  cod_cliente=EXCLUDED.cod_cliente,
+                  cliente_nombre=EXCLUDED.cliente_nombre,
+                  forma_pago=EXCLUDED.forma_pago,
+                  importe=EXCLUDED.importe,
+                  factura_id=EXCLUDED.factura_id
+                """,
+                recibo,
+            )
+            importe = _as_float(recibo.get("importe"))
+            saldo_acum += importe
+            cliente = recibo.get("cliente_nombre") or f"Cliente {recibo.get('cod_cliente', '')}"
+            forma = recibo.get("forma_pago") or "efectivo"
+            cur.execute(
+                """
+                INSERT INTO movimientos_caja (fecha, tipo, descripcion, importe, saldo_acumulado)
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (fecha, tipo, descripcion, importe) DO UPDATE SET
+                  saldo_acumulado=EXCLUDED.saldo_acumulado
+                """,
+                (
+                    recibo.get("fecha"),
+                    "cobro",
+                    f"Recibo {recibo['id']} - {cliente} ({forma})",
+                    importe,
+                    round(saldo_acum, 2),
+                ),
+            )
+
         cur.execute(
             """
             UPDATE public.company_connectors
