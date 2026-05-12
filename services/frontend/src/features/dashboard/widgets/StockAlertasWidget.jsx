@@ -6,7 +6,8 @@ export default function StockAlertasWidget() {
 
   if (loading) return <div className="flex h-full items-center justify-center"><Loader2 className="animate-spin text-indigo-400" size={24} /></div>;
 
-  const items = (data?.alertas || data || []).slice(0, 20);
+  const raw = data?.alertas || data;
+  const items = (Array.isArray(raw) ? raw : []).slice(0, 20);
 
   if (!items.length) {
     return (

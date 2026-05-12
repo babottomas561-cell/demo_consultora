@@ -10,7 +10,8 @@ export default function TopProductosChart() {
 
   if (loading) return <div className="flex h-full items-center justify-center"><Loader2 className="animate-spin text-indigo-400" size={24} /></div>;
 
-  const items = (data?.productos || data || []).slice(0, 10).map(p => ({
+  const raw = data?.productos || data;
+  const items = (Array.isArray(raw) ? raw : []).slice(0, 10).map(p => ({
     name: (p.producto || p.producto_nombre || p.descripcion || '').slice(0, 25),
     total: p.total || p.total_ventas || 0,
   }));

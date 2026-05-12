@@ -12,7 +12,8 @@ export default function VentasPorVendedorChart() {
 
   if (loading) return <div className="flex h-full items-center justify-center"><Loader2 className="animate-spin text-indigo-400" size={24} /></div>;
 
-  const items = (data?.vendedores || data || []).slice(0, 8).map(v => ({
+  const raw = data?.vendedores || data;
+  const items = (Array.isArray(raw) ? raw : []).slice(0, 8).map(v => ({
     name: v.nombre || v.vendedor || `Vendedor ${v.cod_vendedor}`,
     value: v.total || v.total_ventas || 0,
   }));

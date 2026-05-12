@@ -10,7 +10,8 @@ export default function TendenciaVentasChart() {
 
   if (loading) return <div className="flex h-full items-center justify-center"><Loader2 className="animate-spin text-indigo-400" size={24} /></div>;
 
-  const series = (data?.series || data || []).map(s => ({
+  const raw = data?.series || data;
+  const series = (Array.isArray(raw) ? raw : []).map(s => ({
     periodo: s.periodo || s.mes || s.fecha,
     total: s.total || s.total_ventas || 0,
   }));
