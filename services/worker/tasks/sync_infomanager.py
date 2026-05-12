@@ -191,7 +191,7 @@ def sync_company(self, company_id: int, connector_id: int):
         # Safer than upsert when the upstream data model can change between syncs.
         cur.execute("DELETE FROM ventas WHERE fecha >= %s AND fecha <= %s", (desde, hasta))
 
-        _upsert_clientes_from_ventas(cur, ventas, lookup=clientes_lookup)
+        _upsert_clientes_from_ventas(cur, ventas)
         for venta in ventas:
             cur.execute(
                 """
