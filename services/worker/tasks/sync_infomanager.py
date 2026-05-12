@@ -185,7 +185,13 @@ def sync_company(self, company_id: int, connector_id: int):
         hasta = date.today()
 
         ventas = im.sync_ventas(desde, hasta)
-        _upsert_clientes_from_ventas(cur, ventas)
+
+        # Delete-then-insert for the sync window: avoids stale/corrupted rows from
+        # previous syncs (e.g. FA records that were overwritten as NC due to old constraint).
+        # Safer than upsert when the upstream data model can change between syncs.
+        cur.execute("DELETE FROM ventas WHERE fecha >= %s AND fecha <= %s", (desde, hasta))
+
+        _upsert_clientes_from_ventas(cur, ventas, lookup=clientes_lookup)
         for venta in ventas:
             cur.execute(
                 """
