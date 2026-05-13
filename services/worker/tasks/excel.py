@@ -69,7 +69,7 @@ def process_excel(self, tenant_schema: str, filepath: str, job_id: str):
                     )
                     stmt_ventas = insert(ventas_table).values(ventas_data)
                     stmt_ventas = stmt_ventas.on_conflict_do_nothing(
-                        index_elements=['fecha', 'cliente_id', 'producto_id']
+                        index_elements=['fecha', 'cliente_id', 'producto_id', 'tipo_comprobante']
                     )
                     
                     result = session.execute(stmt_ventas)

@@ -85,7 +85,7 @@ const CompanyCreateView = () => {
     setRetrying(true);
     setError(null);
     try {
-      const response = await apiClient.post(`/connectors/${createdCompany.id}/sync?force=true`);
+      const response = await apiClient.post(`/connectors/${createdCompany.id}/sync`);
       setConnectorStatus(response.data);
     } catch (err) {
       setError(err.response?.data?.detail || 'No se pudo reintentar la sincronización.');
@@ -130,7 +130,7 @@ const CompanyCreateView = () => {
         <button
           type="button"
           onClick={handleRetrySync}
-          disabled={retrying}
+          disabled={retrying || connectorStatus?.sync_status === 'running'}
           className="inline-flex items-center justify-center rounded-lg bg-red-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50"
         >
           {retrying ? <Loader2 className="mr-2 animate-spin" size={16} /> : <RotateCw className="mr-2" size={16} />}
@@ -169,7 +169,7 @@ const CompanyCreateView = () => {
                   <button
                     type="button"
                     onClick={handleRetrySync}
-                    disabled={retrying}
+                    disabled={retrying || connectorStatus?.sync_status === 'running'}
                     className="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-50"
                   >
                     {retrying ? <Loader2 className="mr-2 animate-spin" size={16} /> : <RotateCw className="mr-2" size={16} />}

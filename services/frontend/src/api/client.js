@@ -1,7 +1,10 @@
 import axios from 'axios';
 import useAuthStore from '../store/authStore';
 
-const apiUrl = window.__API_URL__ || import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const runtimeApiUrl = window.__API_URL__;
+const apiUrl = runtimeApiUrl && runtimeApiUrl !== '__PLACEHOLDER_API_URL__'
+  ? runtimeApiUrl
+  : import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const baseURL = `${apiUrl}/api/v1`;
 
 const apiClient = axios.create({

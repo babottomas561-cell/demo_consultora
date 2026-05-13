@@ -46,3 +46,18 @@ def test_analytics_tables_define_idempotent_seed_constraints():
     assert "idx_cta_cte_cliente_unica" in constraint_names
     assert "idx_cta_cte_proveedor_unica" in constraint_names
     assert "idx_movimiento_caja_unico" in constraint_names
+
+
+def test_ventas_unique_constraint_keeps_comprobante_type_distinct():
+    ventas = TenantBase.metadata.tables["ventas"]
+    constraint = next(
+        item for item in ventas.constraints
+        if item.name == "idx_venta_unica"
+    )
+
+    assert [column.name for column in constraint.columns] == [
+        "fecha",
+        "cliente_id",
+        "producto_id",
+        "tipo_comprobante",
+    ]

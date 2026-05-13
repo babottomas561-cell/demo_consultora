@@ -2330,7 +2330,7 @@ async def stock_kpis(
         FROM stock s
         LEFT JOIN (
             SELECT am.cod_articulo, AVG(v.precio_unitario) AS avg_precio
-            FROM {_ARTICULO_MAP_SQL} am
+            FROM {_ARTICULO_MAP_SQL}
             JOIN ventas v ON v.producto_id = am.producto_id
                          AND v.tipo_comprobante = 'FA' AND v.anulada <> 'S'
             GROUP BY am.cod_articulo
@@ -2517,7 +2517,7 @@ async def stock_movimientos(
     articulo_filter_c = ""
     if cod_articulo:
         articulo_filter_v = f"AND v.producto_id = (SELECT am.producto_id FROM {_ARTICULO_MAP_SQL} WHERE am.cod_articulo = :cod_articulo_val LIMIT 1)"
-        articulo_filter_c = f"AND c.producto_id = (SELECT am.producto_id FROM {_ARTICULO_MAP_SQL} WHERE am.cod_articulo = :cod_articulo_val LIMIT 1)"
+        articulo_filter_c = f"AND producto_id = (SELECT am.producto_id FROM {_ARTICULO_MAP_SQL} WHERE am.cod_articulo = :cod_articulo_val LIMIT 1)"
         params["cod_articulo_val"] = cod_articulo
 
     series_rows = (await db.execute(text(f"""
@@ -3288,7 +3288,7 @@ async def clientes_temporal(
 
 @router.get("/clientes/detalle/{cliente_id}")
 async def clientes_detalle(
-    cliente_id: int,
+    cliente_id: str,
     company_id: int = None,
     filters: GlobalFilters = Depends(get_global_filters),
     current_user=Depends(get_current_user),

@@ -41,7 +41,7 @@ def test_infomanager_connector_authenticates_and_fetches_paginated_data(monkeypa
     assert vendedores == [{"cod_vendedor": 1, "nombre": "Ana", "habilitado": True}]
     assert calls[0] == (
         "post",
-        "https://example.test/api/v1/auth",
+        "https://example.test/api/v1/auth/login",
         {"client_id": "client", "client_secret": "secret"},
         30,
     )
@@ -51,40 +51,56 @@ def test_infomanager_connector_authenticates_and_fetches_paginated_data(monkeypa
 
 
 def test_infomanager_connector_maps_ventas_items_to_tenant_rows(monkeypatch):
-    payload = [
+    header_payload = [
         {
-            "venta": {
-                "fecha": "2026-05-09T10:00:00",
-                "cod_cliente": 42,
-                "tipo_comprobante": "FA",
-                "tipo_factura": "A",
-                "punto_de_venta": 3,
-                "cod_vendedor": 7,
-                "cod_empresa": 1,
-                "tag": "S",
-                "condicion_venta_tipo": 2,
-                "neto": 100,
-                "iva_importe": 21,
-                "anulada": "N",
-                "cod_deposito": 5,
-            },
-            "items": [
-                {
-                    "cod_articulo": "1001",
-                    "detalle": "Producto",
-                    "cantidad": 2,
-                    "precio": 60.5,
-                    "importe": 121,
-                    "cod_rubro": 9,
-                    "precio_compra_actual": 40,
-                    "descuento_porc": 5,
-                }
-            ],
+            "id": "10",
+            "fecha": "2026-05-09T10:00:00",
+            "cod_cliente": 42,
+            "tipo_comprobante": "FA",
+            "tipo_factura": "A",
+            "punto_de_venta": 3,
+            "cod_vendedor": 7,
+            "cod_empresa": 1,
+            "tag": "S",
+            "condicion_venta_tipo": 2,
+            "neto": -100,
+            "iva_importe": -21,
+            "anulada": "N",
+            "cod_deposito": 5,
         }
+    ]
+    item_payload = [
+        {
+            "id_comprobante": "10",
+            "cod_articulo": "1001",
+            "detalle": "Producto",
+            "cantidad": -2,
+            "precio": -60.5,
+            "importe": -121,
+            "cod_rubro": 9,
+            "precio_compra_actual": 40,
+            "descuento_porc": 5,
+        },
+        {
+            "id_comprobante": "999",
+            "cod_articulo": "1002",
+            "detalle": "Sin cabecera",
+            "cantidad": 1,
+            "precio": 1,
+            "importe": 1,
+        },
     ]
 
     connector = InfomanagerConnector("client", "secret", "https://example.test")
-    monkeypatch.setattr(connector, "fetch_paginated", lambda endpoint, params=None: payload)
+
+    def fake_fetch(endpoint, params=None):
+        if endpoint == "/api/v1/ventas":
+            return header_payload
+        if endpoint == "/api/v1/ventas/items":
+            return item_payload
+        return []
+
+    monkeypatch.setattr(connector, "fetch_paginated", fake_fetch)
 
     ventas = connector.sync_ventas(date(2026, 5, 1), date(2026, 5, 10))
 

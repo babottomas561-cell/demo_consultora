@@ -96,7 +96,7 @@ def _insert_ventas_chunk(session, tenant_schema: str, ventas):
         session.execute(stmt_clientes)
 
     # Upsert Ventas
-    rows_inserted, failed = _insert_chunk(session, tenant_schema, "ventas", ventas_data, ['fecha', 'cliente_id', 'producto_id'])
+    rows_inserted, failed = _insert_chunk(session, tenant_schema, "ventas", ventas_data, ['fecha', 'cliente_id', 'producto_id', 'tipo_comprobante'])
     return rows_inserted, failed
 
 def _backfill_ventas_infomanager_fields(session, tenant_schema: str):

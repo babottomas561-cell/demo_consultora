@@ -179,7 +179,11 @@ class InfomanagerConnector:
             "fechaHasta": fecha_hasta.strftime("%Y%m%d"),
         }
         headers_raw = self.fetch_paginated("/api/v1/ventas", params)
-        headers = {h["id"]: h for h in headers_raw if "id" in h}
+        headers = {
+            _as_int(h.get("id")): h
+            for h in headers_raw
+            if _as_int(h.get("id"))
+        }
 
         items_raw = self.fetch_paginated("/api/v1/ventas/items", params)
 
@@ -190,7 +194,9 @@ class InfomanagerConnector:
 
         ventas: list[dict[str, Any]] = []
         for item in items_raw:
-            cab = headers.get(_as_int(item.get("id_comprobante")), {})
+            cab = headers.get(_as_int(item.get("id_comprobante")))
+            if not cab:
+                continue
             tipo = _normalize_tipo_comprobante(cab.get("tipo_comprobante"))
 
             # Skip non-sales document types contaminating the items endpoint
@@ -234,13 +240,19 @@ class InfomanagerConnector:
             "fechaHasta": fecha_hasta.strftime("%Y%m%d"),
         }
         headers_raw = self.fetch_paginated("/api/v1/compras", params)
-        headers = {h["id"]: h for h in headers_raw if "id" in h}
+        headers = {
+            _as_int(h.get("id")): h
+            for h in headers_raw
+            if _as_int(h.get("id"))
+        }
 
         items_raw = self.fetch_paginated("/api/v1/compras/items", params)
 
         compras: list[dict[str, Any]] = []
         for item in items_raw:
-            cab = headers.get(_as_int(item.get("id_comprobante")), {})
+            cab = headers.get(_as_int(item.get("id_comprobante")))
+            if not cab:
+                continue
             compras.append(
                 {
                     "fecha": cab.get("fecha"),

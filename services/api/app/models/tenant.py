@@ -18,7 +18,7 @@ class Cliente(TenantBase):
 class Venta(TenantBase):
     __tablename__ = "ventas"
     __table_args__ = (
-        UniqueConstraint('fecha', 'cliente_id', 'producto_id', name='idx_venta_unica'),
+        UniqueConstraint('fecha', 'cliente_id', 'producto_id', 'tipo_comprobante', name='idx_venta_unica'),
     )
 
     id = Column(Integer, primary_key=True, index=True)

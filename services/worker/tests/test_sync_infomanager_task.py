@@ -19,3 +19,32 @@ def test_sync_all_companies_is_scheduled_every_six_hours():
 
     assert schedule["task"] == "tasks.sync_infomanager.sync_all_companies"
     assert str(schedule["schedule"]) == "<crontab: 0 */6 * * * (m/h/dM/MY/d)>"
+
+
+def test_sync_all_companies_only_queues_idle_connectors(monkeypatch):
+    queued = []
+
+    class FakeCursor:
+        def execute(self, query):
+            self.query = query
+
+        def fetchall(self):
+            return [(3, 1), (4, 2)]
+
+        def close(self):
+            return None
+
+    class FakeConnection:
+        def cursor(self):
+            return FakeCursor()
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr("tasks.sync_infomanager.psycopg2.connect", lambda _: FakeConnection())
+    monkeypatch.setattr(sync_company, "delay", lambda company_id, connector_id: queued.append((company_id, connector_id)))
+
+    result = sync_all_companies()
+
+    assert result == {"queued": 2}
+    assert queued == [(1, 3), (2, 4)]
