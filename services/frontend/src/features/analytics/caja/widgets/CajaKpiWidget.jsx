@@ -21,10 +21,11 @@ const SEVERITY_CLASSES = {
 };
 
 function formatValue(raw, format) {
-  const actual = raw?.actual ?? raw ?? 0;
-  if (format === 'currency') return formatCurrency(actual);
-  if (format === 'number')   return formatNumber(actual);
-  return String(actual ?? '—');
+  const v = raw?.actual ?? raw;
+  if (v == null || (typeof v === 'number' && isNaN(v))) return '—';
+  if (format === 'currency') return formatCurrency(v);
+  if (format === 'number')   return formatNumber(v);
+  return String(v);
 }
 
 function CajaKpiWidget({ type }) {
@@ -37,7 +38,7 @@ function CajaKpiWidget({ type }) {
   }
 
   const raw = def.getValue(kpis);
-  const actual = raw?.actual ?? raw ?? 0;
+  const actual = raw?.actual ?? (typeof raw === 'object' ? 0 : raw) ?? 0;
   const prev   = raw?.anterior;
   const formatted = formatValue(raw, def.format);
   const severity = def.getSeverity ? def.getSeverity(Number(actual)) : (def.severity ?? 'neutral');
