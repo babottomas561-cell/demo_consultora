@@ -126,7 +126,35 @@ class InfomanagerConnector:
         ]
 
     def sync_clientes(self) -> list[dict[str, Any]]:
-        return []
+        """Fetch client master data from /api/v1/clientes."""
+        data = self.fetch_paginated("/api/v1/clientes")
+        return [
+            {
+                "cod_cliente": str(c.get("cod_cliente") or c.get("id") or 0),
+                "nombre": c.get("nombre") or c.get("razon_social") or f"Cliente {c.get('cod_cliente')}",
+                "razon_social": c.get("razon_social") or c.get("nombre") or "",
+                "cuit": c.get("cuit") or "",
+                "email": c.get("email") or "",
+                "cod_vendedor": _as_int(c.get("cod_vendedor")),
+                "habilitado": str(c.get("habilitado", "1")) not in ("0", "false", "False", "N"),
+            }
+            for c in data
+        ]
+
+    def sync_proveedores(self) -> list[dict[str, Any]]:
+        """Fetch provider master data from /api/v1/proveedores."""
+        data = self.fetch_paginated("/api/v1/proveedores")
+        return [
+            {
+                "cod_proveedor": str(p.get("cod_proveedor") or p.get("id") or 0),
+                "nombre": p.get("nombre") or p.get("razon_social") or f"Proveedor {p.get('cod_proveedor')}",
+                "razon_social": p.get("razon_social") or p.get("nombre") or "",
+                "cuit": p.get("cuit") or "",
+                "email": p.get("email") or "",
+                "habilitado": str(p.get("habilitado", "1")) not in ("0", "false", "False", "N"),
+            }
+            for p in data
+        ]
 
     def sync_articulos(self) -> tuple[list[dict[str, Any]], dict[int, str], dict[int, dict[str, Any]]]:
         data = self.fetch_paginated("/api/v1/articulos")

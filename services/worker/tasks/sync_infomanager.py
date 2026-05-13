@@ -46,6 +46,59 @@ def _upsert_clientes_from_ventas(cur, ventas: list[dict[str, Any]]) -> None:
         )
 
 
+def _sync_clientes_maestro(cur, clientes_maestro: list[dict[str, Any]]) -> dict[str, str]:
+    """Upsert client master data and return {cod_cliente: nombre} lookup."""
+    lookup: dict[str, str] = {}
+    for c in clientes_maestro:
+        cod = str(c.get("cod_cliente", "0"))
+        nombre = c.get("nombre") or c.get("razon_social") or f"Cliente {cod}"
+        lookup[cod] = nombre
+        cur.execute(
+            """
+            INSERT INTO clientes (external_id, nombre)
+            VALUES (%s, %s)
+            ON CONFLICT (external_id) DO UPDATE SET
+              nombre = CASE
+                WHEN EXCLUDED.nombre <> '' AND EXCLUDED.nombre NOT LIKE 'Cliente %%'
+                THEN EXCLUDED.nombre
+                ELSE clientes.nombre
+              END
+            """,
+            (cod, nombre),
+        )
+    return lookup
+
+
+def _enrich_ventas_nombres(cur, cliente_lookup: dict[str, str]) -> None:
+    """Update ventas.cliente_nombre from the client master lookup."""
+    if not cliente_lookup:
+        return
+    for cod, nombre in cliente_lookup.items():
+        if nombre and not nombre.startswith("Cliente "):
+            cur.execute(
+                """
+                UPDATE ventas SET cliente_nombre = %s
+                WHERE cliente_id = %s AND (cliente_nombre IS NULL OR cliente_nombre = '' OR cliente_nombre LIKE 'Cliente %%')
+                """,
+                (nombre, cod),
+            )
+
+
+def _enrich_compras_nombres(cur, proveedor_lookup: dict[str, str]) -> None:
+    """Update compras.proveedor_nombre from the provider master lookup."""
+    if not proveedor_lookup:
+        return
+    for cod, nombre in proveedor_lookup.items():
+        if nombre and not nombre.startswith("Proveedor "):
+            cur.execute(
+                """
+                UPDATE compras SET proveedor_nombre = %s
+                WHERE proveedor_id = %s AND (proveedor_nombre IS NULL OR proveedor_nombre = '' OR proveedor_nombre LIKE 'Proveedor %%')
+                """,
+                (nombre, cod),
+            )
+
+
 def _map_saldo_cliente(row: dict[str, Any], index: int) -> dict[str, Any]:
     cliente_id = str(row.get("cliente_id") or row.get("cod_cliente") or row.get("codcliente") or 0)
     importe = _as_float(row.get("importe") or row.get("saldo") or row.get("saldo_acumulado"))
@@ -144,6 +197,16 @@ def sync_company(self, company_id: int, connector_id: int):
                 """,
                 vendedor,
             )
+
+        # --- Client & provider master data ---
+        clientes_maestro = im.sync_clientes()
+        cliente_lookup = _sync_clientes_maestro(cur, clientes_maestro)
+
+        proveedores_maestro = im.sync_proveedores()
+        proveedor_lookup: dict[str, str] = {}
+        for p in proveedores_maestro:
+            cod = str(p.get("cod_proveedor", "0"))
+            proveedor_lookup[cod] = p.get("nombre") or p.get("razon_social") or f"Proveedor {cod}"
 
         articulos, rubros, subrubros = im.sync_articulos()
         for cod_rubro, nombre in rubros.items():
@@ -248,6 +311,10 @@ def sync_company(self, company_id: int, connector_id: int):
                 compra,
             )
 
+        # --- Enrich names from master data ---
+        _enrich_ventas_nombres(cur, cliente_lookup)
+        _enrich_compras_nombres(cur, proveedor_lookup)
+
         for index, saldo in enumerate(im.sync_saldos_clientes()):
             cur.execute(
                 """
@@ -314,6 +381,24 @@ def sync_company(self, company_id: int, connector_id: int):
                 """,
                 presupuesto,
             )
+
+        # Enrich names in related tables from master lookups
+        for cod, nombre in cliente_lookup.items():
+            if nombre and not nombre.startswith("Cliente "):
+                cur.execute(
+                    "UPDATE cuentas_corrientes_clientes SET cliente_nombre = %s WHERE cliente_id = %s AND (cliente_nombre IS NULL OR cliente_nombre = '' OR cliente_nombre LIKE 'Cliente %%')",
+                    (nombre, cod),
+                )
+                cur.execute(
+                    "UPDATE presupuestos SET cliente_nombre = %s WHERE cod_cliente::text = %s AND (cliente_nombre IS NULL OR cliente_nombre = '' OR cliente_nombre LIKE 'Cliente %%')",
+                    (nombre, cod),
+                )
+        for cod, nombre in proveedor_lookup.items():
+            if nombre and not nombre.startswith("Proveedor "):
+                cur.execute(
+                    "UPDATE cuentas_corrientes_proveedores SET proveedor_nombre = %s WHERE proveedor_id = %s AND (proveedor_nombre IS NULL OR proveedor_nombre = '' OR proveedor_nombre LIKE 'Proveedor %%')",
+                    (nombre, cod),
+                )
 
         recibos = im.sync_recibos(desde, hasta)
         saldo_acum = 0.0
