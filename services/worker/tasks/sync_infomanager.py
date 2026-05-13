@@ -99,6 +99,44 @@ def _enrich_compras_nombres(cur, proveedor_lookup: dict[str, str]) -> None:
             )
 
 
+def _enrich_ventas_from_cta_clientes(cur) -> None:
+    """Use customer current-account names when sales headers lack customer names."""
+    cur.execute(
+        """
+        WITH names AS (
+          SELECT cliente_id, MAX(cliente_nombre) AS cliente_nombre
+          FROM cuentas_corrientes_clientes
+          WHERE NULLIF(TRIM(cliente_nombre), '') IS NOT NULL
+          GROUP BY cliente_id
+        )
+        UPDATE ventas v
+        SET cliente_nombre = names.cliente_nombre
+        FROM names
+        WHERE v.cliente_id = names.cliente_id
+          AND (
+            v.cliente_nombre IS NULL
+            OR v.cliente_nombre = ''
+            OR v.cliente_nombre LIKE 'Cliente %%'
+          )
+        """
+    )
+    cur.execute(
+        """
+        INSERT INTO clientes (external_id, nombre)
+        SELECT cliente_id, MAX(cliente_nombre)
+        FROM cuentas_corrientes_clientes
+        WHERE NULLIF(TRIM(cliente_nombre), '') IS NOT NULL
+        GROUP BY cliente_id
+        ON CONFLICT (external_id) DO UPDATE SET
+          nombre = CASE
+            WHEN EXCLUDED.nombre <> '' AND EXCLUDED.nombre NOT LIKE 'Cliente %%'
+            THEN EXCLUDED.nombre
+            ELSE clientes.nombre
+          END
+        """
+    )
+
+
 def _map_saldo_cliente(row: dict[str, Any], index: int) -> dict[str, Any]:
     cliente_id = str(row.get("cliente_id") or row.get("cod_cliente") or row.get("codcliente") or 0)
     importe = _as_float(row.get("importe") or row.get("saldo") or row.get("saldo_acumulado"))
@@ -290,6 +328,9 @@ def sync_company(self, company_id: int, connector_id: int):
 
         compras = im.sync_compras(desde, hasta)
         for compra in compras:
+            proveedor_nombre = proveedor_lookup.get(str(compra.get("proveedor_id")))
+            if proveedor_nombre and not proveedor_nombre.startswith("Proveedor "):
+                compra["proveedor_nombre"] = proveedor_nombre
             cur.execute(
                 """
                 INSERT INTO compras (
@@ -335,6 +376,8 @@ def sync_company(self, company_id: int, connector_id: int):
                 """,
                 _map_saldo_cliente(saldo, index),
             )
+
+        _enrich_ventas_from_cta_clientes(cur)
 
         for index, saldo in enumerate(im.sync_saldos_proveedores()):
             cur.execute(

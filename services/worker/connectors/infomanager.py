@@ -45,6 +45,14 @@ def _as_float(value: Any, default: float = 0.0) -> float:
         return default
 
 
+def _first_present(row: dict[str, Any], *keys: str) -> Any:
+    for key in keys:
+        value = row.get(key)
+        if value not in (None, ""):
+            return value
+    return None
+
+
 class InfomanagerConnector:
     def __init__(self, client_id: str, client_secret: str, base_url: str | None = None):
         self.client_id = client_id
@@ -285,12 +293,20 @@ class InfomanagerConnector:
                 {
                     "fecha": cab.get("fecha"),
                     "proveedor_id": str(cab.get("cod_proveedor") or 0),
-                    "proveedor_nombre": cab.get("proveedor") or cab.get("proveedor_nombre") or "",
+                    "proveedor_nombre": _first_present(
+                        cab,
+                        "proveedor",
+                        "proveedor_nombre",
+                        "nombre_proveedor",
+                        "razon_social",
+                    ) or "",
                     "producto_id": str(item.get("cod_articulo") or ""),
                     "producto_nombre": item.get("detalle") or item.get("descripcion") or "",
                     "cantidad": _as_float(item.get("cantidad")),
                     "precio_unitario": _as_float(item.get("precio")),
-                    "total": _as_float(item.get("importe")),
+                    "total": _as_float(item.get("importe")) or (
+                        abs(_as_float(item.get("cantidad"))) * abs(_as_float(item.get("precio")))
+                    ),
                 }
             )
         return compras
