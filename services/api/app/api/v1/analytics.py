@@ -1174,10 +1174,11 @@ async def ventas_temporal(
     series = (await db.execute(text(f"""
         SELECT
             to_char(date_trunc('{trunc}', fecha), 'YYYY-MM-DD') AS periodo,
+            COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN ABS(total) ELSE 0 END),0)              AS fa_bruto,
+            COALESCE(SUM(CASE WHEN tipo_comprobante IN ('NC','ND') THEN ABS(total) ELSE 0 END),0)    AS devoluciones,
             COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN ABS(total) ELSE 0 END),0)
               - COALESCE(SUM(CASE WHEN tipo_comprobante IN ('NC','ND') THEN ABS(total) ELSE 0 END),0) AS facturado,
-            COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END)                                         AS tickets,
-            COALESCE(SUM(CASE WHEN tipo_comprobante IN ('NC','ND') THEN ABS(total) ELSE 0 END),0)    AS devoluciones
+            COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END)                                         AS tickets
         FROM ventas
         WHERE {where}
         GROUP BY 1
@@ -1194,6 +1195,8 @@ async def ventas_temporal(
         prev_series = (await db.execute(text(f"""
             SELECT
                 to_char(date_trunc('{trunc}', fecha), 'YYYY-MM-DD') AS periodo,
+                COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN ABS(total) ELSE 0 END),0)              AS fa_bruto,
+                COALESCE(SUM(CASE WHEN tipo_comprobante IN ('NC','ND') THEN ABS(total) ELSE 0 END),0)    AS devoluciones,
                 COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN ABS(total) ELSE 0 END),0)
                   - COALESCE(SUM(CASE WHEN tipo_comprobante IN ('NC','ND') THEN ABS(total) ELSE 0 END),0) AS facturado,
                 COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END) AS tickets
