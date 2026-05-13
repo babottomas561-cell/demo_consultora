@@ -5,42 +5,47 @@ echo "Running central migrations..."
 alembic -c migrations/central/alembic.ini upgrade head
 
 echo "Running tenant migrations for all company schemas..."
-# Query all tenant schemas and apply migrations for each
 python3 - <<'PYEOF'
+import asyncio
 import os
 import subprocess
-import psycopg2
 
 db_url = os.environ.get("DATABASE_URL", "")
 if not db_url:
     print("No DATABASE_URL — skipping tenant migrations")
     raise SystemExit(0)
 
-# Convert asyncpg URL to sync psycopg2 URL if needed
-sync_url = db_url.replace("postgresql+asyncpg://", "postgresql://")
+# Convert to asyncpg-compatible URL
+async_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+# Also need plain asyncpg URL (without +asyncpg for asyncpg.connect)
+pg_url = db_url.replace("postgresql+asyncpg://", "postgresql://", 1)
 
-try:
-    conn = psycopg2.connect(sync_url)
-    cur = conn.cursor()
-    cur.execute("SELECT tenant_schema FROM public.companies WHERE tenant_schema IS NOT NULL")
-    schemas = [row[0] for row in cur.fetchall()]
-    cur.close()
-    conn.close()
-except Exception as e:
-    print(f"Could not query tenant schemas: {e}")
-    raise SystemExit(0)
+async def get_schemas():
+    try:
+        import asyncpg
+        conn = await asyncpg.connect(pg_url)
+        rows = await conn.fetch("SELECT tenant_schema FROM public.companies WHERE tenant_schema IS NOT NULL")
+        await conn.close()
+        return [r["tenant_schema"] for r in rows]
+    except Exception as e:
+        print(f"Could not query tenant schemas: {e}")
+        return []
 
+schemas = asyncio.run(get_schemas())
 print(f"Found {len(schemas)} tenant schemas: {schemas}")
+
 for schema in schemas:
     print(f"  Migrating schema: {schema}")
     result = subprocess.run(
         ["alembic", "-c", "migrations/tenant/alembic.ini", "-x", f"tenant={schema}", "upgrade", "head"],
-        capture_output=True, text=True
+        capture_output=True, text=True,
+        cwd="/app"
     )
     if result.returncode != 0:
-        print(f"  WARNING: migration failed for {schema}: {result.stderr}")
+        print(f"  WARNING: migration failed for {schema}:\n{result.stderr}")
     else:
-        print(f"  OK: {schema}")
+        out = result.stdout.strip()
+        print(f"  OK: {schema}" + (f" — {out.split(chr(10))[-1]}" if out else ""))
 
 PYEOF
 
