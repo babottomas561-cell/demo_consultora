@@ -9,6 +9,28 @@ const ResponsiveGridLayout = WidthProvider(Responsive);
 const WidgetWrapper = ({ widget, editing, onRemove, widgetDef, children }) => {
   if (!widgetDef) return null;
 
+  const isKpi = widgetDef.category === 'kpi';
+
+  // KPI widgets render their own styled card — no wrapper header needed
+  if (isKpi) {
+    return (
+      <div className="h-full relative group">
+        {editing && (
+          <div className="absolute inset-0 z-10 rounded-xl cursor-grab active:cursor-grabbing">
+            <button
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={() => onRemove(widget.id)}
+              className="absolute top-1 right-1 p-1 rounded-md text-slate-400 hover:text-red-500 hover:bg-red-50/80 transition-colors opacity-0 group-hover:opacity-100 z-20"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
+        {children}
+      </div>
+    );
+  }
+
   return (
     <div className="h-full rounded-xl border border-slate-200 bg-white shadow-sm flex flex-col overflow-hidden group">
       <div

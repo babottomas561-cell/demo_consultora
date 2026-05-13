@@ -1,74 +1,62 @@
-import { Package, TrendingUp, TrendingDown, AlertTriangle, Archive } from 'lucide-react';
-import KPICard from '../../../../components/analytics/KPICard';
-import { SkeletonKPI } from '../../../../components/analytics/SkeletonLoader';
+import { Loader2 } from 'lucide-react';
 import { useStockData } from '../StockDataContext';
-import { formatCurrency } from '../../analyticsUtils';
+import { formatCurrency, formatNumber } from '../../analyticsUtils';
 
 const KPI_DEFS = {
-  'stock-kpi-total': {
-    label: 'Total artículos', field: 'total_articulos',
-    format: 'number', severity: 'neutral', icon: Package,
-  },
-  'stock-kpi-con-stock': {
-    label: 'Con stock', field: 'con_stock',
-    format: 'number', icon: TrendingUp,
-    getSeverity: (v) => (v || 0) > 0 ? 'success' : 'warning',
-  },
-  'stock-kpi-sin-stock': {
-    label: 'Sin stock', field: 'sin_stock',
-    format: 'number', icon: TrendingDown,
-    getSeverity: (v) => (v || 0) > 0 ? 'danger' : 'success',
-  },
-  'stock-kpi-bajo': {
-    label: 'Stock bajo', field: 'stock_bajo',
-    format: 'number', icon: AlertTriangle,
-    getSeverity: (v) => (v || 0) > 0 ? 'warning' : 'success',
-  },
-  'stock-kpi-valor-costo': {
-    label: 'Valor inventario (costo)', field: 'valor_inventario_costo',
-    format: 'currency', severity: 'neutral', icon: Archive,
-  },
-  'stock-kpi-valor-venta': {
-    label: 'Valor inventario (venta)', field: 'valor_inventario_precio_venta',
-    format: 'currency', severity: 'neutral', icon: Archive,
-  },
-  'stock-kpi-dias': {
-    label: 'Días inventario prom.', field: 'dias_inventario_promedio',
-    format: 'number', severity: 'neutral', icon: Package,
-    suffix: 'd',
-  },
-  'stock-kpi-sin-movimiento': {
-    label: 'Sin movimiento 90d', field: 'articulos_sin_movimiento',
-    format: 'number', icon: AlertTriangle,
-    getSeverity: (v) => (v || 0) > 0 ? 'warning' : 'success',
-  },
+  'stock-kpi-total':          { label: 'Total artículos',           field: 'total_articulos',                   format: 'number',   severity: 'neutral' },
+  'stock-kpi-con-stock':      { label: 'Con stock',                 field: 'con_stock',                         format: 'number',   getSeverity: (v) => v > 0 ? 'success' : 'warning' },
+  'stock-kpi-sin-stock':      { label: 'Sin stock',                 field: 'sin_stock',                         format: 'number',   getSeverity: (v) => v > 0 ? 'danger' : 'success' },
+  'stock-kpi-bajo':           { label: 'Stock bajo',                field: 'stock_bajo',                        format: 'number',   getSeverity: (v) => v > 0 ? 'warning' : 'success' },
+  'stock-kpi-valor-costo':    { label: 'Valor inventario (costo)',  field: 'valor_inventario_costo',            format: 'currency', severity: 'neutral' },
+  'stock-kpi-valor-venta':    { label: 'Valor inventario (venta)',  field: 'valor_inventario_precio_venta',     format: 'currency', severity: 'neutral' },
+  'stock-kpi-dias':           { label: 'Días inventario prom.',     field: 'dias_inventario_promedio',          format: 'days',     severity: 'neutral' },
+  'stock-kpi-sin-movimiento': { label: 'Sin movimiento 90d',       field: 'articulos_sin_movimiento',          format: 'number',   getSeverity: (v) => v > 0 ? 'warning' : 'success' },
 };
 
-export function createStockKpiWidget(type) {
+const SEVERITY_CLASSES = {
+  success: { card: 'bg-emerald-50 border-emerald-200', label: 'text-emerald-700', value: 'text-emerald-900', dot: 'bg-emerald-500' },
+  warning: { card: 'bg-amber-50 border-amber-200',     label: 'text-amber-700',   value: 'text-amber-900',   dot: 'bg-amber-500'   },
+  danger:  { card: 'bg-red-50 border-red-200',         label: 'text-red-700',     value: 'text-red-900',     dot: 'bg-red-500'     },
+  neutral: { card: 'bg-white border-slate-200',        label: 'text-slate-500',   value: 'text-slate-900',   dot: 'bg-indigo-500'  },
+};
+
+function formatValue(raw, format) {
+  const actual = raw?.actual ?? raw ?? 0;
+  if (format === 'currency') return formatCurrency(actual);
+  if (format === 'number')   return formatNumber(actual);
+  if (format === 'days')     return `${Number(actual).toFixed(0)}d`;
+  return String(actual ?? '—');
+}
+
+function StockKpiWidget({ type }) {
+  const { kpis, loadingKpis } = useStockData();
   const def = KPI_DEFS[type];
-  if (!def) return () => null;
+  if (!def) return null;
 
-  return function StockKpi() {
-    const { kpis, loadingKpis } = useStockData();
-    if (loadingKpis) return <div className="p-4"><SkeletonKPI /></div>;
+  if (loadingKpis) {
+    return <div className="flex h-full items-center justify-center"><Loader2 className="animate-spin text-slate-400" size={24} /></div>;
+  }
 
-    const raw = kpis?.[def.field];
-    const actual = raw?.actual ?? raw ?? 0;
-    const severity = def.getSeverity ? def.getSeverity(actual) : def.severity;
-    const displayValue = def.suffix ? `${actual}${def.suffix}` : actual;
+  const raw = kpis?.[def.field];
+  const actual = raw?.actual ?? raw ?? 0;
+  const formatted = formatValue(raw, def.format);
+  const severity = def.getSeverity ? def.getSeverity(Number(actual)) : (def.severity ?? 'neutral');
+  const cls = SEVERITY_CLASSES[severity] ?? SEVERITY_CLASSES.neutral;
 
-    return (
-      <div className="p-4 h-full flex items-center">
-        <KPICard
-          label={def.label}
-          value={displayValue}
-          severity={severity}
-          format={def.suffix ? 'custom' : def.format}
-          icon={def.icon}
-          className="w-full"
-        />
+  return (
+    <div className={`h-full flex flex-col justify-center rounded-xl border p-4 ${cls.card}`}>
+      <div className="flex items-center gap-2 mb-2">
+        <div className={`h-2 w-2 rounded-full shrink-0 ${cls.dot}`} />
+        <p className={`text-xs font-medium uppercase tracking-wide truncate ${cls.label}`}>{def.label}</p>
       </div>
-    );
+      <p className={`text-2xl font-bold leading-tight ${cls.value}`}>{formatted}</p>
+    </div>
+  );
+}
+
+export function createStockKpiWidget(type) {
+  return function StockKpiInstance(props) {
+    return <StockKpiWidget {...props} type={type} />;
   };
 }
 

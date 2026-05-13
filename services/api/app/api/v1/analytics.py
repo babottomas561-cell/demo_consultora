@@ -2284,23 +2284,15 @@ async def resultado_exportar(
 # Hard-coded mapping between stock.cod_articulo (int) and ventas.producto_id (str)
 # This is stable for the demo product catalog.
 _ARTICULO_MAP_SQL = """
-    (VALUES
-        (1001,'REM001','Remera básica'),
-        (1002,'REM002','Remera estampada'),
-        (2001,'PAN001','Pantalón jean slim'),
-        (2002,'PAN002','Pantalón cargo'),
-        (3001,'VES001','Vestido floral'),
-        (3002,'VES002','Vestido casual'),
-        (4001,'CAM001','Campera impermeable'),
-        (4002,'CAM002','Campera de abrigo'),
-        (5001,'BUZ001','Buzo con capucha'),
-        (6001,'CAL001','Zapatillas urbanas'),
-        (6002,'CAL002','Botas de cuero'),
-        (6003,'CAL003','Sandalias verano'),
-        (7001,'ACC001','Cinturón cuero'),
-        (7002,'ACC002','Cartera mediana')
-    ) AS am(cod_articulo, producto_id, nombre)
-"""
+    (SELECT DISTINCT
+         producto_id::integer AS cod_articulo,
+         producto_id,
+         MAX(producto_nombre) AS nombre
+     FROM ventas
+     WHERE producto_id IS NOT NULL AND producto_id <> ''
+       AND producto_id ~ '^[0-9]+$'
+     GROUP BY producto_id
+    ) AS am"""
 
 
 @router.get("/stock/kpis")
@@ -3636,10 +3628,12 @@ async def caja_kpis(
         FROM movimientos_caja WHERE {caja_where}
     """), params)).mappings().one()
 
-    # Current balance (all time)
+    # Current balance (latest row by fecha)
     saldo_row = (await db.execute(text(
-        "SELECT COALESCE(MAX(saldo_acumulado), 0) AS saldo_actual FROM movimientos_caja ORDER BY fecha DESC LIMIT 1"
-    ))).mappings().one()
+        "SELECT COALESCE(saldo_acumulado, 0) AS saldo_actual FROM movimientos_caja ORDER BY fecha DESC, id DESC LIMIT 1"
+    ))).mappings().first()
+    if saldo_row is None:
+        saldo_row = {"saldo_actual": 0}
 
     ingresos = float(row["ingresos"] or 0)
     egresos = float(row["egresos"] or 0)
