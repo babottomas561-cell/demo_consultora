@@ -43,17 +43,22 @@ const usePanelLayoutStore = create(
         const id = `${panelId}-${++widgetCounter}-${Date.now()}`;
         set((s) => {
           const panel = s.panels[panelId] || PANEL_DEFAULTS[panelId] || { widgets: [], layouts: {} };
+          const existingLayouts =
+            panel.layouts && typeof panel.layouts === 'object' ? panel.layouts : {};
+          const newItem = { i: id, x: 0, y: Infinity, w: 4, h: 3, minW: 2, minH: 2 };
+          const breakpoints = ['lg', 'md', 'sm'];
+          const updatedLayouts = Object.fromEntries(
+            breakpoints.map((bp) => [
+              bp,
+              [...(Array.isArray(existingLayouts[bp]) ? existingLayouts[bp] : []), newItem],
+            ])
+          );
           return {
             panels: {
               ...s.panels,
               [panelId]: {
                 widgets: [...panel.widgets, { id, type }],
-                layouts: Object.fromEntries(
-                  Object.entries(panel.layouts).map(([bp, items]) => [
-                    bp,
-                    [...items, { i: id, x: 0, y: Infinity, w: 4, h: 3, minW: 2, minH: 2 }],
-                  ])
-                ),
+                layouts: updatedLayouts,
               },
             },
           };
