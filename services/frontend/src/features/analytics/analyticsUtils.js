@@ -1,16 +1,21 @@
+const toFiniteNumber = (value) => {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+};
+
 export const formatCurrency = (value) => (
   new Intl.NumberFormat('es-AR', {
     style: 'currency',
     currency: 'ARS',
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
-  }).format(value || 0)
+  }).format(toFiniteNumber(value))
 );
 
 export const formatNumber = (value) => (
   new Intl.NumberFormat('es-AR', {
     maximumFractionDigits: 0,
-  }).format(value || 0)
+  }).format(toFiniteNumber(value))
 );
 
 const arrayFilterKeys = [

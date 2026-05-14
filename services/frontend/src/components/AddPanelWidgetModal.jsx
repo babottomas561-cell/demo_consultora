@@ -81,7 +81,7 @@ export default function AddPanelWidgetModal({ panelId, catalog, onClose }) {
                           </p>
                         </div>
                         <button
-                          onClick={() => addWidget(panelId, w.type)}
+                          onClick={() => addWidget(panelId, w.type, w.defaultSize)}
                           disabled={alreadyAdded}
                           className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-slate-300 disabled:text-slate-500"
                         >

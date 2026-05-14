@@ -39,8 +39,17 @@ const usePanelLayoutStore = create(
           },
         })),
 
-      addWidget: (panelId, type) => {
+      addWidget: (panelId, type, defaultSize = {}) => {
         const id = `${panelId}-${++widgetCounter}-${Date.now()}`;
+        const layoutItem = {
+          i: id,
+          x: 0,
+          y: Infinity,
+          w: defaultSize.w ?? 4,
+          h: defaultSize.h ?? 3,
+          minW: defaultSize.minW ?? 2,
+          minH: defaultSize.minH ?? 2,
+        };
         set((s) => {
           const panel = s.panels[panelId] || PANEL_DEFAULTS[panelId] || { widgets: [], layouts: {} };
           return {
@@ -51,7 +60,7 @@ const usePanelLayoutStore = create(
                 layouts: Object.fromEntries(
                   Object.entries(panel.layouts).map(([bp, items]) => [
                     bp,
-                    [...items, { i: id, x: 0, y: Infinity, w: 4, h: 3, minW: 2, minH: 2 }],
+                    [...items, { ...layoutItem }],
                   ])
                 ),
               },

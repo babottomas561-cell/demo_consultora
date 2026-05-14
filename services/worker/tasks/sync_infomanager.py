@@ -268,6 +268,18 @@ def sync_company(self, company_id: int, connector_id: int):
                 subrubro,
             )
 
+        for deposito in im.sync_depositos():
+            cur.execute(
+                """
+                INSERT INTO depositos (cod_deposito, nombre, habilitado)
+                VALUES (%(cod_deposito)s, %(nombre)s, %(habilitado)s)
+                ON CONFLICT (cod_deposito) DO UPDATE SET
+                  nombre=EXCLUDED.nombre,
+                  habilitado=EXCLUDED.habilitado
+                """,
+                deposito,
+            )
+
         stock_data = im.sync_stock()
         for stock in stock_data:
             cur.execute(
@@ -379,7 +391,7 @@ def sync_company(self, company_id: int, connector_id: int):
 
         _enrich_ventas_from_cta_clientes(cur)
 
-        for index, saldo in enumerate(im.sync_saldos_proveedores()):
+        for index, saldo in enumerate(im.sync_saldos_proveedores(desde, hasta)):
             cur.execute(
                 """
                 INSERT INTO cuentas_corrientes_proveedores (

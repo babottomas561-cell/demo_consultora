@@ -64,6 +64,7 @@ export default function EditablePanel({
   catalog,
   getWidgetDef,
   onAddClick,
+  onAddWidget,
   children: headerChildren,
 }) {
   const store = usePanelLayoutStore();
@@ -88,7 +89,8 @@ export default function EditablePanel({
         {editing && (
           <>
             <button
-              onClick={onAddClick}
+              onClick={onAddClick ?? onAddWidget}
+              disabled={!(onAddClick ?? onAddWidget)}
               className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-white px-3 py-2 text-sm font-medium text-indigo-600 hover:bg-indigo-50 transition-colors"
             >
               <Plus size={16} /> Agregar widget

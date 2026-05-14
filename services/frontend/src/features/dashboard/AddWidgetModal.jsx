@@ -8,8 +8,8 @@ export default function AddWidgetModal({ onClose }) {
   const { widgets, addWidget } = useDashboardStore();
   const activeTypes = new Set(widgets.map(w => w.type));
 
-  const handleAdd = (type) => {
-    addWidget(type);
+  const handleAdd = (widget) => {
+    addWidget(widget.type, widget.defaultSize);
   };
 
   return (
@@ -45,7 +45,7 @@ export default function AddWidgetModal({ onClose }) {
                           <p className="text-xs text-slate-500 truncate">{w.description}</p>
                         </div>
                         <button
-                          onClick={() => handleAdd(w.type)}
+                          onClick={() => handleAdd(w)}
                           disabled={alreadyAdded}
                           className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-slate-300 disabled:text-slate-500"
                         >

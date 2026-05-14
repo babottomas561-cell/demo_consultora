@@ -130,3 +130,113 @@ def test_infomanager_connector_maps_ventas_items_to_tenant_rows(monkeypatch):
             "descuento_porc": 5.0,
         }
     ]
+
+
+def test_infomanager_connector_maps_supplier_balances_from_facturas_compras(monkeypatch):
+    connector = InfomanagerConnector("client", "secret", "https://example.test")
+
+    def fake_fetch(endpoint, params=None, max_pages=500):
+        assert endpoint == "/api/v1/reportes/facturas_compras"
+        assert max_pages == 1
+        assert params == {
+            "fechaDesde": "20260501",
+            "fechaHasta": "20260510",
+            "tag": "T",
+            "codEmpresa": 0,
+            "codProveedor": 0,
+        }
+        return [
+            {
+                "cod_proveedor": 415,
+                "nombre": "Proveedor Real",
+                "fa_id": 122745,
+                "fa_fecha": "2026-05-02",
+                "fa_total": 1000,
+                "op_imp_pagado": 250,
+                "saldo_fa": 750,
+                "ult_fec_vto": "2026-06-02",
+            }
+        ]
+
+    monkeypatch.setattr(connector, "fetch_paginated", fake_fetch)
+
+    saldos = connector.sync_saldos_proveedores(date(2026, 5, 1), date(2026, 5, 10))
+
+    assert saldos == [
+        {
+            "proveedor_id": "415",
+            "proveedor_nombre": "Proveedor Real",
+            "comprobante_id": "factura-compra-122745",
+            "tipo": "factura",
+            "fecha": "2026-05-02",
+            "importe": 750.0,
+            "saldo_acumulado": 750.0,
+            "fecha_vencimiento": "2026-06-02",
+        }
+    ]
+
+
+def test_infomanager_connector_maps_recibos_from_facturas_con_recibos(monkeypatch):
+    connector = InfomanagerConnector("client", "secret", "https://example.test")
+
+    def fake_fetch(endpoint, params=None, max_pages=500):
+        assert endpoint == "/api/v1/reportes/facturas_con_recibos"
+        assert max_pages == 1
+        assert params == {
+            "fechaDesde": "20260501",
+            "fechaHasta": "20260510",
+            "tag": "T",
+            "codEmpresa": 0,
+        }
+        return [
+            {
+                "rc_id": 90,
+                "rc_fecha": "2026-05-03",
+                "cod_cliente": 42,
+                "cond_pago": "EF",
+                "importe": 100,
+                "fa_id": 10,
+                "rc_nro": 123,
+            },
+            {
+                "rc_id": 90,
+                "rc_fecha": "2026-05-03",
+                "cod_cliente": 42,
+                "cond_pago": "EF",
+                "importe": 25.55,
+                "fa_id": 11,
+                "rc_nro": 123,
+            },
+        ]
+
+    monkeypatch.setattr(connector, "fetch_paginated", fake_fetch)
+
+    recibos = connector.sync_recibos(date(2026, 5, 1), date(2026, 5, 10))
+
+    assert recibos == [
+        {
+            "id": 90,
+            "fecha": "2026-05-03",
+            "cod_cliente": 42,
+            "cliente_nombre": "",
+            "forma_pago": "EF",
+            "importe": 125.55,
+            "factura_id": 10,
+            "tarjeta_numero": None,
+            "tarjeta_cupon": "123",
+        }
+    ]
+
+
+def test_infomanager_connector_maps_depositos(monkeypatch):
+    connector = InfomanagerConnector("client", "secret", "https://example.test")
+
+    monkeypatch.setattr(
+        connector,
+        "fetch_paginated",
+        lambda endpoint, params=None, max_pages=500: [{"cod_deposito": 1, "descripcion": "CAMARA"}],
+    )
+
+    assert connector.sync_depositos() == [
+        {"cod_deposito": 1, "nombre": "CAMARA", "habilitado": True}
+    ]

@@ -66,14 +66,23 @@ const useDashboardStore = create(
 
       updateLayouts: (layouts) => set({ layouts }),
 
-      addWidget: (type) => {
+      addWidget: (type, defaultSize = {}) => {
         const id = `widget-${++widgetCounter}-${Date.now()}`;
+        const layoutItem = {
+          i: id,
+          x: 0,
+          y: Infinity,
+          w: defaultSize.w ?? 4,
+          h: defaultSize.h ?? 3,
+          minW: defaultSize.minW ?? 2,
+          minH: defaultSize.minH ?? 2,
+        };
         set(s => ({
           widgets: [...s.widgets, { id, type }],
           layouts: Object.fromEntries(
             Object.entries(s.layouts).map(([bp, items]) => [
               bp,
-              [...items, { i: id, x: 0, y: Infinity, w: 4, h: 3, minW: 2, minH: 2 }],
+              [...items, { ...layoutItem }],
             ])
           ),
         }));

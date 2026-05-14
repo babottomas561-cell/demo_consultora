@@ -207,6 +207,18 @@ class InfomanagerConnector:
             for s in data
         ]
 
+    def sync_depositos(self) -> list[dict[str, Any]]:
+        data = self.fetch_paginated("/api/v1/depositos", max_pages=1)
+        return [
+            {
+                "cod_deposito": _as_int(d.get("cod_deposito")),
+                "nombre": d.get("descripcion") or d.get("nombre") or f"Deposito {d.get('cod_deposito')}",
+                "habilitado": str(d.get("habilitado", "1")) not in ("0", "false", "False", "N"),
+            }
+            for d in data
+            if _as_int(d.get("cod_deposito"))
+        ]
+
     def sync_ventas(self, fecha_desde, fecha_hasta) -> list[dict[str, Any]]:
         # Items endpoint lacks header fields (fecha, cod_cliente, etc.) — must join.
         # Headers are indexed by id; items reference them via id_comprobante.
@@ -333,10 +345,38 @@ class InfomanagerConnector:
             })
         return results
 
-    def sync_saldos_proveedores(self) -> list[dict[str, Any]]:
-        # Infomanager v2 API has no saldos_proveedores report endpoint.
-        # Proveedores balances must be derived from compras data.
-        return []
+    def sync_saldos_proveedores(self, fecha_desde, fecha_hasta) -> list[dict[str, Any]]:
+        data = self.fetch_paginated(
+            "/api/v1/reportes/facturas_compras",
+            {
+                "fechaDesde": fecha_desde.strftime("%Y%m%d"),
+                "fechaHasta": fecha_hasta.strftime("%Y%m%d"),
+                "tag": "T",
+                "codEmpresa": 0,
+                "codProveedor": 0,
+            },
+            max_pages=1,
+        )
+        saldos: list[dict[str, Any]] = []
+        for index, row in enumerate(data):
+            proveedor_id = str(row.get("cod_proveedor") or 0)
+            factura_id = row.get("fa_id") or row.get("id") or index
+            saldo = _as_float(row.get("saldo_fa"))
+            total = _as_float(row.get("fa_total"))
+            pagado = _as_float(row.get("op_imp_pagado"))
+            saldos.append(
+                {
+                    "proveedor_id": proveedor_id,
+                    "proveedor_nombre": row.get("nombre") or row.get("proveedor_nombre") or f"Proveedor {proveedor_id}",
+                    "comprobante_id": f"factura-compra-{factura_id}",
+                    "tipo": "factura",
+                    "fecha": row.get("fa_fecha"),
+                    "importe": saldo if row.get("saldo_fa") is not None else total - pagado,
+                    "saldo_acumulado": saldo if row.get("saldo_fa") is not None else total - pagado,
+                    "fecha_vencimiento": row.get("ult_fec_vto") or row.get("primer_fec_vto"),
+                }
+            )
+        return saldos
 
     def sync_presupuestos(self, fecha_desde, fecha_hasta) -> list[dict[str, Any]]:
         # API has /confirmados and /no_confirmados — no base /presupuestos endpoint.
@@ -382,28 +422,41 @@ class InfomanagerConnector:
 
     def sync_recibos(self, fecha_desde, fecha_hasta) -> list[dict[str, Any]]:
         data = self.fetch_paginated(
-            "/api/v1/recibo",
+            "/api/v1/reportes/facturas_con_recibos",
             {
                 "fechaDesde": fecha_desde.strftime("%Y%m%d"),
                 "fechaHasta": fecha_hasta.strftime("%Y%m%d"),
+                "tag": "T",
+                "codEmpresa": 0,
             },
+            max_pages=1,
         )
-        recibos: list[dict[str, Any]] = []
+        recibos_by_id: dict[int, dict[str, Any]] = {}
         for r in data:
-            recibo_id = _as_int(r.get("id") or r.get("numero"))
+            recibo_id = _as_int(r.get("rc_id") or r.get("id") or r.get("numero"))
             if not recibo_id:
                 continue
-            recibos.append(
-                {
+            importe = _as_float(r.get("importe") or r.get("imp_pag_moneda_local"))
+            if recibo_id not in recibos_by_id:
+                recibos_by_id[recibo_id] = {
                     "id": recibo_id,
-                    "fecha": r.get("fecha"),
+                    "fecha": r.get("rc_fecha") or r.get("fecha"),
                     "cod_cliente": _as_int(r.get("cod_cliente")),
                     "cliente_nombre": r.get("cliente_nombre") or r.get("razon_social") or "",
-                    "forma_pago": r.get("forma_pago") or "efectivo",
-                    "importe": _as_float(r.get("importe")),
-                    "factura_id": _as_int(r.get("factura_id")) or None,
-                    "tarjeta_numero": r.get("tarjeta_numero"),
-                    "tarjeta_cupon": r.get("tarjeta_cupon"),
+                    "forma_pago": r.get("cond_pago") or r.get("forma_pago") or "efectivo",
+                    "importe": 0.0,
+                    "factura_id": _as_int(r.get("fa_id") or r.get("factura_id")) or None,
+                    "tarjeta_numero": r.get("tarjeta_numero") or r.get("cheque_numero"),
+                    "tarjeta_cupon": r.get("tarjeta_cupon") or (str(r.get("rc_nro")) if r.get("rc_nro") is not None else None),
+                }
+            recibos_by_id[recibo_id]["importe"] += importe
+
+        recibos = []
+        for recibo in recibos_by_id.values():
+            recibos.append(
+                {
+                    **recibo,
+                    "importe": round(_as_float(recibo["importe"]), 2),
                 }
             )
         return recibos
