@@ -1,22 +1,69 @@
 from __future__ import annotations
 
 import os
+import hashlib
+import json
 from datetime import date, timedelta
 from typing import Any
 
 import psycopg2
+from psycopg2.extras import Json
 from psycopg2 import sql
 
-from connectors.infomanager import InfomanagerConnector
+from connectors.infomanager import INFOMANAGER_REPORT_CATALOG, InfomanagerConnector
 from worker_app import celery_app
 
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgrespassword@localhost:5433/demo_consultora")
+COMMISSION_RATE = float(os.getenv("INFOMANAGER_COMMISSION_RATE", "0.03"))
+RAW_REPORT_MAX_PAGES = int(os.getenv("INFOMANAGER_RAW_REPORT_MAX_PAGES", "500"))
 
 
 def _as_float(value: Any, default: float = 0.0) -> float:
     if value in (None, ""):
         return default
+
+
+def _report_row_key(report_key: str, row: dict[str, Any], index: int) -> str:
+    for key in ("id", "fa_id", "movimiento", "comprobante_id", "id_comprobante", "numero_de_comprobante", "cod_articulo"):
+        value = row.get(key)
+        if value not in (None, ""):
+            return f"{report_key}:{key}:{value}"
+    digest = hashlib.sha1(json.dumps(row, sort_keys=True, default=str).encode("utf-8")).hexdigest()
+    return f"{report_key}:row:{index}:{digest}"
+
+
+def _sync_infomanager_report_rows(cur, im: InfomanagerConnector, desde: date, hasta: date) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for report_key, report in INFOMANAGER_REPORT_CATALOG.items():
+        if not report.get("supported"):
+            continue
+        rows = im.fetch_report_rows(report_key, desde, hasta, max_pages=RAW_REPORT_MAX_PAGES)
+        counts[report_key] = len(rows)
+        for index, row in enumerate(rows):
+            cur.execute(
+                """
+                INSERT INTO infomanager_report_rows (
+                  report_key, report_name, row_key, fecha_desde, fecha_hasta, payload, synced_at
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, NOW())
+                ON CONFLICT (report_key, row_key) DO UPDATE SET
+                  report_name=EXCLUDED.report_name,
+                  fecha_desde=EXCLUDED.fecha_desde,
+                  fecha_hasta=EXCLUDED.fecha_hasta,
+                  payload=EXCLUDED.payload,
+                  synced_at=NOW()
+                """,
+                (
+                    report_key,
+                    report["name"],
+                    _report_row_key(report_key, row, index),
+                    desde,
+                    hasta,
+                    Json(row),
+                ),
+            )
+    return counts
     try:
         return float(value)
     except (TypeError, ValueError):
@@ -181,6 +228,30 @@ def _map_saldo_proveedor(row: dict[str, Any], index: int) -> dict[str, Any]:
     }
 
 
+def _enrich_customer_documents_with_salespeople(
+    comprobantes: dict[str, dict[str, Any]],
+    ventas: list[dict[str, Any]],
+    vendedor_lookup: dict[int, str],
+) -> None:
+    vendedor_by_cliente_fecha: dict[tuple[str, str], int] = {}
+    for venta in ventas:
+        cod_vendedor = venta.get("cod_vendedor")
+        fecha = str(venta.get("fecha") or "")[:10]
+        cliente_id = str(venta.get("cliente_id") or "")
+        if cliente_id and fecha and cod_vendedor:
+            vendedor_by_cliente_fecha[(cliente_id, fecha)] = int(cod_vendedor)
+
+    for doc in comprobantes.values():
+        if doc.get("cod_vendedor"):
+            doc["vendedor_nombre"] = vendedor_lookup.get(int(doc["cod_vendedor"]))
+            continue
+        key = (str(doc.get("cliente_id") or ""), str(doc.get("fecha") or "")[:10])
+        cod_vendedor = vendedor_by_cliente_fecha.get(key)
+        if cod_vendedor:
+            doc["cod_vendedor"] = cod_vendedor
+            doc["vendedor_nombre"] = vendedor_lookup.get(cod_vendedor)
+
+
 @celery_app.task(bind=True, max_retries=3, name="tasks.sync_infomanager.sync_company")
 def sync_company(self, company_id: int, connector_id: int):
     conn = psycopg2.connect(DATABASE_URL)
@@ -224,7 +295,9 @@ def sync_company(self, company_id: int, connector_id: int):
         _set_tenant_search_path(cur, tenant)
 
         vendedores = im.sync_vendedores()
+        vendedor_lookup: dict[int, str] = {}
         for vendedor in vendedores:
+            vendedor_lookup[int(vendedor["cod_vendedor"])] = vendedor["nombre"]
             cur.execute(
                 """
                 INSERT INTO vendedores (cod_vendedor, nombre, habilitado)
@@ -412,6 +485,142 @@ def sync_company(self, company_id: int, connector_id: int):
                 _map_saldo_proveedor(saldo, index),
             )
 
+        comprobantes_clientes, pagos_clientes = im.sync_comprobantes_clientes(desde, hasta)
+        _enrich_customer_documents_with_salespeople(comprobantes_clientes, ventas, vendedor_lookup)
+        for comprobante in comprobantes_clientes.values():
+            cliente_id = str(comprobante.get("cliente_id") or "")
+            cliente_nombre = comprobante.get("cliente_nombre") or cliente_lookup.get(cliente_id) or f"Cliente {cliente_id}"
+            comprobante["cliente_nombre"] = cliente_nombre
+            cur.execute(
+                """
+                INSERT INTO comprobantes_clientes (
+                  comprobante_id, cliente_id, cliente_nombre, tipo, numero,
+                  punto_de_venta, fecha, fecha_vencimiento, importe_total,
+                  importe_pagado, saldo, cod_vendedor, detalle
+                )
+                VALUES (
+                  %(comprobante_id)s, %(cliente_id)s, %(cliente_nombre)s,
+                  %(tipo)s, %(numero)s, %(punto_de_venta)s, %(fecha)s,
+                  %(fecha_vencimiento)s, %(importe_total)s, %(importe_pagado)s,
+                  %(saldo)s, %(cod_vendedor)s, %(detalle)s
+                )
+                ON CONFLICT (comprobante_id, tipo) DO UPDATE SET
+                  cliente_id=EXCLUDED.cliente_id,
+                  cliente_nombre=EXCLUDED.cliente_nombre,
+                  numero=EXCLUDED.numero,
+                  punto_de_venta=EXCLUDED.punto_de_venta,
+                  fecha=EXCLUDED.fecha,
+                  fecha_vencimiento=EXCLUDED.fecha_vencimiento,
+                  importe_total=EXCLUDED.importe_total,
+                  importe_pagado=EXCLUDED.importe_pagado,
+                  saldo=EXCLUDED.saldo,
+                  cod_vendedor=EXCLUDED.cod_vendedor,
+                  detalle=EXCLUDED.detalle
+                """,
+                comprobante,
+            )
+
+        for pago in pagos_clientes:
+            cod_cliente = str(pago.get("cod_cliente") or "")
+            if not pago.get("cliente_nombre") and cod_cliente in cliente_lookup:
+                pago["cliente_nombre"] = cliente_lookup[cod_cliente]
+            cur.execute(
+                """
+                INSERT INTO pagos_clientes (
+                  pago_id, comprobante_id, fecha, forma_pago, importe,
+                  cod_cliente, cliente_nombre
+                )
+                VALUES (
+                  %(pago_id)s, %(comprobante_id)s, %(fecha)s, %(forma_pago)s,
+                  %(importe)s, %(cod_cliente)s, %(cliente_nombre)s
+                )
+                ON CONFLICT (pago_id, comprobante_id) DO UPDATE SET
+                  fecha=EXCLUDED.fecha,
+                  forma_pago=EXCLUDED.forma_pago,
+                  importe=EXCLUDED.importe,
+                  cod_cliente=EXCLUDED.cod_cliente,
+                  cliente_nombre=EXCLUDED.cliente_nombre
+                """,
+                pago,
+            )
+
+        comprobantes_proveedores, pagos_proveedores = im.sync_comprobantes_proveedores(desde, hasta)
+        for comprobante in comprobantes_proveedores:
+            proveedor_id = str(comprobante.get("proveedor_id") or "")
+            if proveedor_id in proveedor_lookup and not proveedor_lookup[proveedor_id].startswith("Proveedor "):
+                comprobante["proveedor_nombre"] = proveedor_lookup[proveedor_id]
+            cur.execute(
+                """
+                INSERT INTO comprobantes_proveedores (
+                  comprobante_id, proveedor_id, proveedor_nombre, tipo, numero,
+                  punto_de_venta, fecha, fecha_vencimiento, importe_total,
+                  importe_pagado, saldo, detalle
+                )
+                VALUES (
+                  %(comprobante_id)s, %(proveedor_id)s, %(proveedor_nombre)s,
+                  %(tipo)s, %(numero)s, %(punto_de_venta)s, %(fecha)s,
+                  %(fecha_vencimiento)s, %(importe_total)s, %(importe_pagado)s,
+                  %(saldo)s, %(detalle)s
+                )
+                ON CONFLICT (comprobante_id, tipo) DO UPDATE SET
+                  proveedor_id=EXCLUDED.proveedor_id,
+                  proveedor_nombre=EXCLUDED.proveedor_nombre,
+                  numero=EXCLUDED.numero,
+                  punto_de_venta=EXCLUDED.punto_de_venta,
+                  fecha=EXCLUDED.fecha,
+                  fecha_vencimiento=EXCLUDED.fecha_vencimiento,
+                  importe_total=EXCLUDED.importe_total,
+                  importe_pagado=EXCLUDED.importe_pagado,
+                  saldo=EXCLUDED.saldo,
+                  detalle=EXCLUDED.detalle
+                """,
+                comprobante,
+            )
+
+        for pago in pagos_proveedores:
+            cur.execute(
+                """
+                INSERT INTO pagos_proveedores (
+                  pago_id, comprobante_id, fecha, forma_pago, importe,
+                  proveedor_id, proveedor_nombre
+                )
+                VALUES (
+                  %(pago_id)s, %(comprobante_id)s, %(fecha)s, %(forma_pago)s,
+                  %(importe)s, %(proveedor_id)s, %(proveedor_nombre)s
+                )
+                ON CONFLICT (pago_id, comprobante_id) DO UPDATE SET
+                  fecha=EXCLUDED.fecha,
+                  forma_pago=EXCLUDED.forma_pago,
+                  importe=EXCLUDED.importe,
+                  proveedor_id=EXCLUDED.proveedor_id,
+                  proveedor_nombre=EXCLUDED.proveedor_nombre
+                """,
+                pago,
+            )
+
+        for comision in im.build_comisiones_vendedores(comprobantes_clientes, pagos_clientes, vendedor_lookup, COMMISSION_RATE):
+            cur.execute(
+                """
+                INSERT INTO comisiones_vendedores (
+                  cod_vendedor, vendedor_nombre, periodo, base_cobrada,
+                  porcentaje, comision, recibos
+                )
+                VALUES (
+                  %(cod_vendedor)s, %(vendedor_nombre)s, %(periodo)s,
+                  %(base_cobrada)s, %(porcentaje)s, %(comision)s, %(recibos)s
+                )
+                ON CONFLICT (cod_vendedor, periodo) DO UPDATE SET
+                  vendedor_nombre=EXCLUDED.vendedor_nombre,
+                  base_cobrada=EXCLUDED.base_cobrada,
+                  porcentaje=EXCLUDED.porcentaje,
+                  comision=EXCLUDED.comision,
+                  recibos=EXCLUDED.recibos
+                """,
+                comision,
+            )
+
+        raw_report_counts = _sync_infomanager_report_rows(cur, im, desde, hasta)
+
         for presupuesto in im.sync_presupuestos(desde, hasta):
             cur.execute(
                 """
@@ -508,6 +717,13 @@ def sync_company(self, company_id: int, connector_id: int):
             (connector_id,),
         )
         conn.commit()
+        return {
+            "company_id": company_id,
+            "connector_id": connector_id,
+            "tenant_schema": tenant,
+            "status": "success",
+            "raw_reports": raw_report_counts,
+        }
     except Exception as exc:
         conn.rollback()
         cur.execute(

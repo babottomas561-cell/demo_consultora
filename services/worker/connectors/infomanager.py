@@ -8,6 +8,149 @@ import requests
 
 DEFAULT_BASE_URL = "https://impedidos.infomanager.com.ar"
 
+INFOMANAGER_REPORT_CATALOG: dict[str, dict[str, Any]] = {
+    "saldos_clientes": {
+        "name": "Saldos de cuentas corrientes",
+        "group": "clientes",
+        "endpoint": "/api/v1/reportes/saldos_clientes",
+        "params": {"tag": "T", "codCliente": 0, "codEmpresa": 0},
+        "date_format": None,
+        "supported": True,
+    },
+    "comprobantes_pendientes_clientes": {
+        "name": "Comprobantes pendientes de clientes",
+        "group": "clientes",
+        "endpoint": "/api/v1/reportes/comprob_pendientes_clientes",
+        "params": {"tag": "T", "codCliente": 0, "codEmpresa": 0},
+        "date_format": None,
+        "supported": True,
+    },
+    "facturas_clientes": {
+        "name": "Listado de facturas",
+        "group": "clientes",
+        "endpoint": "/api/v1/reportes/facturas",
+        "params": {"tag": "T", "codEmpresa": 0},
+        "date_format": "compact",
+        "supported": True,
+    },
+    "facturas_con_recibos": {
+        "name": "Facturas con recibos",
+        "group": "clientes",
+        "endpoint": "/api/v1/reportes/facturas_con_recibos",
+        "params": {"tag": "T", "codEmpresa": 0},
+        "date_format": "compact",
+        "supported": True,
+    },
+    "facturas_compras": {
+        "name": "Listado de facturas pendientes de proveedores",
+        "group": "proveedores",
+        "endpoint": "/api/v1/reportes/facturas_compras",
+        "params": {"tag": "T", "codEmpresa": 0, "codProveedor": 0},
+        "date_format": "compact",
+        "supported": True,
+    },
+    "compras_por_factura": {
+        "name": "Analisis de compra por factura",
+        "group": "compras",
+        "endpoint": "/api/v1/compras/compras-por-factura",
+        "params": {
+            "cod_proveedor": 0,
+            "cod_articulo": 0,
+            "cod_rubro": 0,
+            "cod_subrubro": 0,
+            "cod_unidad_negocio": 0,
+            "centro_de_costo": "T",
+            "usuario": "admin",
+        },
+        "date_format": "iso_underscore",
+        "supported": True,
+    },
+    "mayor_contable": {
+        "name": "Libro mayor",
+        "group": "contabilidad",
+        "endpoint": "/api/v1/planes/mayor",
+        "params": {"tag": "T", "saldoAnterior": "S", "codEmpresa": 0, "codCuenta": 0},
+        "date_format": "compact",
+        "supported": True,
+    },
+    "stock_existencias": {
+        "name": "Existencias de stock",
+        "group": "stock",
+        "endpoint": "/api/v1/articulos/stock",
+        "params": {},
+        "date_format": None,
+        "supported": True,
+    },
+    "ventas": {
+        "name": "Ventas",
+        "group": "clientes",
+        "endpoint": "/api/v1/ventas",
+        "params": {},
+        "date_format": "compact",
+        "supported": True,
+    },
+    "ventas_items": {
+        "name": "Analisis de compra/ventas por articulo",
+        "group": "clientes",
+        "endpoint": "/api/v1/ventas/items",
+        "params": {},
+        "date_format": "compact",
+        "supported": True,
+    },
+    "compras": {
+        "name": "Compras",
+        "group": "compras",
+        "endpoint": "/api/v1/compras",
+        "params": {},
+        "date_format": "compact",
+        "supported": True,
+    },
+    "compras_items": {
+        "name": "Compras por articulo",
+        "group": "compras",
+        "endpoint": "/api/v1/compras/items",
+        "params": {},
+        "date_format": "compact",
+        "supported": True,
+    },
+    "interdeposito": {
+        "name": "Movimientos de stock entre depositos",
+        "group": "stock",
+        "endpoint": "/api/v1/interdeposito",
+        "params": {},
+        "date_format": "compact",
+        "supported": True,
+    },
+    "clientes_por_vendedor": {
+        "name": "Clientes por vendedor",
+        "group": "vendedores",
+        "endpoint": None,
+        "supported": False,
+        "note": "Derivable cruzando /api/v1/clientes y /api/v1/vendedores; Swagger no publica un reporte dedicado.",
+    },
+    "comisiones_por_recibos": {
+        "name": "Comisiones por recibos",
+        "group": "vendedores",
+        "endpoint": None,
+        "supported": False,
+        "note": "Derivable con facturas_con_recibos; Swagger no publica un reporte dedicado.",
+    },
+    "cheques": {
+        "name": "Cheques / disponibilidades / cash flow",
+        "group": "caja",
+        "endpoint": None,
+        "supported": False,
+        "note": "No hay endpoints de cheques, disponibilidades o cash flow en Swagger v1.",
+    },
+    "iva_balance": {
+        "name": "IVA, balances y estado de resultados",
+        "group": "contabilidad",
+        "endpoint": None,
+        "supported": False,
+        "note": "Swagger v1 solo publica plan de cuentas y mayor; no publica IVA compras/ventas ni balances cerrados.",
+    },
+}
+
 _TIPO_COMPROBANTE_MAP = {
     "1": "FA", "2": "ND", "3": "NC",
     "6": "FA", "7": "ND", "8": "NC",
@@ -121,6 +264,32 @@ class InfomanagerConnector:
                 break
             page += 1
         return all_items
+
+    @staticmethod
+    def report_catalog() -> dict[str, dict[str, Any]]:
+        return INFOMANAGER_REPORT_CATALOG
+
+    def fetch_report_rows(self, report_key: str, fecha_desde, fecha_hasta, max_pages: int = 500) -> list[dict[str, Any]]:
+        report = INFOMANAGER_REPORT_CATALOG.get(report_key)
+        if not report:
+            raise KeyError(f"Unknown Infomanager report: {report_key}")
+        if not report.get("supported") or not report.get("endpoint"):
+            return []
+
+        params = dict(report.get("params") or {})
+        date_format = report.get("date_format")
+        if date_format == "compact":
+            params.update({
+                "fechaDesde": fecha_desde.strftime("%Y%m%d"),
+                "fechaHasta": fecha_hasta.strftime("%Y%m%d"),
+            })
+        elif date_format == "iso_underscore":
+            params.update({
+                "fecha_desde": fecha_desde.isoformat(),
+                "fecha_hasta": fecha_hasta.isoformat(),
+            })
+
+        return self.fetch_paginated(report["endpoint"], params, max_pages=max_pages)
 
     def sync_vendedores(self) -> list[dict[str, Any]]:
         data = self.fetch_paginated("/api/v1/vendedores")
@@ -377,6 +546,184 @@ class InfomanagerConnector:
                 }
             )
         return saldos
+
+    def sync_comprobantes_clientes(self, fecha_desde, fecha_hasta) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]]]:
+        pendientes = self.fetch_paginated(
+            "/api/v1/reportes/comprob_pendientes_clientes",
+            {"tag": "T", "codCliente": 0, "codEmpresa": 0},
+            max_pages=1,
+        )
+        docs: dict[str, dict[str, Any]] = {}
+        for row in pendientes:
+            comprobante_id = str(row.get("id") or row.get("fa_id") or row.get("numero") or "")
+            if not comprobante_id:
+                continue
+            importe_total = _as_float(row.get("importe_factura") or row.get("fa_total"))
+            importe_pagado = _as_float(row.get("importe_pagado") or row.get("imp_pag_moneda_local"))
+            saldo = _as_float(row.get("saldo"), importe_total - importe_pagado)
+            docs[comprobante_id] = {
+                "comprobante_id": comprobante_id,
+                "cliente_id": str(row.get("cod_cliente") or row.get("cliente_id") or 0),
+                "cliente_nombre": row.get("nombre") or row.get("cliente_nombre") or row.get("razon_social") or "",
+                "tipo": _normalize_tipo_comprobante(row.get("tipo_comprobante") or row.get("tipo_comp")),
+                "numero": str(row.get("numero") or row.get("fa_nro") or ""),
+                "punto_de_venta": str(row.get("punto_de_venta") or row.get("fa_pto_vta") or ""),
+                "fecha": row.get("fecha_factura") or row.get("fa_fecha"),
+                "fecha_vencimiento": row.get("fecha_vencimiento") or row.get("ult_fec_vto") or row.get("primer_fec_vto"),
+                "importe_total": importe_total,
+                "importe_pagado": importe_pagado,
+                "saldo": saldo,
+                "cod_vendedor": _as_int(row.get("cod_vendedor")) or None,
+                "detalle": row.get("detalle"),
+            }
+
+        recibos = self.fetch_paginated(
+            "/api/v1/reportes/facturas_con_recibos",
+            {
+                "fechaDesde": fecha_desde.strftime("%Y%m%d"),
+                "fechaHasta": fecha_hasta.strftime("%Y%m%d"),
+                "tag": "T",
+                "codEmpresa": 0,
+            },
+            max_pages=1,
+        )
+        pagos: list[dict[str, Any]] = []
+        pagos_por_doc: dict[str, float] = {}
+        for row in recibos:
+            comprobante_id = str(row.get("fa_id") or row.get("id") or "")
+            pago_id = str(row.get("rc_id") or row.get("pago_id") or "")
+            if not comprobante_id or not pago_id:
+                continue
+            importe_pago = _as_float(row.get("importe") or row.get("imp_pag_moneda_local"))
+            pagos_por_doc[comprobante_id] = pagos_por_doc.get(comprobante_id, 0.0) + importe_pago
+            pagos.append(
+                {
+                    "pago_id": pago_id,
+                    "comprobante_id": comprobante_id,
+                    "fecha": row.get("rc_fecha") or row.get("fecha"),
+                    "forma_pago": row.get("cond_pago") or row.get("forma_pago") or "efectivo",
+                    "importe": importe_pago,
+                    "cod_cliente": _as_int(row.get("cod_cliente")),
+                    "cliente_nombre": row.get("cliente_nombre") or row.get("razon_social") or "",
+                }
+            )
+            if comprobante_id not in docs:
+                importe_total = _as_float(row.get("fa_total") or row.get("fa_total_moneda_local"))
+                docs[comprobante_id] = {
+                    "comprobante_id": comprobante_id,
+                    "cliente_id": str(row.get("cod_cliente") or 0),
+                    "cliente_nombre": row.get("cliente_nombre") or row.get("razon_social") or "",
+                    "tipo": _normalize_tipo_comprobante(row.get("tipo_comp") or row.get("tipo_comprobante")),
+                    "numero": str(row.get("fa_nro") or ""),
+                    "punto_de_venta": str(row.get("fa_pto_vta") or ""),
+                    "fecha": row.get("fa_fecha"),
+                    "fecha_vencimiento": row.get("ult_fec_vto") or row.get("primer_fec_vto"),
+                    "importe_total": importe_total,
+                    "importe_pagado": 0.0,
+                    "saldo": importe_total,
+                    "cod_vendedor": None,
+                    "detalle": None,
+                }
+
+        for comprobante_id, pago_total in pagos_por_doc.items():
+            doc = docs.get(comprobante_id)
+            if not doc:
+                continue
+            doc["importe_pagado"] = max(_as_float(doc.get("importe_pagado")), round(pago_total, 2))
+            doc["saldo"] = round(max(_as_float(doc.get("importe_total")) - _as_float(doc.get("importe_pagado")), 0.0), 2)
+
+        return docs, pagos
+
+    def sync_comprobantes_proveedores(self, fecha_desde, fecha_hasta) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        data = self.fetch_paginated(
+            "/api/v1/reportes/facturas_compras",
+            {
+                "fechaDesde": fecha_desde.strftime("%Y%m%d"),
+                "fechaHasta": fecha_hasta.strftime("%Y%m%d"),
+                "tag": "T",
+                "codEmpresa": 0,
+                "codProveedor": 0,
+            },
+            max_pages=1,
+        )
+        docs: list[dict[str, Any]] = []
+        pagos: list[dict[str, Any]] = []
+        for row in data:
+            comprobante_id = str(row.get("fa_id") or row.get("id") or "")
+            if not comprobante_id:
+                continue
+            proveedor_id = str(row.get("cod_proveedor") or 0)
+            proveedor_nombre = row.get("nombre") or row.get("proveedor_nombre") or f"Proveedor {proveedor_id}"
+            importe_total = _as_float(row.get("fa_total"))
+            importe_pagado = _as_float(row.get("op_imp_pagado"))
+            saldo = _as_float(row.get("saldo_fa"), importe_total - importe_pagado)
+            docs.append(
+                {
+                    "comprobante_id": comprobante_id,
+                    "proveedor_id": proveedor_id,
+                    "proveedor_nombre": proveedor_nombre,
+                    "tipo": "factura",
+                    "numero": str(row.get("fa_nro") or ""),
+                    "punto_de_venta": str(row.get("fa_pto_vta") or ""),
+                    "fecha": row.get("fa_fecha"),
+                    "fecha_vencimiento": row.get("ult_fec_vto") or row.get("primer_fec_vto"),
+                    "importe_total": importe_total,
+                    "importe_pagado": importe_pagado,
+                    "saldo": saldo,
+                    "detalle": row.get("detalle"),
+                }
+            )
+            if importe_pagado > 0:
+                pagos.append(
+                    {
+                        "pago_id": str(row.get("nro_ultima_OP") or f"op-{comprobante_id}"),
+                        "comprobante_id": comprobante_id,
+                        "fecha": row.get("op_fecha"),
+                        "forma_pago": "OP",
+                        "importe": importe_pagado,
+                        "proveedor_id": proveedor_id,
+                        "proveedor_nombre": proveedor_nombre,
+                    }
+                )
+        return docs, pagos
+
+    def build_comisiones_vendedores(
+        self,
+        comprobantes_clientes: dict[str, dict[str, Any]],
+        pagos_clientes: list[dict[str, Any]],
+        vendedor_lookup: dict[int, str],
+        porcentaje: float = 0.03,
+    ) -> list[dict[str, Any]]:
+        grouped: dict[tuple[int, str], dict[str, Any]] = {}
+        for pago in pagos_clientes:
+            doc = comprobantes_clientes.get(str(pago.get("comprobante_id")))
+            if not doc or not doc.get("cod_vendedor"):
+                continue
+            fecha = str(pago.get("fecha") or "")
+            if len(fecha) < 7:
+                continue
+            cod_vendedor = _as_int(doc.get("cod_vendedor"))
+            periodo = fecha[:7]
+            key = (cod_vendedor, periodo)
+            if key not in grouped:
+                grouped[key] = {
+                    "cod_vendedor": cod_vendedor,
+                    "vendedor_nombre": vendedor_lookup.get(cod_vendedor) or doc.get("vendedor_nombre") or f"Vendedor {cod_vendedor}",
+                    "periodo": periodo,
+                    "base_cobrada": 0.0,
+                    "porcentaje": porcentaje,
+                    "comision": 0.0,
+                    "recibos": 0,
+                }
+            grouped[key]["base_cobrada"] += _as_float(pago.get("importe"))
+            grouped[key]["recibos"] += 1
+
+        result = []
+        for row in grouped.values():
+            row["base_cobrada"] = round(row["base_cobrada"], 2)
+            row["comision"] = round(row["base_cobrada"] * porcentaje, 2)
+            result.append(row)
+        return sorted(result, key=lambda item: (item["periodo"], item["cod_vendedor"]))
 
     def sync_presupuestos(self, fecha_desde, fecha_hasta) -> list[dict[str, Any]]:
         # API has /confirmados and /no_confirmados — no base /presupuestos endpoint.

@@ -240,3 +240,199 @@ def test_infomanager_connector_maps_depositos(monkeypatch):
     assert connector.sync_depositos() == [
         {"cod_deposito": 1, "nombre": "CAMARA", "habilitado": True}
     ]
+
+
+def test_infomanager_connector_maps_customer_documents_and_payments(monkeypatch):
+    connector = InfomanagerConnector("client", "secret", "https://example.test")
+
+    def fake_fetch(endpoint, params=None, max_pages=500):
+        if endpoint == "/api/v1/reportes/comprob_pendientes_clientes":
+            return [
+                {
+                    "id": 134667,
+                    "cod_cliente": 7354,
+                    "nombre": "Cliente Real",
+                    "tipo_comprobante": "FA",
+                    "numero": "81881",
+                    "punto_de_venta": "2",
+                    "fecha_factura": "2026-05-02",
+                    "importe_factura": 1000,
+                    "importe_pagado": 250,
+                    "saldo": 750,
+                    "cod_vendedor": 7,
+                    "detalle": "1 BULTO",
+                }
+            ]
+        if endpoint == "/api/v1/reportes/facturas_con_recibos":
+            return [
+                {
+                    "fa_id": 134667,
+                    "fa_fecha": "2026-05-02",
+                    "fa_total": 1000,
+                    "imp_pag_moneda_local": 600,
+                    "importe": 600,
+                    "cod_cliente": 7354,
+                    "tipo_comp": "FA",
+                    "fa_nro": 81881,
+                    "fa_pto_vta": 2,
+                    "rc_id": 90,
+                    "rc_fecha": "2026-05-04",
+                    "cond_pago": "EF",
+                }
+            ]
+        return []
+
+    monkeypatch.setattr(connector, "fetch_paginated", fake_fetch)
+
+    docs, payments = connector.sync_comprobantes_clientes(date(2026, 5, 1), date(2026, 5, 10))
+
+    assert docs["134667"]["cliente_id"] == "7354"
+    assert docs["134667"]["importe_total"] == 1000.0
+    assert docs["134667"]["importe_pagado"] == 600.0
+    assert docs["134667"]["saldo"] == 400.0
+    assert docs["134667"]["cod_vendedor"] == 7
+    assert payments == [
+        {
+            "pago_id": "90",
+            "comprobante_id": "134667",
+            "fecha": "2026-05-04",
+            "forma_pago": "EF",
+            "importe": 600.0,
+            "cod_cliente": 7354,
+            "cliente_nombre": "",
+        }
+    ]
+
+
+def test_infomanager_connector_maps_provider_documents_and_payments(monkeypatch):
+    connector = InfomanagerConnector("client", "secret", "https://example.test")
+
+    monkeypatch.setattr(
+        connector,
+        "fetch_paginated",
+        lambda endpoint, params=None, max_pages=500: [
+            {
+                "cod_proveedor": 415,
+                "nombre": "Proveedor Real",
+                "fa_id": 122745,
+                "fa_nro": 151173,
+                "fa_pto_vta": 28,
+                "fa_fecha": "2026-05-02",
+                "fa_total": 1000,
+                "op_imp_pagado": 250,
+                "saldo_fa": 750,
+                "nro_ultima_OP": 18,
+                "ult_fec_vto": "2026-06-02",
+            }
+        ],
+    )
+
+    docs, payments = connector.sync_comprobantes_proveedores(date(2026, 5, 1), date(2026, 5, 10))
+
+    assert docs == [
+        {
+            "comprobante_id": "122745",
+            "proveedor_id": "415",
+            "proveedor_nombre": "Proveedor Real",
+            "tipo": "factura",
+            "numero": "151173",
+            "punto_de_venta": "28",
+            "fecha": "2026-05-02",
+            "fecha_vencimiento": "2026-06-02",
+            "importe_total": 1000.0,
+            "importe_pagado": 250.0,
+            "saldo": 750.0,
+            "detalle": None,
+        }
+    ]
+    assert payments == [
+        {
+            "pago_id": "18",
+            "comprobante_id": "122745",
+            "fecha": None,
+            "forma_pago": "OP",
+            "importe": 250.0,
+            "proveedor_id": "415",
+            "proveedor_nombre": "Proveedor Real",
+        }
+    ]
+
+
+def test_infomanager_connector_builds_seller_commissions_from_collected_documents(monkeypatch):
+    connector = InfomanagerConnector("client", "secret", "https://example.test")
+
+    docs = {
+        "10": {
+            "comprobante_id": "10",
+            "cod_vendedor": 7,
+            "vendedor_nombre": "Ana",
+        }
+    }
+    payments = [
+        {"comprobante_id": "10", "fecha": "2026-05-04", "importe": 1000.0},
+        {"comprobante_id": "10", "fecha": "2026-05-12", "importe": 500.0},
+    ]
+
+    assert connector.build_comisiones_vendedores(docs, payments, {7: "Ana"}, 0.03) == [
+        {
+            "cod_vendedor": 7,
+            "vendedor_nombre": "Ana",
+            "periodo": "2026-05",
+            "base_cobrada": 1500.0,
+            "porcentaje": 0.03,
+            "comision": 45.0,
+            "recibos": 2,
+        }
+    ]
+
+
+def test_infomanager_report_catalog_marks_supported_and_missing_reports():
+    catalog = InfomanagerConnector.report_catalog()
+
+    assert catalog["facturas_clientes"]["endpoint"] == "/api/v1/reportes/facturas"
+    assert catalog["compras_por_factura"]["endpoint"] == "/api/v1/compras/compras-por-factura"
+    assert catalog["mayor_contable"]["endpoint"] == "/api/v1/planes/mayor"
+    assert catalog["cheques"]["supported"] is False
+    assert "Swagger" in catalog["iva_balance"]["note"]
+
+
+def test_infomanager_fetch_report_rows_builds_swagger_params(monkeypatch):
+    connector = InfomanagerConnector("client", "secret", "https://example.test")
+    calls = []
+
+    def fake_fetch(endpoint, params=None, max_pages=500):
+        calls.append((endpoint, params, max_pages))
+        return [{"fa_id": 10}]
+
+    monkeypatch.setattr(connector, "fetch_paginated", fake_fetch)
+
+    rows = connector.fetch_report_rows("facturas_clientes", date(2026, 5, 1), date(2026, 5, 10), max_pages=7)
+
+    assert rows == [{"fa_id": 10}]
+    assert calls == [
+        (
+            "/api/v1/reportes/facturas",
+            {"tag": "T", "codEmpresa": 0, "fechaDesde": "20260501", "fechaHasta": "20260510"},
+            7,
+        )
+    ]
+
+
+def test_infomanager_fetch_report_rows_builds_compras_por_factura_params(monkeypatch):
+    connector = InfomanagerConnector("client", "secret", "https://example.test")
+    calls = []
+
+    monkeypatch.setattr(
+        connector,
+        "fetch_paginated",
+        lambda endpoint, params=None, max_pages=500: calls.append((endpoint, params, max_pages)) or [{"id": 1}],
+    )
+
+    connector.fetch_report_rows("compras_por_factura", date(2026, 5, 1), date(2026, 5, 10))
+
+    endpoint, params, _ = calls[0]
+    assert endpoint == "/api/v1/compras/compras-por-factura"
+    assert params["fecha_desde"] == "2026-05-01"
+    assert params["fecha_hasta"] == "2026-05-10"
+    assert params["cod_proveedor"] == 0
+    assert params["centro_de_costo"] == "T"
