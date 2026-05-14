@@ -18,6 +18,51 @@ from app.core.filters import GlobalFilters, get_global_filters, text_filter_clau
 router = APIRouter()
 
 
+INFOMANAGER_REPORT_CATALOG = [
+    {"key": "saldos_clientes", "name": "Saldos de cuentas corrientes", "group": "clientes", "supported": True},
+    {"key": "comprobantes_pendientes_clientes", "name": "Comprobantes pendientes de clientes", "group": "clientes", "supported": True},
+    {"key": "facturas_clientes", "name": "Listado de facturas", "group": "clientes", "supported": True},
+    {"key": "facturas_con_recibos", "name": "Facturas con recibos", "group": "clientes", "supported": True},
+    {"key": "facturas_compras", "name": "Listado de facturas pendientes de proveedores", "group": "proveedores", "supported": True},
+    {"key": "compras_por_factura", "name": "Analisis de compra por factura", "group": "compras", "supported": True},
+    {"key": "mayor_contable", "name": "Libro mayor", "group": "contabilidad", "supported": True},
+    {"key": "stock_existencias", "name": "Existencias de stock", "group": "stock", "supported": True},
+    {"key": "ventas", "name": "Ventas", "group": "clientes", "supported": True},
+    {"key": "ventas_items", "name": "Analisis de compra/ventas por articulo", "group": "clientes", "supported": True},
+    {"key": "compras", "name": "Compras", "group": "compras", "supported": True},
+    {"key": "compras_items", "name": "Compras por articulo", "group": "compras", "supported": True},
+    {"key": "interdeposito", "name": "Movimientos de stock entre depositos", "group": "stock", "supported": True},
+    {
+        "key": "clientes_por_vendedor",
+        "name": "Clientes por vendedor",
+        "group": "vendedores",
+        "supported": False,
+        "note": "Derivable con clientes y vendedores; Swagger v1 no publica un reporte dedicado.",
+    },
+    {
+        "key": "comisiones_por_recibos",
+        "name": "Comisiones por recibos",
+        "group": "vendedores",
+        "supported": False,
+        "note": "Derivable con facturas_con_recibos; Swagger v1 no publica un reporte dedicado.",
+    },
+    {
+        "key": "cheques",
+        "name": "Cheques / disponibilidades / cash flow",
+        "group": "caja",
+        "supported": False,
+        "note": "No hay endpoints de cheques, disponibilidades o cash flow en Swagger v1.",
+    },
+    {
+        "key": "iva_balance",
+        "name": "IVA, balances y estado de resultados",
+        "group": "contabilidad",
+        "supported": False,
+        "note": "Swagger v1 solo publica plan de cuentas y mayor; no publica IVA compras/ventas ni balances cerrados.",
+    },
+]
+
+
 # ──────────────────────────────────────────────
 # Helpers
 # ──────────────────────────────────────────────
@@ -87,6 +132,86 @@ def resolve_dates(desde: Optional[str], hasta: Optional[str]):
     hasta_d = date.fromisoformat(hasta) if hasta else date.today()
     desde_d = date.fromisoformat(desde) if desde else date.today() - timedelta(days=365)
     return desde_d, hasta_d + timedelta(days=1)
+
+
+@router.get("/infomanager/reportes")
+async def infomanager_reportes_catalogo(
+    company_id: int = None,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+
+    rows = (await db.execute(text("""
+        SELECT report_key,
+               MAX(report_name) AS report_name,
+               COUNT(*) AS rows_count,
+               MAX(synced_at) AS last_sync_at,
+               MAX(fecha_desde) AS fecha_desde,
+               MAX(fecha_hasta) AS fecha_hasta
+        FROM infomanager_report_rows
+        GROUP BY report_key
+    """))).mappings().all()
+    stats = {r["report_key"]: r for r in rows}
+
+    reportes = []
+    for item in INFOMANAGER_REPORT_CATALOG:
+        stat = stats.get(item["key"])
+        reportes.append({
+            **item,
+            "rows_count": int(stat["rows_count"]) if stat else 0,
+            "last_sync_at": str(stat["last_sync_at"]) if stat and stat["last_sync_at"] else None,
+            "fecha_desde": str(stat["fecha_desde"]) if stat and stat["fecha_desde"] else None,
+            "fecha_hasta": str(stat["fecha_hasta"]) if stat and stat["fecha_hasta"] else None,
+        })
+
+    return {"reportes": reportes}
+
+
+@router.get("/infomanager/reportes/{report_key}")
+async def infomanager_reporte_detalle(
+    report_key: str,
+    limit: int = Query(default=200, ge=1, le=1000),
+    company_id: int = None,
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+    desde, hasta = filters.date_range()
+
+    rows = (await db.execute(text("""
+        SELECT row_key, report_name, fecha_desde, fecha_hasta, synced_at, payload
+        FROM infomanager_report_rows
+        WHERE report_key = :report_key
+          AND (
+            fecha_desde IS NULL
+            OR fecha_hasta IS NULL
+            OR (fecha_desde <= :hasta AND fecha_hasta >= :desde)
+          )
+        ORDER BY synced_at DESC, row_key
+        LIMIT :limit
+    """), {"report_key": report_key, "desde": desde, "hasta": hasta, "limit": limit})).mappings().all()
+
+    catalog_item = next((item for item in INFOMANAGER_REPORT_CATALOG if item["key"] == report_key), None)
+    return {
+        "report_key": report_key,
+        "report_name": catalog_item["name"] if catalog_item else (rows[0]["report_name"] if rows else report_key),
+        "supported": bool(catalog_item.get("supported")) if catalog_item else True,
+        "note": catalog_item.get("note") if catalog_item else None,
+        "rows": [
+            {
+                "row_key": r["row_key"],
+                "fecha_desde": str(r["fecha_desde"]) if r["fecha_desde"] else None,
+                "fecha_hasta": str(r["fecha_hasta"]) if r["fecha_hasta"] else None,
+                "synced_at": str(r["synced_at"]) if r["synced_at"] else None,
+                "payload": r["payload"],
+            }
+            for r in rows
+        ],
+    }
 
 
 def previous_period_params(filters: GlobalFilters) -> dict:
@@ -3023,6 +3148,67 @@ async def vendedores_temporal(
     }
 
 
+@router.get("/vendedores/comisiones")
+async def vendedores_comisiones(
+    company_id: int = None,
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+    desde, hasta = filters.date_range()
+    params = {"desde_periodo": desde.strftime("%Y-%m"), "hasta_periodo": hasta.strftime("%Y-%m")}
+
+    rows = (await db.execute(text("""
+        SELECT cod_vendedor, COALESCE(MAX(vendedor_nombre), CONCAT('Vendedor ', cod_vendedor)) AS vendedor_nombre,
+               COALESCE(SUM(base_cobrada), 0) AS base_cobrada,
+               COALESCE(AVG(porcentaje), 0) AS porcentaje,
+               COALESCE(SUM(comision), 0) AS comision,
+               COALESCE(SUM(recibos), 0) AS recibos
+        FROM comisiones_vendedores
+        WHERE periodo >= :desde_periodo AND periodo <= :hasta_periodo
+        GROUP BY cod_vendedor
+        ORDER BY comision DESC
+    """), params)).mappings().all()
+
+    temporal = (await db.execute(text("""
+        SELECT periodo,
+               COALESCE(SUM(base_cobrada), 0) AS base_cobrada,
+               COALESCE(SUM(comision), 0) AS comision,
+               COALESCE(SUM(recibos), 0) AS recibos
+        FROM comisiones_vendedores
+        WHERE periodo >= :desde_periodo AND periodo <= :hasta_periodo
+        GROUP BY periodo
+        ORDER BY periodo
+    """), params)).mappings().all()
+
+    return {
+        "total_base_cobrada": round(sum(float(r["base_cobrada"] or 0) for r in rows), 2),
+        "total_comision": round(sum(float(r["comision"] or 0) for r in rows), 2),
+        "vendedores": [
+            {
+                "cod_vendedor": r["cod_vendedor"],
+                "vendedor_nombre": r["vendedor_nombre"],
+                "base_cobrada": round(float(r["base_cobrada"] or 0), 2),
+                "porcentaje": round(float(r["porcentaje"] or 0), 4),
+                "comision": round(float(r["comision"] or 0), 2),
+                "recibos": int(r["recibos"] or 0),
+            }
+            for r in rows
+        ],
+        "temporal": [
+            {
+                "periodo": r["periodo"],
+                "base_cobrada": round(float(r["base_cobrada"] or 0), 2),
+                "comision": round(float(r["comision"] or 0), 2),
+                "recibos": int(r["recibos"] or 0),
+            }
+            for r in temporal
+        ],
+    }
+
+
 @router.get("/vendedores/detalle/{vendedor_id}")
 async def vendedores_detalle(
     vendedor_id: int,
@@ -3286,6 +3472,77 @@ async def clientes_temporal(
     }
 
 
+@router.get("/clientes/{cliente_id}/comprobantes")
+async def clientes_comprobantes(
+    cliente_id: str,
+    company_id: int = None,
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+    params = dict(filters.sql_params())
+    params["cli_id"] = cliente_id
+
+    rows = (await db.execute(text("""
+        SELECT comprobante_id, cliente_id, cliente_nombre, tipo, numero, punto_de_venta,
+               fecha, fecha_vencimiento, importe_total, importe_pagado, saldo,
+               cod_vendedor, detalle
+        FROM comprobantes_clientes
+        WHERE cliente_id = :cli_id AND (fecha IS NULL OR (fecha >= :desde AND fecha < :hasta))
+        ORDER BY COALESCE(fecha_vencimiento, fecha) DESC NULLS LAST, comprobante_id DESC
+        LIMIT 200
+    """), params)).mappings().all()
+
+    comprobante_ids = [r["comprobante_id"] for r in rows]
+    pagos_por_comprobante: dict[str, list[dict]] = {cid: [] for cid in comprobante_ids}
+    if comprobante_ids:
+        pagos = (await db.execute(text("""
+            SELECT pago_id, comprobante_id, fecha, forma_pago, importe, cod_cliente, cliente_nombre
+            FROM pagos_clientes
+            WHERE comprobante_id = ANY(:comprobante_ids)
+            ORDER BY fecha DESC NULLS LAST, pago_id DESC
+        """), {"comprobante_ids": comprobante_ids})).mappings().all()
+        for pago in pagos:
+            pagos_por_comprobante.setdefault(pago["comprobante_id"], []).append({
+                "pago_id": pago["pago_id"],
+                "fecha": str(pago["fecha"]) if pago["fecha"] else None,
+                "forma_pago": pago["forma_pago"],
+                "importe": round(float(pago["importe"] or 0), 2),
+                "cod_cliente": pago["cod_cliente"],
+                "cliente_nombre": pago["cliente_nombre"],
+            })
+
+    comprobantes = []
+    for r in rows:
+        comprobantes.append({
+            "comprobante_id": r["comprobante_id"],
+            "cliente_id": r["cliente_id"],
+            "cliente_nombre": r["cliente_nombre"],
+            "tipo": r["tipo"],
+            "numero": r["numero"],
+            "punto_de_venta": r["punto_de_venta"],
+            "fecha": str(r["fecha"]) if r["fecha"] else None,
+            "fecha_vencimiento": str(r["fecha_vencimiento"]) if r["fecha_vencimiento"] else None,
+            "importe_total": round(float(r["importe_total"] or 0), 2),
+            "importe_pagado": round(float(r["importe_pagado"] or 0), 2),
+            "saldo": round(float(r["saldo"] or 0), 2),
+            "cod_vendedor": r["cod_vendedor"],
+            "detalle": r["detalle"],
+            "pagos": pagos_por_comprobante.get(r["comprobante_id"], []),
+        })
+
+    return {
+        "cliente_id": cliente_id,
+        "total_comprobantes": len(comprobantes),
+        "importe_total": round(sum(c["importe_total"] for c in comprobantes), 2),
+        "importe_pagado": round(sum(c["importe_pagado"] for c in comprobantes), 2),
+        "saldo": round(sum(c["saldo"] for c in comprobantes), 2),
+        "comprobantes": comprobantes,
+    }
+
+
 @router.get("/clientes/detalle/{cliente_id}")
 async def clientes_detalle(
     cliente_id: str,
@@ -3512,6 +3769,75 @@ async def proveedores_temporal(
             }
             for r in rows
         ]
+    }
+
+
+@router.get("/proveedores/{proveedor_id}/comprobantes")
+async def proveedores_comprobantes(
+    proveedor_id: str,
+    company_id: int = None,
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+    params = dict(filters.sql_params())
+    params["prov_id"] = proveedor_id
+
+    rows = (await db.execute(text("""
+        SELECT comprobante_id, proveedor_id, proveedor_nombre, tipo, numero, punto_de_venta,
+               fecha, fecha_vencimiento, importe_total, importe_pagado, saldo, detalle
+        FROM comprobantes_proveedores
+        WHERE proveedor_id = :prov_id AND (fecha IS NULL OR (fecha >= :desde AND fecha < :hasta))
+        ORDER BY COALESCE(fecha_vencimiento, fecha) DESC NULLS LAST, comprobante_id DESC
+        LIMIT 200
+    """), params)).mappings().all()
+
+    comprobante_ids = [r["comprobante_id"] for r in rows]
+    pagos_por_comprobante: dict[str, list[dict]] = {cid: [] for cid in comprobante_ids}
+    if comprobante_ids:
+        pagos = (await db.execute(text("""
+            SELECT pago_id, comprobante_id, fecha, forma_pago, importe, proveedor_id, proveedor_nombre
+            FROM pagos_proveedores
+            WHERE comprobante_id = ANY(:comprobante_ids)
+            ORDER BY fecha DESC NULLS LAST, pago_id DESC
+        """), {"comprobante_ids": comprobante_ids})).mappings().all()
+        for pago in pagos:
+            pagos_por_comprobante.setdefault(pago["comprobante_id"], []).append({
+                "pago_id": pago["pago_id"],
+                "fecha": str(pago["fecha"]) if pago["fecha"] else None,
+                "forma_pago": pago["forma_pago"],
+                "importe": round(float(pago["importe"] or 0), 2),
+                "proveedor_id": pago["proveedor_id"],
+                "proveedor_nombre": pago["proveedor_nombre"],
+            })
+
+    comprobantes = []
+    for r in rows:
+        comprobantes.append({
+            "comprobante_id": r["comprobante_id"],
+            "proveedor_id": r["proveedor_id"],
+            "proveedor_nombre": r["proveedor_nombre"],
+            "tipo": r["tipo"],
+            "numero": r["numero"],
+            "punto_de_venta": r["punto_de_venta"],
+            "fecha": str(r["fecha"]) if r["fecha"] else None,
+            "fecha_vencimiento": str(r["fecha_vencimiento"]) if r["fecha_vencimiento"] else None,
+            "importe_total": round(float(r["importe_total"] or 0), 2),
+            "importe_pagado": round(float(r["importe_pagado"] or 0), 2),
+            "saldo": round(float(r["saldo"] or 0), 2),
+            "detalle": r["detalle"],
+            "pagos": pagos_por_comprobante.get(r["comprobante_id"], []),
+        })
+
+    return {
+        "proveedor_id": proveedor_id,
+        "total_comprobantes": len(comprobantes),
+        "importe_total": round(sum(c["importe_total"] for c in comprobantes), 2),
+        "importe_pagado": round(sum(c["importe_pagado"] for c in comprobantes), 2),
+        "saldo": round(sum(c["saldo"] for c in comprobantes), 2),
+        "comprobantes": comprobantes,
     }
 
 

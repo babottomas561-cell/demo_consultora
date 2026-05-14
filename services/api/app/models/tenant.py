@@ -1,4 +1,5 @@
 from sqlalchemy import BigInteger, Column, Date, DateTime, ForeignKey, Integer, Numeric, String, Float, Boolean, UniqueConstraint, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.declarative import declared_attr
 from app.core.database import Base
 
@@ -180,6 +181,112 @@ class Recibo(TenantBase):
     factura_id = Column(BigInteger, nullable=True)
     tarjeta_numero = Column(String, nullable=True)
     tarjeta_cupon = Column(String, nullable=True)
+
+class ComprobanteCliente(TenantBase):
+    __tablename__ = "comprobantes_clientes"
+    __table_args__ = (
+        UniqueConstraint("comprobante_id", "tipo", name="idx_comprobante_cliente_unico"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    comprobante_id = Column(String, nullable=False)
+    cliente_id = Column(String, nullable=False)
+    cliente_nombre = Column(String, nullable=False)
+    tipo = Column(String, nullable=False)
+    numero = Column(String, nullable=True)
+    punto_de_venta = Column(String, nullable=True)
+    fecha = Column(DateTime, nullable=True)
+    fecha_vencimiento = Column(DateTime, nullable=True)
+    importe_total = Column(Numeric, nullable=False, default=0, server_default="0")
+    importe_pagado = Column(Numeric, nullable=False, default=0, server_default="0")
+    saldo = Column(Numeric, nullable=False, default=0, server_default="0")
+    cod_vendedor = Column(Integer, nullable=True)
+    detalle = Column(String, nullable=True)
+    created_at = Column(DateTime, default=func.now(), server_default=func.now(), nullable=False)
+
+class PagoCliente(TenantBase):
+    __tablename__ = "pagos_clientes"
+    __table_args__ = (
+        UniqueConstraint("pago_id", "comprobante_id", name="idx_pago_cliente_unico"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    pago_id = Column(String, nullable=False)
+    comprobante_id = Column(String, nullable=False)
+    fecha = Column(DateTime, nullable=True)
+    forma_pago = Column(String, nullable=True)
+    importe = Column(Numeric, nullable=False, default=0, server_default="0")
+    cod_cliente = Column(Integer, nullable=True)
+    cliente_nombre = Column(String, nullable=True)
+    created_at = Column(DateTime, default=func.now(), server_default=func.now(), nullable=False)
+
+class ComprobanteProveedor(TenantBase):
+    __tablename__ = "comprobantes_proveedores"
+    __table_args__ = (
+        UniqueConstraint("comprobante_id", "tipo", name="idx_comprobante_proveedor_unico"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    comprobante_id = Column(String, nullable=False)
+    proveedor_id = Column(String, nullable=False)
+    proveedor_nombre = Column(String, nullable=False)
+    tipo = Column(String, nullable=False)
+    numero = Column(String, nullable=True)
+    punto_de_venta = Column(String, nullable=True)
+    fecha = Column(DateTime, nullable=True)
+    fecha_vencimiento = Column(DateTime, nullable=True)
+    importe_total = Column(Numeric, nullable=False, default=0, server_default="0")
+    importe_pagado = Column(Numeric, nullable=False, default=0, server_default="0")
+    saldo = Column(Numeric, nullable=False, default=0, server_default="0")
+    detalle = Column(String, nullable=True)
+    created_at = Column(DateTime, default=func.now(), server_default=func.now(), nullable=False)
+
+class PagoProveedor(TenantBase):
+    __tablename__ = "pagos_proveedores"
+    __table_args__ = (
+        UniqueConstraint("pago_id", "comprobante_id", name="idx_pago_proveedor_unico"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    pago_id = Column(String, nullable=False)
+    comprobante_id = Column(String, nullable=False)
+    fecha = Column(DateTime, nullable=True)
+    forma_pago = Column(String, nullable=True)
+    importe = Column(Numeric, nullable=False, default=0, server_default="0")
+    proveedor_id = Column(String, nullable=True)
+    proveedor_nombre = Column(String, nullable=True)
+    created_at = Column(DateTime, default=func.now(), server_default=func.now(), nullable=False)
+
+class ComisionVendedor(TenantBase):
+    __tablename__ = "comisiones_vendedores"
+    __table_args__ = (
+        UniqueConstraint("cod_vendedor", "periodo", name="idx_comision_vendedor_periodo_unica"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    cod_vendedor = Column(Integer, nullable=False)
+    vendedor_nombre = Column(String, nullable=True)
+    periodo = Column(String, nullable=False)
+    base_cobrada = Column(Numeric, nullable=False, default=0, server_default="0")
+    porcentaje = Column(Numeric, nullable=False, default=0, server_default="0")
+    comision = Column(Numeric, nullable=False, default=0, server_default="0")
+    recibos = Column(Integer, nullable=False, default=0, server_default="0")
+    created_at = Column(DateTime, default=func.now(), server_default=func.now(), nullable=False)
+
+class InfomanagerReportRow(TenantBase):
+    __tablename__ = "infomanager_report_rows"
+    __table_args__ = (
+        UniqueConstraint("report_key", "row_key", name="idx_infomanager_report_row_unica"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    report_key = Column(String, nullable=False)
+    report_name = Column(String, nullable=False)
+    row_key = Column(String, nullable=False)
+    fecha_desde = Column(Date, nullable=True)
+    fecha_hasta = Column(Date, nullable=True)
+    payload = Column(JSONB, nullable=False)
+    synced_at = Column(DateTime, default=func.now(), server_default=func.now(), nullable=False)
 
 class Stock(TenantBase):
     __tablename__ = "stock"

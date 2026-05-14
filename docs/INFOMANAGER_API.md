@@ -1,6 +1,6 @@
 # Infomanager API
 
-Base documental consultada: `Documentacion Funcional API (1).docx` y estructura Swagger indicada por Infomanager. La API requiere autenticacion previa con `client_id` y `client_secret`, y luego usa token Bearer.
+Base documental consultada: `Documentacion Funcional API (1).docx` y Swagger vivo de Infomanager en `https://impedidos.infomanager.com.ar/swagger/v1/swagger.json`. La API requiere autenticacion previa con `client_id` y `client_secret`, y luego usa token Bearer.
 
 ## Autenticacion
 
@@ -52,6 +52,25 @@ Base documental consultada: `Documentacion Funcional API (1).docx` y estructura 
 | GET | `/api/v1/reportes/disponible_por_cliente` | `cod_cliente`, `limite_credito`, `saldo`, `disponible` | Limite crediticio, bloqueo comercial |
 | GET | `/api/v1/reportes/ventas` | Totales agregados por fecha, cliente, vendedor, articulo | Validacion de BI vs reporte Infomanager |
 | GET | `/api/v1/reportes/stock` | Stock por articulo/deposito | Control de inventario |
+
+## Cobertura de informes de escritorio
+
+Validado contra Swagger v1 el 2026-05-14 y probes autenticados sobre `Test IMP 02`.
+
+| Informe visto en capturas | Estado API | Endpoint / Origen |
+|---|---|---|
+| Saldos de cuentas corrientes clientes | Publicado con datos | `/api/v1/reportes/saldos_clientes` |
+| Comprobantes pendientes por cliente / totales | Publicado con datos | `/api/v1/reportes/comprob_pendientes_clientes` |
+| Listado de facturas / notas de credito / notas de debito | Publicado con datos | `/api/v1/reportes/facturas` |
+| Facturas con recibos / comisiones por recibos | Publicado con datos base | `/api/v1/reportes/facturas_con_recibos` |
+| Facturas pendientes de proveedores | Publicado con datos | `/api/v1/reportes/facturas_compras` |
+| Analisis de compra por factura | Publicado con datos | `/api/v1/compras/compras-por-factura` |
+| Existencias de stock | Publicado con datos | `/api/v1/articulos/stock` |
+| Movimientos por articulo | Publicado, requiere articulo | `/api/v1/articulos/movimientos-por-articulo` |
+| Libro mayor | Publicado con datos | `/api/v1/planes/mayor` |
+| Clientes por vendedor | Derivable | `/api/v1/clientes` + `/api/v1/vendedores` |
+| Cheques, disponibilidades, cash flow | No publicado en Swagger v1 | No disponible como endpoint |
+| IVA compras/ventas, balances, estado de resultados | Parcial | Solo plan de cuentas y mayor publicados |
 
 ## Stock
 

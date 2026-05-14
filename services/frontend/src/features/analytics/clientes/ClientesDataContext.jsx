@@ -49,12 +49,15 @@ export default function ClientesDataProvider({ children }) {
   // ── Lazy data ─────────────────────────────────────────────────────────────
   const [temporal,        setTemporal]        = useState(null);
   const [detalle,         setDetalle]         = useState(null);
+  const [comprobantes,    setComprobantes]    = useState(null);
   const [loadingTemporal, setLoadingTemporal] = useState(false);
   const [loadingDetalle,  setLoadingDetalle]  = useState(false);
+  const [loadingComprobantes, setLoadingComprobantes] = useState(false);
 
   useEffect(() => {
     setTemporal(null);
     setDetalle(null);
+    setComprobantes(null);
   }, [qs]);
 
   // ── Primary fetch ─────────────────────────────────────────────────────────
@@ -99,12 +102,22 @@ export default function ClientesDataProvider({ children }) {
     } catch (e) { console.error(e); } finally { setLoadingDetalle(false); }
   }, [qs, canFetch]);
 
+  const fetchComprobantes = useCallback(async (clienteId) => {
+    if (!canFetch || !clienteId) return;
+    setComprobantes(null);
+    setLoadingComprobantes(true);
+    try {
+      const r = await apiClient.get(`/analytics/clientes/${clienteId}/comprobantes${qs}`);
+      setComprobantes(r.data);
+    } catch (e) { console.error(e); } finally { setLoadingComprobantes(false); }
+  }, [qs, canFetch]);
+
   const value = {
     qs,
-    kpis, ranking, temporal, detalle,
-    loadingKpis, loadingRanking, loadingTemporal, loadingDetalle,
+    kpis, ranking, temporal, detalle, comprobantes,
+    loadingKpis, loadingRanking, loadingTemporal, loadingDetalle, loadingComprobantes,
     error,
-    fetchTemporal, fetchDetalle,
+    fetchTemporal, fetchDetalle, fetchComprobantes,
     refetch: fetchPrimary,
   };
 

@@ -7,6 +7,7 @@ import RankingVendedoresWidget    from './RankingVendedoresWidget';
 import EvolucionVendedoresWidget  from './EvolucionVendedoresWidget';
 import ConversionVendedoresWidget from './ConversionVendedoresWidget';
 import DetalleVendedorWidget      from './DetalleVendedorWidget';
+import ComisionesVendedoresWidget from './ComisionesVendedoresWidget';
 
 const VENDEDORES_WIDGET_CATALOG = [
   // ── KPIs ──
@@ -23,6 +24,7 @@ const VENDEDORES_WIDGET_CATALOG = [
   { type: 'v-evolucion',  name: 'Evolución temporal', description: 'Evolución mensual de facturación por vendedor',            icon: LineChart,  component: EvolucionVendedoresWidget,  defaultSize: { w: 7,  h: 6 }, category: 'chart' },
   { type: 'v-conversion', name: 'Conversión',         description: 'Presupuestos confirmados vs. perdidos por vendedor',       icon: PieChart,   component: ConversionVendedoresWidget, defaultSize: { w: 5,  h: 6 }, category: 'chart' },
   { type: 'v-detalle',    name: 'Detalle vendedor',   description: 'Drill-down: evolución, clientes y productos por vendedor', icon: Search,     component: DetalleVendedorWidget,      defaultSize: { w: 12, h: 7 }, category: 'table' },
+  { type: 'v-comisiones', name: 'Comisiones',         description: 'Comisiones calculadas sobre importes cobrados',            icon: DollarSign, component: ComisionesVendedoresWidget, defaultSize: { w: 12, h: 7 }, category: 'table' },
 ];
 
 export default VENDEDORES_WIDGET_CATALOG;
@@ -44,6 +46,7 @@ export const VENDEDORES_DEFAULT_WIDGETS = [
   { id: 'v-10', type: 'v-evolucion'            },
   { id: 'v-11', type: 'v-conversion'           },
   { id: 'v-12', type: 'v-detalle'              },
+  { id: 'v-13', type: 'v-comisiones'           },
 ];
 
 export const VENDEDORES_DEFAULT_LAYOUTS = {
@@ -60,6 +63,7 @@ export const VENDEDORES_DEFAULT_LAYOUTS = {
     { i: 'v-10', x: 0,  y: 11, w: 7,  h: 6, minW: 4, minH: 4 },
     { i: 'v-11', x: 7,  y: 11, w: 5,  h: 6, minW: 3, minH: 4 },
     { i: 'v-12', x: 0,  y: 17, w: 12, h: 7, minW: 6, minH: 4 },
+    { i: 'v-13', x: 0,  y: 24, w: 12, h: 7, minW: 6, minH: 4 },
   ],
   md: [
     { i: 'v-1',  x: 0,  y: 0,  w: 3,  h: 2, minW: 2, minH: 2 },
@@ -74,6 +78,7 @@ export const VENDEDORES_DEFAULT_LAYOUTS = {
     { i: 'v-10', x: 0,  y: 11, w: 7,  h: 6, minW: 4, minH: 4 },
     { i: 'v-11', x: 7,  y: 11, w: 5,  h: 6, minW: 3, minH: 4 },
     { i: 'v-12', x: 0,  y: 17, w: 12, h: 7, minW: 6, minH: 4 },
+    { i: 'v-13', x: 0,  y: 24, w: 12, h: 7, minW: 6, minH: 4 },
   ],
   sm: [
     { i: 'v-1',  x: 0, y: 0,  w: 3, h: 2, minW: 2, minH: 2 },
@@ -88,5 +93,6 @@ export const VENDEDORES_DEFAULT_LAYOUTS = {
     { i: 'v-10', x: 0, y: 15, w: 6, h: 6, minW: 3, minH: 4 },
     { i: 'v-11', x: 0, y: 21, w: 6, h: 6, minW: 3, minH: 4 },
     { i: 'v-12', x: 0, y: 27, w: 6, h: 7, minW: 3, minH: 4 },
+    { i: 'v-13', x: 0, y: 34, w: 6, h: 7, minW: 3, minH: 4 },
   ],
 };

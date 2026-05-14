@@ -49,13 +49,16 @@ export default function VendedoresDataProvider({ children }) {
   // ── Lazy data ─────────────────────────────────────────────────────────────
   const [temporal,       setTemporal]       = useState(null);
   const [detalle,        setDetalle]        = useState(null);
+  const [comisiones,     setComisiones]     = useState(null);
   const [loadingTemporal, setLoadingTemporal] = useState(false);
   const [loadingDetalle,  setLoadingDetalle]  = useState(false);
+  const [loadingComisiones, setLoadingComisiones] = useState(false);
 
   // Reset lazy data when filters change
   useEffect(() => {
     setTemporal(null);
     setDetalle(null);
+    setComisiones(null);
   }, [qs]);
 
   // ── Primary fetch ─────────────────────────────────────────────────────────
@@ -100,12 +103,21 @@ export default function VendedoresDataProvider({ children }) {
     } catch (e) { console.error(e); } finally { setLoadingDetalle(false); }
   }, [qs, canFetch]);
 
+  const fetchComisiones = useCallback(async () => {
+    if (!canFetch || comisiones) return;
+    setLoadingComisiones(true);
+    try {
+      const r = await apiClient.get(`/analytics/vendedores/comisiones${qs}`);
+      setComisiones(r.data);
+    } catch (e) { console.error(e); } finally { setLoadingComisiones(false); }
+  }, [qs, canFetch, comisiones]);
+
   const value = {
     qs,
-    kpis,    ranking,    temporal,    detalle,
-    loadingKpis, loadingRanking, loadingTemporal, loadingDetalle,
+    kpis,    ranking,    temporal,    detalle,    comisiones,
+    loadingKpis, loadingRanking, loadingTemporal, loadingDetalle, loadingComisiones,
     error,
-    fetchTemporal, fetchDetalle,
+    fetchTemporal, fetchDetalle, fetchComisiones,
     refetch: fetchPrimary,
   };
 

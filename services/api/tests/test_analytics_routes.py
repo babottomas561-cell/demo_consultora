@@ -20,6 +20,11 @@ def test_analytics_routes_are_registered():
         "/api/v1/analytics/clientes/resumen",
         "/api/v1/analytics/proveedores/resumen",
         "/api/v1/analytics/caja/resumen",
+        "/api/v1/analytics/clientes/{cliente_id}/comprobantes",
+        "/api/v1/analytics/proveedores/{proveedor_id}/comprobantes",
+        "/api/v1/analytics/vendedores/comisiones",
+        "/api/v1/analytics/infomanager/reportes",
+        "/api/v1/analytics/infomanager/reportes/{report_key}",
     }
 
     registered_paths = {route.path for route in app.routes}

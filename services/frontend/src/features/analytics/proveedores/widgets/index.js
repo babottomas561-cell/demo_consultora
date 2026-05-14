@@ -1,12 +1,13 @@
 import {
   ShoppingBag, DollarSign, Package, Activity, Award, TrendingUp, AlertTriangle, Calendar,
-  BarChart3, PieChart, LineChart, Search,
+  BarChart3, PieChart, LineChart, Search, FileText,
 } from 'lucide-react';
 import { createProveedoresKpiWidget } from './ProveedoresKpiWidget';
 import RankingProveedoresWidget      from './RankingProveedoresWidget';
 import SegmentacionProveedoresWidget from './SegmentacionProveedoresWidget';
 import TemporalProveedoresWidget     from './TemporalProveedoresWidget';
 import DetalleProveedorWidget        from './DetalleProveedorWidget';
+import ComprobantesProveedorWidget   from './ComprobantesProveedorWidget';
 
 const PROVEEDORES_WIDGET_CATALOG = [
   // ── KPIs ──
@@ -23,6 +24,7 @@ const PROVEEDORES_WIDGET_CATALOG = [
   { type: 'p-segmentacion', name: 'Segmentación ABC',   description: 'Distribución de gasto y proveedores por segmento',       icon: PieChart,  component: SegmentacionProveedoresWidget, defaultSize: { w: 6,  h: 6 }, category: 'chart' },
   { type: 'p-temporal',     name: 'Temporal',           description: 'Evolución mensual de gasto y órdenes de compra',         icon: LineChart, component: TemporalProveedoresWidget,     defaultSize: { w: 6,  h: 6 }, category: 'chart' },
   { type: 'p-detalle',      name: 'Detalle proveedor',  description: 'Drill-down: evolución, productos y vencimientos',        icon: Search,    component: DetalleProveedorWidget,        defaultSize: { w: 12, h: 7 }, category: 'table' },
+  { type: 'p-comprobantes', name: 'Comprobantes',       description: 'Facturas, saldos y pagos aplicados por proveedor',       icon: FileText,  component: ComprobantesProveedorWidget,   defaultSize: { w: 12, h: 7 }, category: 'table' },
 ];
 
 export default PROVEEDORES_WIDGET_CATALOG;
@@ -44,6 +46,7 @@ export const PROVEEDORES_DEFAULT_WIDGETS = [
   { id: 'p-10', type: 'p-segmentacion'      },
   { id: 'p-11', type: 'p-temporal'          },
   { id: 'p-12', type: 'p-detalle'           },
+  { id: 'p-13', type: 'p-comprobantes'      },
 ];
 
 export const PROVEEDORES_DEFAULT_LAYOUTS = {
@@ -60,6 +63,7 @@ export const PROVEEDORES_DEFAULT_LAYOUTS = {
     { i: 'p-10', x: 0,  y: 11, w: 6,  h: 6, minW: 3, minH: 4 },
     { i: 'p-11', x: 6,  y: 11, w: 6,  h: 6, minW: 3, minH: 4 },
     { i: 'p-12', x: 0,  y: 17, w: 12, h: 7, minW: 6, minH: 4 },
+    { i: 'p-13', x: 0,  y: 24, w: 12, h: 7, minW: 6, minH: 4 },
   ],
   md: [
     { i: 'p-1',  x: 0,  y: 0,  w: 3,  h: 2, minW: 2, minH: 2 },
@@ -74,6 +78,7 @@ export const PROVEEDORES_DEFAULT_LAYOUTS = {
     { i: 'p-10', x: 0,  y: 11, w: 6,  h: 6, minW: 3, minH: 4 },
     { i: 'p-11', x: 6,  y: 11, w: 6,  h: 6, minW: 3, minH: 4 },
     { i: 'p-12', x: 0,  y: 17, w: 12, h: 7, minW: 6, minH: 4 },
+    { i: 'p-13', x: 0,  y: 24, w: 12, h: 7, minW: 6, minH: 4 },
   ],
   sm: [
     { i: 'p-1',  x: 0, y: 0,  w: 3, h: 2, minW: 2, minH: 2 },
@@ -88,5 +93,6 @@ export const PROVEEDORES_DEFAULT_LAYOUTS = {
     { i: 'p-10', x: 0, y: 15, w: 6, h: 6, minW: 3, minH: 4 },
     { i: 'p-11', x: 0, y: 21, w: 6, h: 6, minW: 3, minH: 4 },
     { i: 'p-12', x: 0, y: 27, w: 6, h: 7, minW: 3, minH: 4 },
+    { i: 'p-13', x: 0, y: 34, w: 6, h: 7, minW: 3, minH: 4 },
   ],
 };
