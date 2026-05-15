@@ -44,17 +44,14 @@ def _sync_infomanager_report_rows(cur, im: InfomanagerConnector, desde: date, ha
             continue
         rows = im.fetch_report_rows(report_key, desde, hasta, max_pages=RAW_REPORT_MAX_PAGES)
         counts[report_key] = len(rows)
-        values = [
-            (
-                report_key,
-                report["name"],
-                _report_row_key(report_key, row, index),
-                desde,
-                hasta,
-                Json(row),
-            )
-            for index, row in enumerate(rows)
-        ]
+        # Deduplicate by row_key within the batch to avoid PostgreSQL's
+        # "ON CONFLICT DO UPDATE command cannot affect row a second time" error
+        # when the upstream API returns duplicate rows in the same response.
+        seen_keys: dict[str, tuple] = {}
+        for index, row in enumerate(rows):
+            rk = _report_row_key(report_key, row, index)
+            seen_keys[rk] = (report_key, report["name"], rk, desde, hasta, Json(row))
+        values = list(seen_keys.values())
         if values:
             execute_values(
                 cur,
