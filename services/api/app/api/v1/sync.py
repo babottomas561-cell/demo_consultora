@@ -2,6 +2,8 @@ import os
 import uuid
 import shutil
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
+from pydantic import BaseModel
+from typing import Literal
 from app.api.deps import get_current_user
 from celery.result import AsyncResult
 from celery import Celery
@@ -18,7 +20,7 @@ celery_client = Celery(
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
-from app.models.central import Company
+from app.models.central import Company, CompanyConnector
 from sqlalchemy import select
 from fastapi import Depends, Form
     
@@ -78,3 +80,47 @@ async def get_job_status(
         response["status"] = "processing"
         
     return response
+
+
+class InfomanagerSyncRequest(BaseModel):
+    company_id: int
+    mode: Literal["full", "incremental"] = "full"
+
+
+@router.post("/infomanager")
+async def sync_infomanager(
+    body: InfomanagerSyncRequest,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(Company).where(Company.id == body.company_id))
+    company = result.scalar_one_or_none()
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+
+    if not current_user.is_admin and current_user.company_id != body.company_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    if company.erp_type != "infomanager":
+        raise HTTPException(status_code=400, detail="Company is not of type infomanager")
+
+    conn_result = await db.execute(
+        select(CompanyConnector).where(
+            CompanyConnector.company_id == body.company_id,
+            CompanyConnector.connector_type == "INFOMANAGER",
+        )
+    )
+    connector = conn_result.scalar_one_or_none()
+    if not connector:
+        raise HTTPException(status_code=404, detail="Infomanager connector not found for this company")
+
+    connector.sync_status = "pending"
+    connector.sync_error = None
+    await db.commit()
+
+    task = celery_client.send_task(
+        "tasks.sync_infomanager.sync_company",
+        args=[body.company_id, connector.id],
+    )
+
+    return {"job_id": task.id, "status": "processing", "mode": body.mode}
