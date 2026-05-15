@@ -1,12 +1,13 @@
 import {
   TrendingUp, TrendingDown, DollarSign, RefreshCw,
   ArrowUpCircle, ArrowDownCircle, Activity, BarChart2,
-  PieChart, List,
+  PieChart, List, Database,
 } from 'lucide-react';
 import { createCajaKpiWidget } from './CajaKpiWidget';
 import FlujoWidget     from './FlujoWidget';
 import PorTipoWidget   from './PorTipoWidget';
 import MovimientosWidget from './MovimientosWidget';
+import { createInfomanagerReportsWidget, INFOMANAGER_REPORT_GROUPS } from '../../components/InfomanagerReportsWidget';
 
 const CAJA_WIDGET_CATALOG = [
   // ── KPIs ──
@@ -22,6 +23,7 @@ const CAJA_WIDGET_CATALOG = [
   { type: 'caja-flujo',        name: 'Flujo de caja',       description: 'Ingresos vs. egresos mensuales y saldo acumulado', icon: BarChart2, component: FlujoWidget,       defaultSize: { w: 12, h: 9  }, category: 'chart' },
   { type: 'caja-por-tipo',     name: 'Por tipo',            description: 'Distribución de ingresos y egresos por tipo de movimiento', icon: PieChart, component: PorTipoWidget,  defaultSize: { w: 8,  h: 9  }, category: 'chart' },
   { type: 'caja-movimientos',  name: 'Movimientos',         description: 'Listado paginado de movimientos de caja',        icon: List,     component: MovimientosWidget, defaultSize: { w: 12, h: 10 }, category: 'table' },
+  { type: 'caja-infomanager-reportes', name: 'Informes InfoManager', description: 'Reportes originales de caja exportables a Excel', icon: Database, component: createInfomanagerReportsWidget(INFOMANAGER_REPORT_GROUPS.caja), defaultSize: { w: 12, h: 7 }, category: 'table' },
 ];
 
 export default CAJA_WIDGET_CATALOG;
@@ -42,6 +44,7 @@ export const CAJA_DEFAULT_WIDGETS = [
   { id: 'cj-9',  type: 'caja-flujo'             },
   { id: 'cj-10', type: 'caja-por-tipo'          },
   { id: 'cj-11', type: 'caja-movimientos'       },
+  { id: 'cj-12', type: 'caja-infomanager-reportes' },
 ];
 
 export const CAJA_DEFAULT_LAYOUTS = {
@@ -57,6 +60,7 @@ export const CAJA_DEFAULT_LAYOUTS = {
     { i: 'cj-9',  x: 0,  y: 4,  w: 12, h: 9,  minW: 6, minH: 6 },
     { i: 'cj-10', x: 0,  y: 13, w: 8,  h: 9,  minW: 4, minH: 6 },
     { i: 'cj-11', x: 0,  y: 22, w: 12, h: 10, minW: 6, minH: 6 },
+    { i: 'cj-12', x: 0,  y: 32, w: 12, h: 7,  minW: 6, minH: 4 },
   ],
   md: [
     { i: 'cj-1',  x: 0,  y: 0,  w: 3,  h: 2,  minW: 2, minH: 2 },
@@ -70,6 +74,7 @@ export const CAJA_DEFAULT_LAYOUTS = {
     { i: 'cj-9',  x: 0,  y: 4,  w: 12, h: 9,  minW: 6, minH: 6 },
     { i: 'cj-10', x: 0,  y: 13, w: 12, h: 9,  minW: 4, minH: 6 },
     { i: 'cj-11', x: 0,  y: 22, w: 12, h: 10, minW: 6, minH: 6 },
+    { i: 'cj-12', x: 0,  y: 32, w: 12, h: 7,  minW: 6, minH: 4 },
   ],
   sm: [
     { i: 'cj-1',  x: 0, y: 0,  w: 3, h: 2,  minW: 2, minH: 2 },
@@ -83,5 +88,6 @@ export const CAJA_DEFAULT_LAYOUTS = {
     { i: 'cj-9',  x: 0, y: 8,  w: 6, h: 9,  minW: 3, minH: 6 },
     { i: 'cj-10', x: 0, y: 17, w: 6, h: 9,  minW: 3, minH: 6 },
     { i: 'cj-11', x: 0, y: 26, w: 6, h: 10, minW: 3, minH: 6 },
+    { i: 'cj-12', x: 0, y: 36, w: 6, h: 7,  minW: 3, minH: 4 },
   ],
 };

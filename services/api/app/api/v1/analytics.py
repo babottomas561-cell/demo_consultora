@@ -19,6 +19,10 @@ router = APIRouter()
 
 
 INFOMANAGER_REPORT_CATALOG = [
+    {"key": "clientes", "name": "Listado de clientes", "group": "clientes", "supported": True},
+    {"key": "proveedores", "name": "Listado de proveedores", "group": "proveedores", "supported": True},
+    {"key": "vendedores", "name": "Listado de vendedores", "group": "vendedores", "supported": True},
+    {"key": "articulos", "name": "Listado de articulos", "group": "stock", "supported": True},
     {"key": "saldos_clientes", "name": "Saldos de cuentas corrientes", "group": "clientes", "supported": True},
     {"key": "comprobantes_pendientes_clientes", "name": "Comprobantes pendientes de clientes", "group": "clientes", "supported": True},
     {"key": "facturas_clientes", "name": "Listado de facturas", "group": "clientes", "supported": True},
@@ -26,12 +30,16 @@ INFOMANAGER_REPORT_CATALOG = [
     {"key": "facturas_compras", "name": "Listado de facturas pendientes de proveedores", "group": "proveedores", "supported": True},
     {"key": "compras_por_factura", "name": "Analisis de compra por factura", "group": "compras", "supported": True},
     {"key": "mayor_contable", "name": "Libro mayor", "group": "contabilidad", "supported": True},
+    {"key": "planes", "name": "Plan de cuentas", "group": "contabilidad", "supported": True},
     {"key": "stock_existencias", "name": "Existencias de stock", "group": "stock", "supported": True},
     {"key": "ventas", "name": "Ventas", "group": "clientes", "supported": True},
     {"key": "ventas_items", "name": "Analisis de compra/ventas por articulo", "group": "clientes", "supported": True},
     {"key": "compras", "name": "Compras", "group": "compras", "supported": True},
     {"key": "compras_items", "name": "Compras por articulo", "group": "compras", "supported": True},
     {"key": "interdeposito", "name": "Movimientos de stock entre depositos", "group": "stock", "supported": True},
+    {"key": "disponible_por_cliente", "name": "Disponible por cliente", "group": "caja", "supported": True},
+    {"key": "comprobantes_relacion", "name": "Comprobantes relacion", "group": "comprobantes", "supported": True},
+    {"key": "comprobantes_destino", "name": "Comprobantes destino", "group": "comprobantes", "supported": True},
     {
         "key": "clientes_por_vendedor",
         "name": "Clientes por vendedor",
@@ -45,6 +53,62 @@ INFOMANAGER_REPORT_CATALOG = [
         "group": "vendedores",
         "supported": False,
         "note": "Derivable con facturas_con_recibos; Swagger v1 no publica un reporte dedicado.",
+    },
+    {
+        "key": "anticipos_clientes",
+        "name": "Anticipos emitidos vs cancelados de clientes",
+        "group": "clientes",
+        "supported": False,
+        "note": "Swagger v1 no publica un endpoint de anticipos de clientes.",
+    },
+    {
+        "key": "remitos_cliente",
+        "name": "Remitos de clientes",
+        "group": "clientes",
+        "supported": False,
+        "note": "Swagger v1 solo publica creacion/consulta individual de remitos, no un listado exportable por periodo.",
+    },
+    {
+        "key": "saldos_proveedores_clientes",
+        "name": "Saldos de proveedores-clientes",
+        "group": "proveedores",
+        "supported": False,
+        "note": "Swagger v1 no publica el reporte consolidado proveedor-cliente.",
+    },
+    {
+        "key": "conciliacion_proveedor_cliente",
+        "name": "Conciliacion proveedor-cliente",
+        "group": "proveedores",
+        "supported": False,
+        "note": "Swagger v1 no publica el reporte de conciliacion proveedor-cliente.",
+    },
+    {
+        "key": "anticipos_proveedores",
+        "name": "Anticipos emitidos vs cancelados de proveedores",
+        "group": "proveedores",
+        "supported": False,
+        "note": "Swagger v1 no publica un endpoint de anticipos de proveedores.",
+    },
+    {
+        "key": "saldos_proveedores_por_cuenta",
+        "name": "Saldos de proveedores por cuenta contable",
+        "group": "proveedores",
+        "supported": False,
+        "note": "Swagger v1 no publica el saldo de proveedores por cuenta contable.",
+    },
+    {
+        "key": "movimientos_por_articulo",
+        "name": "Movimientos por articulo",
+        "group": "stock",
+        "supported": False,
+        "note": "Swagger v1 no publica un historial global de movimientos por articulo.",
+    },
+    {
+        "key": "proyeccion_stock",
+        "name": "Proyeccion de stock",
+        "group": "stock",
+        "supported": False,
+        "note": "Swagger v1 no publica un reporte de proyeccion de stock.",
     },
     {
         "key": "cheques",
@@ -180,7 +244,8 @@ async def infomanager_reporte_detalle(
 ):
     tenant_schema = await get_tenant_schema(current_user, db, company_id)
     await set_tenant_search_path(db, tenant_schema)
-    desde, hasta = filters.date_range()
+    desde = filters.desde
+    hasta = filters.hasta
 
     rows = (await db.execute(text("""
         SELECT row_key, report_name, fecha_desde, fecha_hasta, synced_at, payload

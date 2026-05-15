@@ -1,6 +1,6 @@
 import {
   DollarSign, ShoppingCart, Package, Users, TrendingDown,
-  Activity, BarChart3, PieChart, Trophy, FileText, List, Layers,
+  Activity, BarChart3, PieChart, Trophy, FileText, List, Layers, Database,
 } from 'lucide-react';
 import { createKpiWidget } from './VentasKpiWidget';
 import EvolucionTemporalWidget from './EvolucionTemporalWidget';
@@ -13,6 +13,7 @@ import AbcClientesWidget from './AbcClientesWidget';
 import RankingClientesWidget from './RankingClientesWidget';
 import ComprobantesTipoWidget from './ComprobantesTipoWidget';
 import TransaccionesWidget from './TransaccionesWidget';
+import { createInfomanagerReportsWidget, INFOMANAGER_REPORT_GROUPS } from '../../components/InfomanagerReportsWidget';
 
 const VENTAS_WIDGET_CATALOG = [
   // ── KPIs ──
@@ -180,6 +181,15 @@ const VENTAS_WIDGET_CATALOG = [
     defaultSize: { w: 12, h: 5 },
     category: 'table',
   },
+  {
+    type: 'ventas-infomanager-reportes',
+    name: 'Informes InfoManager',
+    description: 'Reportes originales de ventas exportables a Excel',
+    icon: Database,
+    component: createInfomanagerReportsWidget(INFOMANAGER_REPORT_GROUPS.ventas),
+    defaultSize: { w: 12, h: 7 },
+    category: 'table',
+  },
 ];
 
 export default VENTAS_WIDGET_CATALOG;
@@ -208,6 +218,7 @@ export const VENTAS_DEFAULT_WIDGETS = [
   { id: 'v-16', type: 'ventas-ranking-productos' },
   { id: 'v-17', type: 'ventas-ranking-clientes' },
   { id: 'v-18', type: 'ventas-transacciones' },
+  { id: 'v-19', type: 'ventas-infomanager-reportes' },
 ];
 
 export const VENTAS_DEFAULT_LAYOUTS = {
@@ -238,6 +249,7 @@ export const VENTAS_DEFAULT_LAYOUTS = {
     { i: 'v-17', x: 6, y: 22, w: 6, h: 4, minW: 4, minH: 3 },
     // Transacciones full width
     { i: 'v-18', x: 0, y: 26, w: 12, h: 5, minW: 6, minH: 3 },
+    { i: 'v-19', x: 0, y: 31, w: 12, h: 7, minW: 6, minH: 4 },
   ],
   md: [
     { i: 'v-1', x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2 },
@@ -258,6 +270,7 @@ export const VENTAS_DEFAULT_LAYOUTS = {
     { i: 'v-16', x: 0, y: 22, w: 6, h: 4, minW: 4, minH: 3 },
     { i: 'v-17', x: 6, y: 22, w: 6, h: 4, minW: 4, minH: 3 },
     { i: 'v-18', x: 0, y: 26, w: 12, h: 5, minW: 6, minH: 3 },
+    { i: 'v-19', x: 0, y: 31, w: 12, h: 7, minW: 6, minH: 4 },
   ],
   sm: [
     { i: 'v-1', x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2 },
@@ -278,5 +291,6 @@ export const VENTAS_DEFAULT_LAYOUTS = {
     { i: 'v-16', x: 0, y: 38, w: 6, h: 4, minW: 3, minH: 3 },
     { i: 'v-17', x: 0, y: 42, w: 6, h: 4, minW: 3, minH: 3 },
     { i: 'v-18', x: 0, y: 46, w: 6, h: 5, minW: 3, minH: 3 },
+    { i: 'v-19', x: 0, y: 51, w: 6, h: 7, minW: 3, minH: 4 },
   ],
 };

@@ -1,7 +1,7 @@
 import {
   DollarSign, Package, TrendingUp, Percent, ShoppingCart,
   AlertTriangle, Tag, TrendingDown,
-  BarChart3, LineChart, Users, UserCheck, Scissors,
+  BarChart3, LineChart, Users, UserCheck, Scissors, Database,
 } from 'lucide-react';
 import { createResultadoKpiWidget }   from './ResultadoKpiWidget';
 import TemporalResultadoWidget        from './TemporalResultadoWidget';
@@ -9,6 +9,7 @@ import ProductosResultadoWidget       from './ProductosResultadoWidget';
 import VendedoresResultadoWidget      from './VendedoresResultadoWidget';
 import ClientesResultadoWidget        from './ClientesResultadoWidget';
 import DescuentosResultadoWidget      from './DescuentosResultadoWidget';
+import { createInfomanagerReportsWidget, INFOMANAGER_REPORT_GROUPS } from '../../components/InfomanagerReportsWidget';
 
 const RESULTADO_WIDGET_CATALOG = [
   // ── KPIs ──
@@ -26,6 +27,7 @@ const RESULTADO_WIDGET_CATALOG = [
   { type: 'r-vendedores', name: 'Resultado vendedores', description: 'Margen y descuentos por vendedor con alertas de exceso',                    icon: Users,    component: VendedoresResultadoWidget, defaultSize: { w: 6,  h: 8 }, category: 'chart' },
   { type: 'r-clientes',   name: 'Resultado clientes',   description: 'Scatter clientes: facturación vs margen, alertas de bajo margen',            icon: UserCheck, component: ClientesResultadoWidget,  defaultSize: { w: 6,  h: 8 }, category: 'chart' },
   { type: 'r-descuentos', name: 'Análisis descuentos',  description: 'Resumen de descuentos: monto, % y mayores individuales',                    icon: Scissors,  component: DescuentosResultadoWidget, defaultSize: { w: 12, h: 7 }, category: 'table' },
+  { type: 'r-infomanager-reportes', name: 'Informes InfoManager', description: 'Reportes contables originales exportables a Excel', icon: Database, component: createInfomanagerReportsWidget(INFOMANAGER_REPORT_GROUPS.contabilidad), defaultSize: { w: 12, h: 7 }, category: 'table' },
 ];
 
 export default RESULTADO_WIDGET_CATALOG;
@@ -48,6 +50,7 @@ export const RESULTADO_DEFAULT_WIDGETS = [
   { id: 'r-11', type: 'r-vendedores'          },
   { id: 'r-12', type: 'r-clientes'            },
   { id: 'r-13', type: 'r-descuentos'          },
+  { id: 'r-14', type: 'r-infomanager-reportes' },
 ];
 
 export const RESULTADO_DEFAULT_LAYOUTS = {
@@ -65,6 +68,7 @@ export const RESULTADO_DEFAULT_LAYOUTS = {
     { i: 'r-11', x: 0,  y: 20, w: 6,  h: 8, minW: 3, minH: 5 },
     { i: 'r-12', x: 6,  y: 20, w: 6,  h: 8, minW: 3, minH: 5 },
     { i: 'r-13', x: 0,  y: 28, w: 12, h: 7, minW: 6, minH: 4 },
+    { i: 'r-14', x: 0,  y: 35, w: 12, h: 7, minW: 6, minH: 4 },
   ],
   md: [
     { i: 'r-1',  x: 0,  y: 0,  w: 3,  h: 2, minW: 2, minH: 2 },
@@ -80,6 +84,7 @@ export const RESULTADO_DEFAULT_LAYOUTS = {
     { i: 'r-11', x: 0,  y: 20, w: 6,  h: 8, minW: 3, minH: 5 },
     { i: 'r-12', x: 6,  y: 20, w: 6,  h: 8, minW: 3, minH: 5 },
     { i: 'r-13', x: 0,  y: 28, w: 12, h: 7, minW: 6, minH: 4 },
+    { i: 'r-14', x: 0,  y: 35, w: 12, h: 7, minW: 6, minH: 4 },
   ],
   sm: [
     { i: 'r-1',  x: 0, y: 0,  w: 3, h: 2, minW: 2, minH: 2 },
@@ -95,5 +100,6 @@ export const RESULTADO_DEFAULT_LAYOUTS = {
     { i: 'r-11', x: 0, y: 24, w: 6, h: 8, minW: 3, minH: 5 },
     { i: 'r-12', x: 0, y: 32, w: 6, h: 8, minW: 3, minH: 5 },
     { i: 'r-13', x: 0, y: 40, w: 6, h: 7, minW: 3, minH: 4 },
+    { i: 'r-14', x: 0, y: 47, w: 6, h: 7, minW: 3, minH: 4 },
   ],
 };

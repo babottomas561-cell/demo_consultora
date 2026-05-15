@@ -15,7 +15,6 @@ import ProveedoresAnalyticsView from './features/analytics/ProveedoresAnalyticsV
 import CajaAnalyticsView from './features/analytics/CajaAnalyticsView';
 import StockAnalyticsView from './features/analytics/StockAnalyticsView';
 import VendedoresAnalyticsView from './features/analytics/VendedoresAnalyticsView';
-import InfomanagerReportesView from './features/analytics/InfomanagerReportesView';
 
 // Trigger rebuild to inject VITE_API_URL properly in production
 
@@ -37,7 +36,6 @@ function App() {
           <Route path="/analytics/clientes" element={<ClientesAnalyticsView />} />
           <Route path="/analytics/proveedores" element={<ProveedoresAnalyticsView />} />
           <Route path="/analytics/caja" element={<CajaAnalyticsView />} />
-          <Route path="/analytics/infomanager-reportes" element={<InfomanagerReportesView />} />
           
           {/* Admin Routes */}
           <Route element={<AdminRoute />}>

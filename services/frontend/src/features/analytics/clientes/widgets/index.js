@@ -1,6 +1,6 @@
 import {
   Users, DollarSign, Activity, UserCheck, Award, TrendingUp, AlertTriangle, Percent,
-  BarChart3, PieChart, LineChart, Search, FileText,
+  BarChart3, PieChart, LineChart, Search, FileText, Database,
 } from 'lucide-react';
 import { createClientesKpiWidget } from './ClientesKpiWidget';
 import RankingClientesWidget     from './RankingClientesWidget';
@@ -8,6 +8,7 @@ import SegmentacionClientesWidget from './SegmentacionClientesWidget';
 import TemporalClientesWidget    from './TemporalClientesWidget';
 import DetalleClienteWidget      from './DetalleClienteWidget';
 import ComprobantesClienteWidget from './ComprobantesClienteWidget';
+import { createInfomanagerReportsWidget, INFOMANAGER_REPORT_GROUPS } from '../../components/InfomanagerReportsWidget';
 
 const CLIENTES_WIDGET_CATALOG = [
   // ── KPIs ──
@@ -25,6 +26,7 @@ const CLIENTES_WIDGET_CATALOG = [
   { type: 'c-temporal',     name: 'Temporal',           description: 'Evolución mensual de facturación y clientes',     icon: LineChart,  component: TemporalClientesWidget,     defaultSize: { w: 6,  h: 6 }, category: 'chart' },
   { type: 'c-detalle',      name: 'Detalle cliente',    description: 'Drill-down: evolución y productos por cliente',   icon: Search,     component: DetalleClienteWidget,       defaultSize: { w: 12, h: 7 }, category: 'table' },
   { type: 'c-comprobantes', name: 'Comprobantes',       description: 'Facturas, saldos y pagos aplicados por cliente',  icon: FileText,   component: ComprobantesClienteWidget,  defaultSize: { w: 12, h: 7 }, category: 'table' },
+  { type: 'c-infomanager-reportes', name: 'Informes InfoManager', description: 'Reportes originales de clientes exportables a Excel', icon: Database, component: createInfomanagerReportsWidget(INFOMANAGER_REPORT_GROUPS.clientes), defaultSize: { w: 12, h: 7 }, category: 'table' },
 ];
 
 export default CLIENTES_WIDGET_CATALOG;
@@ -47,6 +49,7 @@ export const CLIENTES_DEFAULT_WIDGETS = [
   { id: 'c-11', type: 'c-temporal'          },
   { id: 'c-12', type: 'c-detalle'           },
   { id: 'c-13', type: 'c-comprobantes'      },
+  { id: 'c-14', type: 'c-infomanager-reportes' },
 ];
 
 export const CLIENTES_DEFAULT_LAYOUTS = {
@@ -64,6 +67,7 @@ export const CLIENTES_DEFAULT_LAYOUTS = {
     { i: 'c-11', x: 6,  y: 11, w: 6,  h: 6, minW: 3, minH: 4 },
     { i: 'c-12', x: 0,  y: 17, w: 12, h: 7, minW: 6, minH: 4 },
     { i: 'c-13', x: 0,  y: 24, w: 12, h: 7, minW: 6, minH: 4 },
+    { i: 'c-14', x: 0,  y: 31, w: 12, h: 7, minW: 6, minH: 4 },
   ],
   md: [
     { i: 'c-1',  x: 0,  y: 0,  w: 3,  h: 2, minW: 2, minH: 2 },
@@ -79,6 +83,7 @@ export const CLIENTES_DEFAULT_LAYOUTS = {
     { i: 'c-11', x: 6,  y: 11, w: 6,  h: 6, minW: 3, minH: 4 },
     { i: 'c-12', x: 0,  y: 17, w: 12, h: 7, minW: 6, minH: 4 },
     { i: 'c-13', x: 0,  y: 24, w: 12, h: 7, minW: 6, minH: 4 },
+    { i: 'c-14', x: 0,  y: 31, w: 12, h: 7, minW: 6, minH: 4 },
   ],
   sm: [
     { i: 'c-1',  x: 0, y: 0,  w: 3, h: 2, minW: 2, minH: 2 },
@@ -94,5 +99,6 @@ export const CLIENTES_DEFAULT_LAYOUTS = {
     { i: 'c-11', x: 0, y: 21, w: 6, h: 6, minW: 3, minH: 4 },
     { i: 'c-12', x: 0, y: 27, w: 6, h: 7, minW: 3, minH: 4 },
     { i: 'c-13', x: 0, y: 34, w: 6, h: 7, minW: 3, minH: 4 },
+    { i: 'c-14', x: 0, y: 41, w: 6, h: 7, minW: 3, minH: 4 },
   ],
 };

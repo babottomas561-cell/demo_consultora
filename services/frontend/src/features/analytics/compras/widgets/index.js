@@ -1,7 +1,7 @@
 import {
   DollarSign, ShoppingCart, Package, Users, AlertTriangle,
   Clock, CreditCard, Calculator, BarChart3, List, FileText,
-  TrendingUp, Calendar,
+  TrendingUp, Calendar, Database,
 } from 'lucide-react';
 import { createComprasKpiWidget } from './ComprasKpiWidget';
 import EvolucionComprasWidget from './EvolucionComprasWidget';
@@ -10,6 +10,7 @@ import RankingProveedoresWidget from './RankingProveedoresWidget';
 import CalendarioPagosWidget from './CalendarioPagosWidget';
 import VariacionPreciosWidget from './VariacionPreciosWidget';
 import TransaccionesComprasWidget from './TransaccionesComprasWidget';
+import { createInfomanagerReportsWidget, INFOMANAGER_REPORT_GROUPS } from '../../components/InfomanagerReportsWidget';
 
 const COMPRAS_WIDGET_CATALOG = [
   // ── KPIs ──
@@ -29,6 +30,7 @@ const COMPRAS_WIDGET_CATALOG = [
   // ── Tables ──
   { type: 'compras-proveedores', name: 'Ranking proveedores', description: 'Tabla con totales y variación de precios', icon: List, component: RankingProveedoresWidget, defaultSize: { w: 12, h: 4 }, category: 'table' },
   { type: 'compras-transacciones', name: 'Transacciones', description: 'Detalle paginado de compras', icon: FileText, component: TransaccionesComprasWidget, defaultSize: { w: 12, h: 5 }, category: 'table' },
+  { type: 'compras-infomanager-reportes', name: 'Informes InfoManager', description: 'Reportes originales de compras exportables a Excel', icon: Database, component: createInfomanagerReportsWidget(INFOMANAGER_REPORT_GROUPS.compras), defaultSize: { w: 12, h: 7 }, category: 'table' },
 ];
 
 export default COMPRAS_WIDGET_CATALOG;
@@ -52,6 +54,7 @@ export const COMPRAS_DEFAULT_WIDGETS = [
   { id: 'c-12', type: 'compras-precios' },
   { id: 'c-13', type: 'compras-calendario' },
   { id: 'c-14', type: 'compras-transacciones' },
+  { id: 'c-15', type: 'compras-infomanager-reportes' },
 ];
 
 export const COMPRAS_DEFAULT_LAYOUTS = {
@@ -76,6 +79,7 @@ export const COMPRAS_DEFAULT_LAYOUTS = {
     { i: 'c-13', x: 6, y: 13, w: 6, h: 5, minW: 4, minH: 3 },
     // Transacciones full width
     { i: 'c-14', x: 0, y: 18, w: 12, h: 5, minW: 6, minH: 3 },
+    { i: 'c-15', x: 0, y: 23, w: 12, h: 7, minW: 6, minH: 4 },
   ],
   md: [
     { i: 'c-1', x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2 },
@@ -92,6 +96,7 @@ export const COMPRAS_DEFAULT_LAYOUTS = {
     { i: 'c-12', x: 0, y: 13, w: 6, h: 5, minW: 4, minH: 3 },
     { i: 'c-13', x: 6, y: 13, w: 6, h: 5, minW: 4, minH: 3 },
     { i: 'c-14', x: 0, y: 18, w: 12, h: 5, minW: 6, minH: 3 },
+    { i: 'c-15', x: 0, y: 23, w: 12, h: 7, minW: 6, minH: 4 },
   ],
   sm: [
     { i: 'c-1', x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2 },
@@ -108,5 +113,6 @@ export const COMPRAS_DEFAULT_LAYOUTS = {
     { i: 'c-12', x: 0, y: 21, w: 6, h: 5, minW: 3, minH: 3 },
     { i: 'c-13', x: 0, y: 26, w: 6, h: 5, minW: 3, minH: 3 },
     { i: 'c-14', x: 0, y: 31, w: 6, h: 5, minW: 3, minH: 3 },
+    { i: 'c-15', x: 0, y: 36, w: 6, h: 7, minW: 3, minH: 4 },
   ],
 };

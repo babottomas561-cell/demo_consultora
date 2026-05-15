@@ -18,7 +18,43 @@ const usePanelLayoutStore = create(
           set((s) => ({
             panels: { ...s.panels, [panelId]: defaults },
           }));
+          return;
         }
+        const currentWidgetIds = new Set(current.widgets.map((widget) => widget.id));
+        const missingWidgets = defaults.widgets.filter((widget) => !currentWidgetIds.has(widget.id));
+        if (!missingWidgets.length) return;
+
+        set((s) => {
+          const panel = s.panels[panelId] || current;
+          const nextLayouts = Object.fromEntries(
+            Object.entries(defaults.layouts || {}).map(([bp, defaultItems]) => {
+              const currentItems = panel.layouts?.[bp] || [];
+              const currentItemIds = new Set(currentItems.map((item) => item.i));
+              return [
+                bp,
+                [
+                  ...currentItems,
+                  ...defaultItems
+                    .filter((item) => !currentItemIds.has(item.i))
+                    .map((item) => ({ ...item, y: Infinity })),
+                ],
+              ];
+            })
+          );
+
+          return {
+            panels: {
+              ...s.panels,
+              [panelId]: {
+                widgets: [...panel.widgets, ...missingWidgets],
+                layouts: {
+                  ...(panel.layouts || {}),
+                  ...nextLayouts,
+                },
+              },
+            },
+          };
+        });
       },
 
       getPanel: (panelId) =>

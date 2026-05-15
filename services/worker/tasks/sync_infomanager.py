@@ -7,7 +7,7 @@ from datetime import date, timedelta
 from typing import Any
 
 import psycopg2
-from psycopg2.extras import Json
+from psycopg2.extras import Json, execute_values
 from psycopg2 import sql
 
 from connectors.infomanager import INFOMANAGER_REPORT_CATALOG, InfomanagerConnector
@@ -21,6 +21,10 @@ RAW_REPORT_MAX_PAGES = int(os.getenv("INFOMANAGER_RAW_REPORT_MAX_PAGES", "500"))
 
 def _as_float(value: Any, default: float = 0.0) -> float:
     if value in (None, ""):
+        return default
+    try:
+        return float(value)
+    except (TypeError, ValueError):
         return default
 
 
@@ -40,13 +44,25 @@ def _sync_infomanager_report_rows(cur, im: InfomanagerConnector, desde: date, ha
             continue
         rows = im.fetch_report_rows(report_key, desde, hasta, max_pages=RAW_REPORT_MAX_PAGES)
         counts[report_key] = len(rows)
-        for index, row in enumerate(rows):
-            cur.execute(
+        values = [
+            (
+                report_key,
+                report["name"],
+                _report_row_key(report_key, row, index),
+                desde,
+                hasta,
+                Json(row),
+            )
+            for index, row in enumerate(rows)
+        ]
+        if values:
+            execute_values(
+                cur,
                 """
                 INSERT INTO infomanager_report_rows (
                   report_key, report_name, row_key, fecha_desde, fecha_hasta, payload, synced_at
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, NOW())
+                VALUES %s
                 ON CONFLICT (report_key, row_key) DO UPDATE SET
                   report_name=EXCLUDED.report_name,
                   fecha_desde=EXCLUDED.fecha_desde,
@@ -54,20 +70,11 @@ def _sync_infomanager_report_rows(cur, im: InfomanagerConnector, desde: date, ha
                   payload=EXCLUDED.payload,
                   synced_at=NOW()
                 """,
-                (
-                    report_key,
-                    report["name"],
-                    _report_row_key(report_key, row, index),
-                    desde,
-                    hasta,
-                    Json(row),
-                ),
+                values,
+                template="(%s, %s, %s, %s, %s, %s, NOW())",
+                page_size=500,
             )
     return counts
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return default
 
 
 def _set_tenant_search_path(cur, tenant_schema: str) -> None:
