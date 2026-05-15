@@ -16,13 +16,14 @@ import PROVEEDORES_WIDGET_CATALOG, {
   PROVEEDORES_DEFAULT_WIDGETS,
   PROVEEDORES_DEFAULT_LAYOUTS,
 } from './proveedores/widgets';
+import { buildExportData } from './analyticsUtils';
 
 const PANEL_ID = 'proveedores';
 
 const ProveedoresPanelInner = () => {
   const user = useAuthStore((s) => s.user);
   const activeCompany = useAuthStore((s) => s.activeCompany);
-  const { error, refetch, qs } = useProveedoresData();
+  const { error, refetch, qs, kpis, ranking, temporal, detalle, comprobantes } = useProveedoresData();
   const panelRef = useRef(null);
   const [showAddModal, setShowAddModal] = useState(false);
 
@@ -74,6 +75,14 @@ const ProveedoresPanelInner = () => {
             <ExportButton
               label="Exportar ranking"
               endpoint={`/analytics/proveedores/ranking${qs}`}
+              data={buildExportData({
+                KPIs: kpis,
+                Ranking: ranking?.proveedores,
+                Temporal: temporal?.series,
+                DetalleProductos: detalle?.productos,
+                DetalleTemporal: detalle?.evolucion,
+                Comprobantes: comprobantes?.comprobantes,
+              })}
               filename="proveedores_ranking"
             />
           </div>

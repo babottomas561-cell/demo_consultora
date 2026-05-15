@@ -492,6 +492,7 @@ class InfomanagerConnector:
                 # API returns current stock in "existencia", not "cantidad"
                 "cantidad": _as_float(s.get("existencia") or s.get("cantidad")),
                 "precio_compra_actual": _as_float(s.get("precio_compra")),
+                "stock_minimo": _as_float(_first_present(s, "stock_minimo", "stock_min", "punto_pedido")),
             }
             for s in data
         ]
@@ -590,6 +591,32 @@ class InfomanagerConnector:
             cab = headers.get(_as_int(item.get("id_comprobante")))
             if not cab:
                 continue
+            item_total = abs(_as_float(item.get("importe")) or (
+                abs(_as_float(item.get("cantidad"))) * abs(_as_float(item.get("precio")))
+            ))
+            header_total = abs(_as_float(_first_present(
+                cab, "total", "importe", "importe_total", "total_comprobante", "fa_total"
+            )))
+            ratio = (item_total / header_total) if header_total else 0
+            item_neto_raw = _first_present(item, "neto", "importe_neto")
+            item_iva_raw = _first_present(item, "iva_importe", "importe_iva")
+            header_neto_raw = _first_present(cab, "neto", "importe_neto")
+            header_iva_raw = _first_present(cab, "iva_importe", "importe_iva")
+            item_neto = abs(_as_float(item_neto_raw)) if item_neto_raw is not None else None
+            item_iva = abs(_as_float(item_iva_raw)) if item_iva_raw is not None else None
+            header_neto = abs(_as_float(header_neto_raw)) if header_neto_raw is not None else None
+            header_iva = abs(_as_float(header_iva_raw)) if header_iva_raw is not None else None
+            if item_neto is None and header_neto is not None and ratio:
+                item_neto = header_neto * ratio
+            if item_iva is None and header_iva is not None and ratio:
+                item_iva = header_iva * ratio
+            if item_neto is None and item_iva is not None:
+                item_neto = max(item_total - item_iva, 0)
+            if item_iva is None and item_neto is not None:
+                item_iva = max(item_total - item_neto, 0)
+
+            tipo_raw = _first_present(cab, "tipo_comprobante", "tipo_comp", "tipo")
+            tipo = _normalize_tipo_comprobante(tipo_raw) if tipo_raw else "FC"
             compras.append(
                 {
                     "fecha": cab.get("fecha"),
@@ -603,11 +630,17 @@ class InfomanagerConnector:
                     ) or "",
                     "producto_id": str(item.get("cod_articulo") or ""),
                     "producto_nombre": item.get("detalle") or item.get("descripcion") or "",
-                    "cantidad": _as_float(item.get("cantidad")),
-                    "precio_unitario": _as_float(item.get("precio")),
-                    "total": _as_float(item.get("importe")) or (
-                        abs(_as_float(item.get("cantidad"))) * abs(_as_float(item.get("precio")))
-                    ),
+                    "cantidad": abs(_as_float(item.get("cantidad"))),
+                    "precio_unitario": abs(_as_float(item.get("precio"))),
+                    "total": item_total,
+                    "tipo_comprobante": tipo,
+                    "tipo_factura": cab.get("tipo_factura"),
+                    "punto_de_venta": _as_int(cab.get("punto_de_venta")),
+                    "cod_empresa": _as_int(cab.get("cod_empresa"), 1),
+                    "neto": item_neto,
+                    "iva_importe": item_iva,
+                    "anulada": cab.get("anulada", "N"),
+                    "cod_deposito": _as_int(cab.get("cod_deposito"), 1),
                 }
             )
         return compras

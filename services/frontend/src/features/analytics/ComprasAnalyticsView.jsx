@@ -16,13 +16,14 @@ import COMPRAS_WIDGET_CATALOG, {
   COMPRAS_DEFAULT_WIDGETS,
   COMPRAS_DEFAULT_LAYOUTS,
 } from './compras/widgets';
+import { buildExportData } from './analyticsUtils';
 
 const PANEL_ID = 'compras';
 
 const ComprasPanelInner = () => {
   const user = useAuthStore((s) => s.user);
   const activeCompany = useAuthStore((s) => s.activeCompany);
-  const { error, refetch, temporal } = useComprasData();
+  const { error, refetch, kpis, temporal, productos, proveedores, vencimientos, precios, transacciones } = useComprasData();
   const panelRef = useRef(null);
   const [showAddModal, setShowAddModal] = useState(false);
 
@@ -72,7 +73,15 @@ const ComprasPanelInner = () => {
           <div className="flex items-center gap-2 shrink-0">
             <SavedViews />
             <ExportButton
-              data={{ Compras: temporal?.series ?? [] }}
+              data={buildExportData({
+                KPIs: kpis,
+                Temporal: temporal,
+                Productos: productos,
+                Proveedores: proveedores,
+                Vencimientos: vencimientos,
+                Precios: precios,
+                Transacciones: transacciones?.data,
+              })}
               filename="compras"
             />
           </div>

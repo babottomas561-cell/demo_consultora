@@ -16,13 +16,14 @@ import STOCK_WIDGET_CATALOG, {
   STOCK_DEFAULT_WIDGETS,
   STOCK_DEFAULT_LAYOUTS,
 } from './stock/widgets';
+import { buildExportData } from './analyticsUtils';
 
 const PANEL_ID = 'stock';
 
 const StockPanelInner = () => {
   const user = useAuthStore((s) => s.user);
   const activeCompany = useAuthStore((s) => s.activeCompany);
-  const { error, refetch } = useStockData();
+  const { error, refetch, kpis, inventario, movimientos, rotacion, alertas, reposicion } = useStockData();
   const panelRef = useRef(null);
   const [showAddModal, setShowAddModal] = useState(false);
 
@@ -71,7 +72,18 @@ const StockPanelInner = () => {
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <SavedViews />
-            <ExportButton filename="stock" />
+            <ExportButton
+              data={buildExportData({
+                KPIs: kpis,
+                Inventario: inventario?.productos,
+                Depositos: inventario?.por_deposito,
+                Movimientos: movimientos?.por_articulo,
+                Rotacion: rotacion?.ranking,
+                Alertas: alertas?.alertas,
+                Reposicion: reposicion?.sugerencias,
+              })}
+              filename="stock"
+            />
           </div>
         </div>
 

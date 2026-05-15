@@ -194,7 +194,7 @@ def seed_tenant_demo(self, tenant_schema: str, meses: int = 12):
                     tenant_schema,
                     "compras",
                     compras[i:i+chunk_size],
-                    ['fecha', 'proveedor_id', 'producto_id'],
+                    ['fecha', 'proveedor_id', 'producto_id', 'tipo_comprobante'],
                 )
                 total_compras += inserted
 

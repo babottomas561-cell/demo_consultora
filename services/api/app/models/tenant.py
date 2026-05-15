@@ -64,7 +64,7 @@ class SimulationResult(TenantBase):
 class Compra(TenantBase):
     __tablename__ = "compras"
     __table_args__ = (
-        UniqueConstraint('fecha', 'proveedor_id', 'producto_id', name='idx_compra_unica'),
+        UniqueConstraint('fecha', 'proveedor_id', 'producto_id', 'tipo_comprobante', name='idx_compra_unica'),
     )
 
     id = Column(Integer, primary_key=True, index=True)
@@ -76,6 +76,14 @@ class Compra(TenantBase):
     cantidad = Column(Float, nullable=False)
     precio_unitario = Column(Float, nullable=False)
     total = Column(Float, nullable=False)
+    tipo_comprobante = Column(String, default='FC', server_default='FC')
+    tipo_factura = Column(String, nullable=True)
+    punto_de_venta = Column(Integer, nullable=True)
+    cod_empresa = Column(Integer, default=1, server_default='1')
+    neto = Column(Numeric, nullable=True)
+    iva_importe = Column(Numeric, nullable=True)
+    anulada = Column(String, default='N', server_default='N')
+    cod_deposito = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=func.now(), server_default=func.now(), nullable=False)
 
 class CuentaCorrienteCliente(TenantBase):

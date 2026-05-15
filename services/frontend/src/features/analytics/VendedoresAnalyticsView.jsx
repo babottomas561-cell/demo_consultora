@@ -16,13 +16,14 @@ import VENDEDORES_WIDGET_CATALOG, {
   VENDEDORES_DEFAULT_WIDGETS,
   VENDEDORES_DEFAULT_LAYOUTS,
 } from './vendedores/widgets';
+import { buildExportData } from './analyticsUtils';
 
 const PANEL_ID = 'vendedores';
 
 const VendedoresPanelInner = () => {
   const user = useAuthStore((s) => s.user);
   const activeCompany = useAuthStore((s) => s.activeCompany);
-  const { error, refetch, qs } = useVendedoresData();
+  const { error, refetch, qs, kpis, ranking, temporal, detalle, comisiones } = useVendedoresData();
   const panelRef = useRef(null);
   const [showAddModal, setShowAddModal] = useState(false);
 
@@ -74,6 +75,14 @@ const VendedoresPanelInner = () => {
             <ExportButton
               label="Exportar ranking"
               endpoint={`/analytics/vendedores/ranking${qs}`}
+              data={buildExportData({
+                KPIs: kpis,
+                Ranking: ranking?.vendedores,
+                Temporal: temporal?.series,
+                DetalleProductos: detalle?.productos,
+                DetalleClientes: detalle?.clientes,
+                Comisiones: comisiones?.comisiones,
+              })}
               filename="vendedores_ranking"
             />
           </div>

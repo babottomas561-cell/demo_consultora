@@ -30,7 +30,19 @@ def test_analytics_tables_have_required_business_columns():
     cta_proveedores = TenantBase.metadata.tables["cuentas_corrientes_proveedores"].columns
     caja = TenantBase.metadata.tables["movimientos_caja"].columns
 
-    assert {"fecha", "proveedor_id", "producto_id", "cantidad", "precio_unitario", "total"}.issubset(compras.keys())
+    assert {
+        "fecha",
+        "proveedor_id",
+        "producto_id",
+        "cantidad",
+        "precio_unitario",
+        "total",
+        "tipo_comprobante",
+        "neto",
+        "iva_importe",
+        "anulada",
+        "cod_deposito",
+    }.issubset(compras.keys())
     assert {"cliente_id", "tipo", "importe", "saldo_acumulado", "fecha_vencimiento"}.issubset(cta_clientes.keys())
     assert {"proveedor_id", "tipo", "importe", "saldo_acumulado", "fecha_vencimiento"}.issubset(cta_proveedores.keys())
     assert {"fecha", "tipo", "descripcion", "importe", "saldo_acumulado"}.issubset(caja.keys())
@@ -64,6 +76,21 @@ def test_ventas_unique_constraint_keeps_comprobante_type_distinct():
     assert [column.name for column in constraint.columns] == [
         "fecha",
         "cliente_id",
+        "producto_id",
+        "tipo_comprobante",
+    ]
+
+
+def test_compras_unique_constraint_keeps_comprobante_type_distinct():
+    compras = TenantBase.metadata.tables["compras"]
+    constraint = next(
+        item for item in compras.constraints
+        if item.name == "idx_compra_unica"
+    )
+
+    assert [column.name for column in constraint.columns] == [
+        "fecha",
+        "proveedor_id",
         "producto_id",
         "tipo_comprobante",
     ]

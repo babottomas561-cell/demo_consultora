@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState } from 'rea
 import apiClient from '../../../api/client';
 import useAuthStore from '../../../store/authStore';
 import { useFilterStore } from '../../../store/filterStore';
-import { buildQueryParams } from '../analyticsUtils';
+import { appendQueryParams, buildQueryParams } from '../analyticsUtils';
 
 const CajaDataContext = createContext(null);
 
@@ -95,7 +95,7 @@ export default function CajaDataProvider({ children }) {
     if (!canFetch) return;
     setLoadingMovs(true);
     try {
-      const r = await apiClient.get(`/analytics/caja/movimientos${qs}&page=${page}&limit=50`);
+      const r = await apiClient.get(`/analytics/caja/movimientos${appendQueryParams(qs, { page, limit: 50 })}`);
       setMovimientos(r.data);
       setMovsPage(page);
     } catch (e) { console.error(e); } finally { setLoadingMovs(false); }

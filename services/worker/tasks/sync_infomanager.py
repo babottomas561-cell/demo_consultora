@@ -364,11 +364,12 @@ def sync_company(self, company_id: int, connector_id: int):
         for stock in stock_data:
             cur.execute(
                 """
-                INSERT INTO stock (cod_articulo, cod_deposito, cantidad, precio_compra_actual)
-                VALUES (%(cod_articulo)s, %(cod_deposito)s, %(cantidad)s, %(precio_compra_actual)s)
+                INSERT INTO stock (cod_articulo, cod_deposito, cantidad, precio_compra_actual, stock_minimo)
+                VALUES (%(cod_articulo)s, %(cod_deposito)s, %(cantidad)s, %(precio_compra_actual)s, %(stock_minimo)s)
                 ON CONFLICT (cod_articulo, cod_deposito) DO UPDATE SET
                   cantidad=EXCLUDED.cantidad,
                   precio_compra_actual=EXCLUDED.precio_compra_actual,
+                  stock_minimo=EXCLUDED.stock_minimo,
                   ultima_actualizacion=NOW()
                 """,
                 stock,
@@ -427,19 +428,29 @@ def sync_company(self, company_id: int, connector_id: int):
                 """
                 INSERT INTO compras (
                   fecha, proveedor_id, proveedor_nombre, producto_id, producto_nombre,
-                  cantidad, precio_unitario, total
+                  cantidad, precio_unitario, total, tipo_comprobante, tipo_factura,
+                  punto_de_venta, cod_empresa, neto, iva_importe, anulada, cod_deposito
                 )
                 VALUES (
                   %(fecha)s, %(proveedor_id)s, %(proveedor_nombre)s,
                   %(producto_id)s, %(producto_nombre)s, %(cantidad)s,
-                  %(precio_unitario)s, %(total)s
+                  %(precio_unitario)s, %(total)s, %(tipo_comprobante)s, %(tipo_factura)s,
+                  %(punto_de_venta)s, %(cod_empresa)s, %(neto)s, %(iva_importe)s,
+                  %(anulada)s, %(cod_deposito)s
                 )
-                ON CONFLICT (fecha, proveedor_id, producto_id) DO UPDATE SET
+                ON CONFLICT (fecha, proveedor_id, producto_id, tipo_comprobante) DO UPDATE SET
                   proveedor_nombre=EXCLUDED.proveedor_nombre,
                   producto_nombre=EXCLUDED.producto_nombre,
                   cantidad=EXCLUDED.cantidad,
                   precio_unitario=EXCLUDED.precio_unitario,
-                  total=EXCLUDED.total
+                  total=EXCLUDED.total,
+                  tipo_factura=EXCLUDED.tipo_factura,
+                  punto_de_venta=EXCLUDED.punto_de_venta,
+                  cod_empresa=EXCLUDED.cod_empresa,
+                  neto=EXCLUDED.neto,
+                  iva_importe=EXCLUDED.iva_importe,
+                  anulada=EXCLUDED.anulada,
+                  cod_deposito=EXCLUDED.cod_deposito
                 """,
                 compra,
             )

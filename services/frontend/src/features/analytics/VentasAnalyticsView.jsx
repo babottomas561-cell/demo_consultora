@@ -20,13 +20,14 @@ import VENTAS_WIDGET_CATALOG, {
   VENTAS_DEFAULT_WIDGETS,
   VENTAS_DEFAULT_LAYOUTS,
 } from './ventas/widgets';
+import { buildExportData } from './analyticsUtils';
 
 const PANEL_ID = 'ventas';
 
 const VentasPanelInner = () => {
   const user = useAuthStore((s) => s.user);
   const activeCompany = useAuthStore((s) => s.activeCompany);
-  const { error, refetch, temporal } = useVentasData();
+  const { error, refetch, kpis, temporal, productos, vendedores, clientes, comprobantes, transacciones } = useVentasData();
   const panelRef = useRef(null);
   const [showAddModal, setShowAddModal] = useState(false);
 
@@ -76,7 +77,16 @@ const VentasPanelInner = () => {
           <div className="flex items-center gap-2 shrink-0">
             <SavedViews />
             <ExportButton
-              data={{ Ventas: temporal?.series ?? [] }}
+              data={buildExportData({
+                KPIs: kpis,
+                Temporal: temporal,
+                Productos: productos?.ranking,
+                Rubros: productos?.por_rubro,
+                Vendedores: vendedores?.vendedores,
+                Clientes: clientes?.clientes,
+                Comprobantes: comprobantes?.por_tipo,
+                Transacciones: transacciones?.rows,
+              })}
               filename="ventas"
               panelRef={panelRef}
             />

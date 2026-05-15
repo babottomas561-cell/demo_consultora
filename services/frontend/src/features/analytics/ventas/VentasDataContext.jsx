@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import apiClient from '../../../api/client';
 import useAuthStore from '../../../store/authStore';
 import { useFilterStore } from '../../../store/filterStore';
-import { buildQueryParams } from '../analyticsUtils';
+import { appendQueryParams, buildQueryParams } from '../analyticsUtils';
 
 const VentasDataContext = createContext(null);
 
@@ -64,7 +64,7 @@ export default function VentasDataProvider({ children }) {
     try {
       const [kR, tR, pR, vR] = await Promise.all([
         apiClient.get(`/analytics/ventas/kpis${qs}`),
-        apiClient.get(`/analytics/ventas/temporal${qs}&granularidad=${granularidad}`),
+        apiClient.get(`/analytics/ventas/temporal${appendQueryParams(qs, { granularidad })}`),
         apiClient.get(`/analytics/ventas/productos${qs}`),
         apiClient.get(`/analytics/ventas/por-vendedor${qs}`),
       ]);
@@ -85,7 +85,7 @@ export default function VentasDataProvider({ children }) {
     if (!canFetch) return;
     setLoadingTemporal(true);
     try {
-      const r = await apiClient.get(`/analytics/ventas/temporal${qs}&granularidad=${granularidad}`);
+      const r = await apiClient.get(`/analytics/ventas/temporal${appendQueryParams(qs, { granularidad })}`);
       setTemporal(r.data);
     } catch (e) { console.error(e); } finally { setLoadingTemporal(false); }
   }, [qs, granularidad, canFetch]);
@@ -112,7 +112,7 @@ export default function VentasDataProvider({ children }) {
     if (!canFetch) return;
     setLoadingTransacciones(true);
     try {
-      const r = await apiClient.get(`/analytics/ventas/transacciones${qs}&page=${page}&limit=50`);
+      const r = await apiClient.get(`/analytics/ventas/transacciones${appendQueryParams(qs, { page, limit: 50 })}`);
       setTransacciones(r.data);
       setTxPage(page);
     } catch (e) { console.error(e); } finally { setLoadingTransacciones(false); }

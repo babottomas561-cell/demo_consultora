@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import apiClient from '../../../api/client';
 import useAuthStore from '../../../store/authStore';
 import { useFilterStore } from '../../../store/filterStore';
-import { buildQueryParams } from '../analyticsUtils';
+import { appendQueryParams, buildQueryParams } from '../analyticsUtils';
 
 const ComprasDataContext = createContext(null);
 
@@ -57,10 +57,9 @@ export default function ComprasDataProvider({ children }) {
     setLoadingProductos(true); setLoadingProveedores(true);
     setError(null);
     try {
-      const sep = qs ? '&' : '?';
       const [kR, tR, pR, vR] = await Promise.all([
         apiClient.get(`/analytics/compras/kpis${qs}`),
-        apiClient.get(`/analytics/compras/temporal${qs}${sep}granularidad=${granularidad}`),
+        apiClient.get(`/analytics/compras/temporal${appendQueryParams(qs, { granularidad })}`),
         apiClient.get(`/analytics/compras/por-producto${qs}`),
         apiClient.get(`/analytics/compras/por-proveedor${qs}`),
       ]);
@@ -79,10 +78,9 @@ export default function ComprasDataProvider({ children }) {
 
   const fetchTemporal = useCallback(async () => {
     if (!canFetch) return;
-    const sep = qs ? '&' : '?';
     setLoadingTemporal(true);
     try {
-      const r = await apiClient.get(`/analytics/compras/temporal${qs}${sep}granularidad=${granularidad}`);
+      const r = await apiClient.get(`/analytics/compras/temporal${appendQueryParams(qs, { granularidad })}`);
       setTemporal(r.data);
     } catch (e) { console.error(e); } finally { setLoadingTemporal(false); }
   }, [qs, granularidad, canFetch]);
@@ -107,10 +105,9 @@ export default function ComprasDataProvider({ children }) {
 
   const fetchTransacciones = useCallback(async (page = 1) => {
     if (!canFetch) return;
-    const sep = qs ? '&' : '?';
     setLoadingTransacciones(true);
     try {
-      const r = await apiClient.get(`/analytics/compras/transacciones${qs}${sep}page=${page}&limit=50`);
+      const r = await apiClient.get(`/analytics/compras/transacciones${appendQueryParams(qs, { page, limit: 50 })}`);
       setTransacciones(r.data);
     } catch (e) { console.error(e); } finally { setLoadingTransacciones(false); }
   }, [qs, canFetch]);

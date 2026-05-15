@@ -17,13 +17,14 @@ import RESULTADO_WIDGET_CATALOG, {
   RESULTADO_DEFAULT_WIDGETS,
   RESULTADO_DEFAULT_LAYOUTS,
 } from './resultado/widgets';
+import { buildExportData } from './analyticsUtils';
 
 const PANEL_ID = 'resultado';
 
 const ResultadoPanelInner = () => {
   const user = useAuthStore((s) => s.user);
   const activeCompany = useAuthStore((s) => s.activeCompany);
-  const { error, refetch, qs } = useResultadoData();
+  const { error, refetch, kpis, temporal, productos, vendedores, clientes, descuentos } = useResultadoData();
   const panelRef = useRef(null);
   const [showAddModal, setShowAddModal] = useState(false);
 
@@ -73,6 +74,16 @@ const ResultadoPanelInner = () => {
           <div className="flex items-center gap-2 shrink-0">
             <SavedViews />
             <ExportButton
+              data={buildExportData({
+                KPIs: kpis,
+                Temporal: temporal,
+                Productos: productos?.ranking,
+                Vendedores: vendedores?.ranking,
+                Clientes: clientes?.ranking,
+                DescuentosVendedor: descuentos?.por_vendedor,
+                DescuentosProducto: descuentos?.por_producto,
+                MayoresDescuentos: descuentos?.mayores_descuentos,
+              })}
               filename="resultado"
             />
           </div>

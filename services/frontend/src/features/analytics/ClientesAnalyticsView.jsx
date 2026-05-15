@@ -16,13 +16,14 @@ import CLIENTES_WIDGET_CATALOG, {
   CLIENTES_DEFAULT_WIDGETS,
   CLIENTES_DEFAULT_LAYOUTS,
 } from './clientes/widgets';
+import { buildExportData } from './analyticsUtils';
 
 const PANEL_ID = 'clientes';
 
 const ClientesPanelInner = () => {
   const user = useAuthStore((s) => s.user);
   const activeCompany = useAuthStore((s) => s.activeCompany);
-  const { error, refetch, qs } = useClientesData();
+  const { error, refetch, qs, kpis, ranking, temporal, detalle, comprobantes } = useClientesData();
   const panelRef = useRef(null);
   const [showAddModal, setShowAddModal] = useState(false);
 
@@ -74,6 +75,14 @@ const ClientesPanelInner = () => {
             <ExportButton
               label="Exportar ranking"
               endpoint={`/analytics/clientes/ranking${qs}`}
+              data={buildExportData({
+                KPIs: kpis,
+                Ranking: ranking?.clientes,
+                Temporal: temporal?.series,
+                DetalleProductos: detalle?.productos,
+                DetalleTemporal: detalle?.evolucion,
+                Comprobantes: comprobantes?.comprobantes,
+              })}
               filename="clientes_ranking"
             />
           </div>

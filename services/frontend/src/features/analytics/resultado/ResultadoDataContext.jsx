@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState } from 'rea
 import apiClient from '../../../api/client';
 import useAuthStore from '../../../store/authStore';
 import { useFilterStore } from '../../../store/filterStore';
-import { buildQueryParams } from '../analyticsUtils';
+import { appendQueryParams, buildQueryParams } from '../analyticsUtils';
 
 const ResultadoDataContext = createContext(null);
 
@@ -77,7 +77,7 @@ export default function ResultadoDataProvider({ children }) {
     try {
       const [kR, tR, pR] = await Promise.all([
         apiClient.get(`/analytics/resultado/kpis${qs}`),
-        apiClient.get(`/analytics/resultado/temporal${qs}&granularidad=${granularidad}`),
+        apiClient.get(`/analytics/resultado/temporal${appendQueryParams(qs, { granularidad })}`),
         apiClient.get(`/analytics/resultado/por-producto${qs}`),
       ]);
       setKpis(kR.data);

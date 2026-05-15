@@ -77,7 +77,9 @@ class GlobalFilters(BaseModel):
             "tipo_comprobante": self.tipo_comprobante,
             "condicion_venta": self.condicion_venta,
             "cod_cliente": self.cod_cliente,
+            "cod_cliente_text": [str(item) for item in self.cod_cliente or []],
             "cod_articulo": self.cod_articulo,
+            "cod_articulo_text": [str(item) for item in self.cod_articulo or []],
             "cod_deposito": self.cod_deposito,
         }
 
@@ -165,6 +167,11 @@ TEXT_FILTER_COLUMNS = {
         "cod_articulo": "cod_articulo",
         "cod_deposito": "cod_deposito",
     },
+    "compras": {
+        "cod_empresa": "cod_empresa",
+        "cod_deposito": "cod_deposito",
+        "anulada": "anulada",
+    },
     "presupuestos": {
         "cod_cliente": "cod_cliente",
         "cod_vendedor": "cod_vendedor",
@@ -187,5 +194,16 @@ def text_filter_clause(table_name: str, filters: GlobalFilters, date_col: str = 
 
     if "anulada" in columns and not filters.incluir_anuladas:
         clauses.append(f"{columns['anulada']} <> 'S'")
+
+    if table_name == "ventas":
+        if filters.cod_cliente:
+            clauses.append("cliente_id = ANY(:cod_cliente_text)")
+        if filters.cod_articulo:
+            clauses.append("producto_id = ANY(:cod_articulo_text)")
+    elif table_name == "compras":
+        if filters.cod_cliente:
+            clauses.append("proveedor_id = ANY(:cod_cliente_text)")
+        if filters.cod_articulo:
+            clauses.append("producto_id = ANY(:cod_articulo_text)")
 
     return " AND ".join(clauses)

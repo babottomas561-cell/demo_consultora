@@ -2,9 +2,12 @@ import { useState, useRef, useEffect } from 'react';
 import { Download, FileSpreadsheet, FileText, ImageIcon, ChevronDown } from 'lucide-react';
 import { cn } from '../../ui/utils';
 import { useExport } from '../../../hooks/useExport';
+import apiClient from '../../../api/client';
 
 const ExportButton = ({
   data,
+  endpoint,
+  label,
   filename = 'export',
   columns = [],
   panelRef,
@@ -12,8 +15,15 @@ const ExportButton = ({
   className,
 }) => {
   const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
   const menuRef = useRef(null);
-  const { exportCSV, exportXLSX, exportPDF, copyImage } = useExport({ data, filename, columns });
+  const getData = async () => {
+    if (!endpoint) return data;
+    const response = await apiClient.get(endpoint);
+    const sheetName = label || filename || 'Datos';
+    return { [sheetName]: response.data };
+  };
+  const { exportCSV, exportXLSX, exportPDF, copyImage } = useExport({ data, getData, filename, columns });
 
   useEffect(() => {
     if (!open) return;
@@ -37,6 +47,7 @@ const ExportButton = ({
     <div className="relative" ref={menuRef}>
       <button
         onClick={() => setOpen((o) => !o)}
+        disabled={loading}
         className={cn(
           'inline-flex items-center gap-1.5 rounded text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors',
           isIcon ? 'p-1.5' : 'h-8 px-2.5 text-xs font-medium border border-slate-200 bg-white shadow-sm rounded-lg text-slate-700',
@@ -45,7 +56,7 @@ const ExportButton = ({
         title="Exportar"
       >
         <Download size={isIcon ? 14 : 13} />
-        {!isIcon && <span>Exportar</span>}
+        {!isIcon && <span>{loading ? 'Exportando' : 'Exportar'}</span>}
         {!isIcon && <ChevronDown size={11} />}
       </button>
 
@@ -55,7 +66,15 @@ const ExportButton = ({
             <button
               key={label}
               className="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
-              onClick={() => { action(); setOpen(false); }}
+              onClick={async () => {
+                try {
+                  setLoading(true);
+                  await action();
+                } finally {
+                  setLoading(false);
+                  setOpen(false);
+                }
+              }}
             >
               <Icon size={14} className="text-slate-400" />
               {label}

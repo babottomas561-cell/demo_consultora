@@ -16,13 +16,14 @@ import CAJA_WIDGET_CATALOG, {
   CAJA_DEFAULT_WIDGETS,
   CAJA_DEFAULT_LAYOUTS,
 } from './caja/widgets';
+import { appendQueryParams, buildExportData } from './analyticsUtils';
 
 const PANEL_ID = 'caja';
 
 const CajaPanelInner = () => {
   const user = useAuthStore((s) => s.user);
   const activeCompany = useAuthStore((s) => s.activeCompany);
-  const { error, refetch, qs } = useCajaData();
+  const { error, refetch, qs, kpis, flujo, porTipo, movimientos } = useCajaData();
   const panelRef = useRef(null);
   const [showAddModal, setShowAddModal] = useState(false);
 
@@ -73,7 +74,13 @@ const CajaPanelInner = () => {
             <SavedViews />
             <ExportButton
               label="Exportar movimientos"
-              endpoint={`/analytics/caja/movimientos${qs}&limit=10000`}
+              endpoint={`/analytics/caja/movimientos${appendQueryParams(qs, { limit: 10000 })}`}
+              data={buildExportData({
+                KPIs: kpis,
+                Flujo: flujo?.series,
+                PorTipo: porTipo?.por_tipo,
+                Movimientos: movimientos?.movimientos,
+              })}
               filename="caja_movimientos"
             />
           </div>

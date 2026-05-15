@@ -61,6 +61,58 @@ export const buildQueryParams = (user, activeCompany, filtersOrDesde, hastaArg) 
   return qs ? `?${qs}` : '';
 };
 
+export const appendQueryParams = (queryString = '', params = {}) => {
+  const search = new URLSearchParams(queryString.startsWith('?') ? queryString.slice(1) : queryString);
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== null && value !== undefined && value !== '') {
+      search.set(key, value);
+    }
+  });
+
+  const qs = search.toString();
+  return qs ? `?${qs}` : '';
+};
+
+const flattenRecord = (value, prefix = '') => {
+  if (!value || typeof value !== 'object' || value instanceof Date || Array.isArray(value)) {
+    return { [prefix || 'valor']: value };
+  }
+
+  return Object.entries(value).reduce((acc, [key, item]) => {
+    const nextKey = prefix ? `${prefix}_${key}` : key;
+    if (item && typeof item === 'object' && !Array.isArray(item) && !(item instanceof Date)) {
+      Object.assign(acc, flattenRecord(item, nextKey));
+    } else {
+      acc[nextKey] = item;
+    }
+    return acc;
+  }, {});
+};
+
+const rowsFromValue = (value) => {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  if (Array.isArray(value.series)) return value.series;
+  if (Array.isArray(value.ranking)) return value.ranking;
+  if (Array.isArray(value.productos)) return value.productos;
+  if (Array.isArray(value.vendedores)) return value.vendedores;
+  if (Array.isArray(value.clientes)) return value.clientes;
+  if (Array.isArray(value.proveedores)) return value.proveedores;
+  if (Array.isArray(value.data)) return value.data;
+  if (Array.isArray(value.rows)) return value.rows;
+  if (typeof value === 'object') return [value];
+  return [{ valor: value }];
+};
+
+export const buildExportData = (sheets) => (
+  Object.entries(sheets).reduce((acc, [name, value]) => {
+    const rows = rowsFromValue(value).map((row) => flattenRecord(row));
+    if (rows.length > 0) acc[name] = rows;
+    return acc;
+  }, {})
+);
+
 // Legacy helper kept for backwards compatibility
 export const withCompanyParam = (user, activeCompany) => (
   user?.is_admin && activeCompany ? `?company_id=${activeCompany.id}` : ''
