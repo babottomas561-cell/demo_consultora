@@ -10,7 +10,7 @@ import psycopg2
 from psycopg2.extras import Json, execute_values
 from psycopg2 import sql
 
-from connectors.infomanager import INFOMANAGER_REPORT_CATALOG, InfomanagerConnector
+from connectors.infomanager import INFOMANAGER_REPORT_CATALOG, InfomanagerConnector, _as_int
 from worker_app import celery_app
 
 
@@ -774,6 +774,582 @@ def sync_company(self, company_id: int, connector_id: int):
         )
         conn.commit()
         raise self.retry(exc=exc, countdown=60)
+    finally:
+        cur.close()
+        conn.close()
+
+
+def _as_bool(value: Any, default: bool = False) -> bool:
+    if value in (None, ""):
+        return default
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().upper() not in ("0", "N", "FALSE", "NO")
+
+
+def _upsert_empresas(cur, rows: list[dict]) -> None:
+    for r in rows:
+        cur.execute(
+            """
+            INSERT INTO empresas_infomanager (
+              cod_empresa, nombre, nombre_1, cuit, direccion, email,
+              telefonos, categoria_iva, habilitada, cod_deposito_default
+            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            ON CONFLICT (cod_empresa) DO UPDATE SET
+              nombre=EXCLUDED.nombre, nombre_1=EXCLUDED.nombre_1,
+              cuit=EXCLUDED.cuit, direccion=EXCLUDED.direccion,
+              email=EXCLUDED.email, telefonos=EXCLUDED.telefonos,
+              categoria_iva=EXCLUDED.categoria_iva,
+              habilitada=EXCLUDED.habilitada,
+              cod_deposito_default=EXCLUDED.cod_deposito_default
+            """,
+            (
+                _as_int(r.get("cod_empresa")),
+                r.get("nombre") or "",
+                r.get("nombre_1"),
+                r.get("cuit"),
+                r.get("direccion"),
+                r.get("email"),
+                r.get("telefonos"),
+                r.get("categoria_iva"),
+                _as_bool(r.get("habilitada"), True),
+                _as_int(r.get("cod_deposito")) or None,
+            ),
+        )
+
+
+def _upsert_listas_precios(cur, rows: list[dict]) -> None:
+    for r in rows:
+        cur.execute(
+            """
+            INSERT INTO listas_precios (cod_lista, descripcion, aplica_a, cod_empresa, habilitado)
+            VALUES (%s,%s,%s,%s,%s)
+            ON CONFLICT (cod_lista) DO UPDATE SET
+              descripcion=EXCLUDED.descripcion, aplica_a=EXCLUDED.aplica_a,
+              habilitado=EXCLUDED.habilitado
+            """,
+            (
+                _as_int(r.get("cod_lista")),
+                r.get("descripcion") or "",
+                r.get("aplica_a"),
+                _as_int(r.get("cod_empresa")) or None,
+                _as_bool(r.get("habilitado"), True),
+            ),
+        )
+
+
+def _upsert_items_lista(cur, items: list[dict], cod_lista: int) -> int:
+    from psycopg2.extras import execute_values
+    values = []
+    for r in items:
+        values.append((
+            cod_lista,
+            _as_int(r.get("cod_articulo")),
+            r.get("art_descripcion"),
+            _as_float(r.get("art_precio_compra")),
+            _as_float(r.get("art_precio_venta")),
+            _as_float(r.get("art_iva")),
+            _as_float(r.get("lista_porcentaje")),
+            _as_float(r.get("lista_precio_sugerido")),
+            _as_float(r.get("lista_precio_base")),
+            _as_float(r.get("lista_descuento")),
+            _as_float(r.get("lista_precio_con_iva")),
+            _as_float(r.get("lista_precio_venta")),
+            _as_float(r.get("lista_cotizacion")),
+            r.get("fecha_actualiz"),
+        ))
+    if not values:
+        return 0
+    execute_values(
+        cur,
+        """
+        INSERT INTO items_listas_precios (
+          cod_lista, cod_articulo, art_descripcion,
+          art_precio_compra, art_precio_venta, art_iva,
+          lista_porcentaje, lista_precio_sugerido, lista_precio_base,
+          lista_descuento, lista_precio_con_iva, lista_precio_venta,
+          lista_cotizacion, fecha_actualizacion, synced_at
+        ) VALUES %s
+        ON CONFLICT (cod_lista, cod_articulo) DO UPDATE SET
+          art_descripcion=EXCLUDED.art_descripcion,
+          art_precio_compra=EXCLUDED.art_precio_compra,
+          art_precio_venta=EXCLUDED.art_precio_venta,
+          art_iva=EXCLUDED.art_iva,
+          lista_porcentaje=EXCLUDED.lista_porcentaje,
+          lista_precio_sugerido=EXCLUDED.lista_precio_sugerido,
+          lista_precio_base=EXCLUDED.lista_precio_base,
+          lista_descuento=EXCLUDED.lista_descuento,
+          lista_precio_con_iva=EXCLUDED.lista_precio_con_iva,
+          lista_precio_venta=EXCLUDED.lista_precio_venta,
+          lista_cotizacion=EXCLUDED.lista_cotizacion,
+          fecha_actualizacion=EXCLUDED.fecha_actualizacion,
+          synced_at=NOW()
+        """,
+        values,
+        template="(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())",
+        page_size=500,
+    )
+    return len(values)
+
+
+def _replace_snapshot(cur, table: str, rows: list[dict], insert_fn) -> int:
+    cur.execute(f"TRUNCATE TABLE {table}")
+    return insert_fn(cur, rows)
+
+
+def _insert_saldos_clientes(cur, rows: list[dict]) -> int:
+    from psycopg2.extras import execute_values
+    values = []
+    for r in rows:
+        values.append((
+            _as_int(r.get("cod_cliente")),
+            r.get("nombre"),
+            r.get("fecha"),
+            _as_int(r.get("dias_deuda")),
+            _as_float(r.get("tot_entrada")),
+            _as_float(r.get("tot_salida")),
+            _as_float(r.get("tot_saldo")),
+            _as_int(r.get("color")),
+            _as_float(r.get("prevision")),
+            r.get("cod_cuenta"),
+            r.get("cta_descripcion"),
+        ))
+    if not values:
+        return 0
+    execute_values(
+        cur,
+        """
+        INSERT INTO saldos_clientes (
+          cod_cliente, nombre, fecha, dias_deuda,
+          tot_entrada, tot_salida, tot_saldo, color,
+          prevision, cod_cuenta, cta_descripcion, snapshot_at
+        ) VALUES %s
+        """,
+        values,
+        template="(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())",
+        page_size=1000,
+    )
+    return len(values)
+
+
+def _insert_comprobantes_pendientes(cur, rows: list[dict]) -> int:
+    from psycopg2.extras import execute_values
+    values = []
+    for r in rows:
+        values.append((
+            _as_int(r.get("id")),
+            r.get("tipo_comprobante"),
+            _as_int(r.get("cod_cliente")) or None,
+            r.get("nombre"),
+            _as_int(r.get("cod_empresa")) or None,
+            _as_int(r.get("cod_vendedor")) or None,
+            str(r.get("punto_de_venta") or ""),
+            str(r.get("numero") or ""),
+            _as_float(r.get("importe_factura")),
+            _as_float(r.get("importe_pagado")),
+            _as_float(r.get("saldo")),
+            r.get("fecha_factura"),
+            _as_int(r.get("dias_deuda")),
+            _as_int(r.get("color")),
+            r.get("moneda_fa"),
+            r.get("detalle"),
+        ))
+    if not values:
+        return 0
+    execute_values(
+        cur,
+        """
+        INSERT INTO comprobantes_pendientes_clientes (
+          comprobante_id, tipo_comprobante, cod_cliente, nombre,
+          cod_empresa, cod_vendedor, punto_de_venta, numero,
+          importe_factura, importe_pagado, saldo,
+          fecha_factura, dias_deuda, color, moneda_fa, detalle, snapshot_at
+        ) VALUES %s
+        """,
+        values,
+        template="(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())",
+        page_size=500,
+    )
+    return len(values)
+
+
+def _insert_stock_disponible(cur, rows: list[dict]) -> int:
+    from psycopg2.extras import execute_values
+    values = []
+    for r in rows:
+        values.append((
+            _as_int(r.get("cod_articulo")),
+            r.get("descripcion"),
+            _as_int(r.get("cod_deposito")) or None,
+            _as_float(r.get("stock_entradas")),
+            _as_float(r.get("stock_salidas")),
+            _as_float(r.get("compras")),
+            _as_float(r.get("ventas")),
+            _as_float(r.get("existencia")),
+            _as_float(r.get("existencia_anterior")),
+            _as_float(r.get("precio_compra")),
+            _as_float(r.get("precio_venta")),
+            _as_float(r.get("pto_de_reposicion")),
+            _as_int(r.get("cod_rubro")) or None,
+            r.get("rubro"),
+            _as_int(r.get("cod_subrubro")) or None,
+            r.get("subrubro"),
+            r.get("proveedor"),
+            _as_int(r.get("habilitado")),
+        ))
+    if not values:
+        return 0
+    execute_values(
+        cur,
+        """
+        INSERT INTO stock_disponible (
+          cod_articulo, descripcion, cod_deposito,
+          stock_entradas, stock_salidas, compras, ventas,
+          existencia, existencia_anterior,
+          precio_compra, precio_venta, pto_de_reposicion,
+          cod_rubro, rubro, cod_subrubro, subrubro,
+          proveedor, habilitado, snapshot_at
+        ) VALUES %s
+        """,
+        values,
+        template="(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())",
+        page_size=500,
+    )
+    return len(values)
+
+
+def _upsert_facturas_venta(cur, rows: list[dict]) -> int:
+    from psycopg2.extras import execute_values
+    values = []
+    for r in rows:
+        values.append((
+            _as_int(r.get("fa_id")),
+            r.get("tipo_comprobante"),
+            r.get("tipo_factura"),
+            _as_int(r.get("fa_cod_empresa")) or None,
+            r.get("fa_fecha"),
+            r.get("fa_cc"),
+            _as_int(r.get("fa_pto_vta")) or None,
+            r.get("fa_nro"),
+            r.get("fa_moneda"),
+            _as_float(r.get("fa_cotiz")),
+            _as_int(r.get("cod_cliente")) or None,
+            _as_int(r.get("cod_vendedor")) or None,
+            _as_float(r.get("fa_total")),
+            _as_float(r.get("fa_total_moneda_local")),
+            r.get("primer_fec_vto"),
+            r.get("ult_fec_vto"),
+            _as_int(r.get("vto_cant_cuotas")),
+            _as_float(r.get("vto_importe")),
+            _as_float(r.get("rc_imp_pagado")),
+            _as_float(r.get("saldo_fa")),
+            r.get("ultimo_recibo"),
+            str(r.get("remitos_asociados") or ""),
+        ))
+    if not values:
+        return 0
+    execute_values(
+        cur,
+        """
+        INSERT INTO facturas_venta (
+          fa_id, tipo_comprobante, tipo_factura, fa_cod_empresa,
+          fa_fecha, fa_cc, fa_pto_vta, fa_nro, fa_moneda, fa_cotiz,
+          cod_cliente, cod_vendedor, fa_total, fa_total_moneda_local,
+          primer_fec_vto, ult_fec_vto, vto_cant_cuotas, vto_importe,
+          rc_imp_pagado, saldo_fa, ultimo_recibo, remitos_asociados, synced_at
+        ) VALUES %s
+        ON CONFLICT (fa_id) DO UPDATE SET
+          rc_imp_pagado=EXCLUDED.rc_imp_pagado,
+          saldo_fa=EXCLUDED.saldo_fa,
+          synced_at=NOW()
+        """,
+        values,
+        template="(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())",
+        page_size=500,
+    )
+    return len(values)
+
+
+def _upsert_facturas_compra(cur, rows: list[dict]) -> int:
+    from psycopg2.extras import execute_values
+    values = []
+    for r in rows:
+        values.append((
+            _as_int(r.get("id")),
+            r.get("fecha"),
+            r.get("fecha_comprobante"),
+            r.get("tipo_comprobante"),
+            r.get("tipo_factura"),
+            r.get("numero"),
+            _as_int(r.get("punto_de_venta")) or None,
+            r.get("moneda"),
+            _as_float(r.get("cotizacion")),
+            _as_float(r.get("importe_total")),
+            _as_float(r.get("importe_iva")),
+            _as_int(r.get("cod_proveedor")) or None,
+            r.get("proveedor"),
+            _as_int(r.get("cod_empresa")) or None,
+            r.get("tag"),
+            r.get("anulada", "N") == "S",
+            _as_int(r.get("cod_deposito")) or None,
+            str(r.get("nro_cai") or ""),
+            _as_int(r.get("id_orden_de_compra")) or None,
+        ))
+    if not values:
+        return 0
+    execute_values(
+        cur,
+        """
+        INSERT INTO facturas_compra (
+          id, fecha, fecha_comprobante, tipo_comprobante, tipo_factura,
+          numero, punto_de_venta, moneda, cotizacion, importe_total,
+          importe_iva, cod_proveedor, proveedor, cod_empresa, tag,
+          anulada, cod_deposito, nro_cai, id_orden_de_compra, synced_at
+        ) VALUES %s
+        ON CONFLICT (id) DO UPDATE SET
+          importe_total=EXCLUDED.importe_total, synced_at=NOW()
+        """,
+        values,
+        template="(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())",
+        page_size=500,
+    )
+    return len(values)
+
+
+def _upsert_facturas_con_recibos(cur, rows: list[dict]) -> int:
+    from psycopg2.extras import execute_values
+    values = []
+    for r in rows:
+        fa_id = _as_int(r.get("fa_id"))
+        rc_id = _as_int(r.get("rc_id")) or None
+        if not fa_id:
+            continue
+        values.append((
+            fa_id,
+            r.get("tipo_comp"),
+            _as_int(r.get("fa_cod_empresa")) or None,
+            r.get("fa_fecha"),
+            r.get("fa_cc"),
+            _as_int(r.get("fa_pto_vta")) or None,
+            r.get("fa_nro"),
+            r.get("fa_moneda"),
+            _as_float(r.get("fa_cotiz")),
+            _as_int(r.get("cod_cliente")) or None,
+            _as_float(r.get("fa_total")),
+            _as_float(r.get("fa_total_moneda_local")),
+            rc_id,
+            r.get("rc_fecha"),
+            r.get("rc_nro"),
+            r.get("rc_moneda"),
+            _as_float(r.get("rc_cotiz")),
+            _as_float(r.get("imp_pag_moneda_local")),
+            r.get("cond_pago"),
+            _as_float(r.get("importe")),
+            _as_int(r.get("cod_banco")) or None,
+            r.get("cheque_numero"),
+            r.get("cheque_fec_pago"),
+            _as_float(r.get("importe_retencion")),
+            r.get("primer_fec_vto"),
+            r.get("ult_fec_vto"),
+        ))
+    if not values:
+        return 0
+    execute_values(
+        cur,
+        """
+        INSERT INTO facturas_con_recibos (
+          fa_id, tipo_comp, fa_cod_empresa, fa_fecha, fa_cc,
+          fa_pto_vta, fa_nro, fa_moneda, fa_cotiz, cod_cliente,
+          fa_total, fa_total_moneda_local, rc_id, rc_fecha, rc_nro,
+          rc_moneda, rc_cotiz, imp_pag_moneda_local, cond_pago, importe,
+          cod_banco, cheque_numero, cheque_fec_pago, importe_retencion,
+          primer_fec_vto, ult_fec_vto, synced_at
+        ) VALUES %s
+        ON CONFLICT (fa_id, rc_id) DO UPDATE SET
+          imp_pag_moneda_local=EXCLUDED.imp_pag_moneda_local,
+          synced_at=NOW()
+        """,
+        values,
+        template="(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())",
+        page_size=500,
+    )
+    return len(values)
+
+
+@celery_app.task(name="tasks.sync_infomanager.sync_incremental")
+def sync_incremental(tenant_schema: str, erp_config: dict) -> dict:
+    """Fast sync every 3 min: last 2h of invoices + full snapshots."""
+    import time
+    t0 = time.time()
+    conn = psycopg2.connect(DATABASE_URL)
+    cur = conn.cursor()
+    counts: dict[str, int] = {}
+    try:
+        client_id = erp_config["client_id"]
+        client_secret = erp_config["client_secret"]
+        base_url = erp_config.get("base_url")
+        im = InfomanagerConnector(client_id, client_secret, base_url)
+        im.authenticate()
+
+        _set_tenant_search_path(cur, tenant_schema)
+
+        desde_inc = date.today() - timedelta(days=2)
+        hasta_inc = date.today()
+
+        # Catalogs (always refresh)
+        _upsert_empresas(cur, im.obtener_empresas())
+        counts["empresas"] = 1
+
+        for dep in im.obtener_depositos():
+            cur.execute(
+                """
+                INSERT INTO depositos (cod_deposito, nombre, habilitado)
+                VALUES (%s,%s,%s)
+                ON CONFLICT (cod_deposito) DO UPDATE SET nombre=EXCLUDED.nombre
+                """,
+                (
+                    _as_int(dep.get("cod_deposito")),
+                    dep.get("descripcion") or dep.get("nombre") or "",
+                    True,
+                ),
+            )
+        counts["depositos"] = 1
+
+        for v in im.obtener_vendedores():
+            cur.execute(
+                """
+                INSERT INTO vendedores (cod_vendedor, nombre, habilitado)
+                VALUES (%s,%s,%s)
+                ON CONFLICT (cod_vendedor) DO UPDATE SET nombre=EXCLUDED.nombre
+                """,
+                (_as_int(v.get("cod_vendedor")), v.get("nombre") or "", v.get("inactivo", "N") != "S"),
+            )
+        counts["vendedores"] = 1
+
+        _upsert_listas_precios(cur, im.obtener_listas_precios())
+        counts["listas_precios"] = 1
+
+        # Incremental invoices
+        fv = im.obtener_facturas_venta(desde_inc, hasta_inc)
+        counts["facturas_venta"] = _upsert_facturas_venta(cur, fv)
+
+        fc = im.obtener_facturas_compra(desde_inc, hasta_inc)
+        counts["facturas_compra"] = _upsert_facturas_compra(cur, fc)
+
+        fcr = im.obtener_facturas_con_recibos(desde_inc, hasta_inc)
+        counts["facturas_con_recibos"] = _upsert_facturas_con_recibos(cur, fcr)
+
+        # Full snapshots — truncate + insert
+        saldos = im.obtener_saldos_clientes()
+        cur.execute("TRUNCATE TABLE saldos_clientes")
+        counts["saldos_clientes"] = _insert_saldos_clientes(cur, saldos)
+
+        pendientes = im.obtener_comprobantes_pendientes()
+        cur.execute("TRUNCATE TABLE comprobantes_pendientes_clientes")
+        counts["comprobantes_pendientes_clientes"] = _insert_comprobantes_pendientes(cur, pendientes)
+
+        stock = im.obtener_stock_disponible()
+        cur.execute("TRUNCATE TABLE stock_disponible")
+        counts["stock_disponible"] = _insert_stock_disponible(cur, stock)
+
+        conn.commit()
+        return {
+            "tenant_schema": tenant_schema,
+            "status": "ok",
+            "tablas": counts,
+            "duracion_segundos": round(time.time() - t0, 2),
+        }
+    except Exception as exc:
+        conn.rollback()
+        raise
+    finally:
+        cur.close()
+        conn.close()
+
+
+@celery_app.task(name="tasks.sync_infomanager.sync_completo")
+def sync_completo(tenant_schema: str, erp_config: dict) -> dict:
+    """Full sync once a day: 90 days + price lists + accounting."""
+    import time
+    t0 = time.time()
+    conn = psycopg2.connect(DATABASE_URL)
+    cur = conn.cursor()
+    counts: dict[str, int] = {}
+    try:
+        client_id = erp_config["client_id"]
+        client_secret = erp_config["client_secret"]
+        base_url = erp_config.get("base_url")
+        im = InfomanagerConnector(client_id, client_secret, base_url)
+        im.authenticate()
+
+        _set_tenant_search_path(cur, tenant_schema)
+
+        desde = date.today() - timedelta(days=90)
+        hasta = date.today()
+
+        _upsert_empresas(cur, im.obtener_empresas())
+
+        for dep in im.obtener_depositos():
+            cur.execute(
+                """
+                INSERT INTO depositos (cod_deposito, nombre, habilitado)
+                VALUES (%s,%s,%s)
+                ON CONFLICT (cod_deposito) DO UPDATE SET nombre=EXCLUDED.nombre
+                """,
+                (
+                    _as_int(dep.get("cod_deposito")),
+                    dep.get("descripcion") or dep.get("nombre") or "",
+                    True,
+                ),
+            )
+
+        listas = im.obtener_listas_precios()
+        _upsert_listas_precios(cur, listas)
+        counts["listas_precios"] = len(listas)
+
+        # Items for every enabled price list
+        items_count = 0
+        for lista in listas:
+            if not _as_bool(lista.get("habilitado"), True):
+                continue
+            cod_lista = _as_int(lista.get("cod_lista"))
+            if not cod_lista:
+                continue
+            items = im.obtener_items_lista_precios(cod_lista, desde, hasta)
+            items_count += _upsert_items_lista(cur, items, cod_lista)
+        counts["items_listas_precios"] = items_count
+
+        fv = im.obtener_facturas_venta(desde, hasta)
+        counts["facturas_venta"] = _upsert_facturas_venta(cur, fv)
+
+        fc = im.obtener_facturas_compra(desde, hasta)
+        counts["facturas_compra"] = _upsert_facturas_compra(cur, fc)
+
+        fcr = im.obtener_facturas_con_recibos(desde, hasta)
+        counts["facturas_con_recibos"] = _upsert_facturas_con_recibos(cur, fcr)
+
+        saldos = im.obtener_saldos_clientes()
+        cur.execute("TRUNCATE TABLE saldos_clientes")
+        counts["saldos_clientes"] = _insert_saldos_clientes(cur, saldos)
+
+        pendientes = im.obtener_comprobantes_pendientes()
+        cur.execute("TRUNCATE TABLE comprobantes_pendientes_clientes")
+        counts["comprobantes_pendientes_clientes"] = _insert_comprobantes_pendientes(cur, pendientes)
+
+        stock = im.obtener_stock_disponible()
+        cur.execute("TRUNCATE TABLE stock_disponible")
+        counts["stock_disponible"] = _insert_stock_disponible(cur, stock)
+
+        conn.commit()
+        return {
+            "tenant_schema": tenant_schema,
+            "status": "ok",
+            "tablas": counts,
+            "duracion_segundos": round(time.time() - t0, 2),
+        }
+    except Exception as exc:
+        conn.rollback()
+        raise
     finally:
         cur.close()
         conn.close()

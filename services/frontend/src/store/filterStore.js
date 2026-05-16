@@ -38,6 +38,7 @@ const arrayFilters = [
   'cod_cliente',
   'cod_articulo',
   'cod_deposito',
+  'cod_lista_precios',
 ];
 
 const emptyAdvancedFilters = {
@@ -53,6 +54,7 @@ const emptyAdvancedFilters = {
   cod_cliente: [],
   cod_articulo: [],
   cod_deposito: [],
+  cod_lista_precios: [],
   incluir_anuladas: false,
 };
 
@@ -90,6 +92,7 @@ const pickFilterState = (state) => ({
   cod_cliente: state.cod_cliente,
   cod_articulo: state.cod_articulo,
   cod_deposito: state.cod_deposito,
+  cod_lista_precios: state.cod_lista_precios,
   incluir_anuladas: state.incluir_anuladas,
 });
 
@@ -180,7 +183,7 @@ export const useFilterStore = create(
     }),
     {
       name: 'bi-filters',
-      version: 3,
+      version: 4,
       partialize: (state) => ({
         ...pickFilterState(state),
         savedViews: state.savedViews,

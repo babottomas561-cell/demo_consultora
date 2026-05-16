@@ -1,5 +1,7 @@
-import { useState } from 'react';
-import { Calendar } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Calendar, ChevronDown } from 'lucide-react';
+import apiClient from '../api/client';
+import useAuthStore from '../store/authStore';
 import { useFilterStore } from '../store/filterStore';
 
 const PERIODOS = [
@@ -17,10 +19,53 @@ const formatDateDisplay = (dateStr) => {
   return `${d}/${m}/${y}`;
 };
 
+function InlineSelect({ label, value, onChange, options, valueKey, labelKey }) {
+  return (
+    <div className="relative flex items-center">
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value === '' ? null : e.target.value)}
+        className="appearance-none rounded-md border border-slate-200 bg-white py-1.5 pl-2.5 pr-7 text-[13px] font-medium text-slate-600 shadow-sm transition-colors hover:border-slate-300 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500"
+      >
+        <option value="">{label}</option>
+        {options.map((opt) => (
+          <option key={opt[valueKey]} value={opt[valueKey]}>
+            {opt[labelKey]}
+          </option>
+        ))}
+      </select>
+      <ChevronDown size={12} className="pointer-events-none absolute right-2 text-slate-400" />
+    </div>
+  );
+}
+
 const FilterBar = () => {
-  const { periodo, desde, hasta, setPeriodo, setCustomRange } = useFilterStore();
+  const { periodo, desde, hasta, setPeriodo, setCustomRange, setFilter, cod_empresa, cod_deposito, cod_lista_precios } = useFilterStore();
+  const user = useAuthStore((s) => s.user);
+  const activeCompany = useAuthStore((s) => s.activeCompany);
+
   const [customDesde, setCustomDesde] = useState(desde);
   const [customHasta, setCustomHasta] = useState(hasta);
+
+  const [empresas, setEmpresas] = useState([]);
+  const [depositos, setDepositos] = useState([]);
+  const [listas, setListas] = useState([]);
+
+  const canFetch = Boolean(user?.company_id || (user?.is_admin && activeCompany));
+
+  useEffect(() => {
+    if (!canFetch) return;
+    const companyParam = user?.is_admin && activeCompany ? `?company_id=${activeCompany.id}` : '';
+    Promise.all([
+      apiClient.get(`/analytics/empresas${companyParam}`),
+      apiClient.get(`/analytics/depositos${companyParam}`),
+      apiClient.get(`/analytics/listas-precios${companyParam}`),
+    ]).then(([eRes, dRes, lRes]) => {
+      setEmpresas(eRes.data?.empresas ?? []);
+      setDepositos(dRes.data?.depositos ?? []);
+      setListas(lRes.data?.listas ?? []);
+    }).catch(() => {});
+  }, [canFetch, user?.is_admin, activeCompany?.id]);
 
   const handlePeriodoClick = (key) => {
     if (key === 'custom') {
@@ -38,9 +83,13 @@ const FilterBar = () => {
     }
   };
 
+  const selectedEmpresa = cod_empresa?.[0] ?? '';
+  const selectedDeposito = cod_deposito?.[0] ?? '';
+  const selectedLista = cod_lista_precios?.[0] ?? '';
+
   return (
     <div className="sticky top-0 z-10 -mx-8 -mt-8 mb-6 border-b border-slate-200 bg-white px-6 shadow-sm">
-      <div className="flex items-center justify-between py-3">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-3">
         <div className="flex flex-wrap items-center gap-1.5">
           {PERIODOS.map(({ key, label }) => (
             <button
@@ -56,9 +105,42 @@ const FilterBar = () => {
             </button>
           ))}
         </div>
-        <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
-          <Calendar size={14} className="text-slate-400" />
-          <span>{formatDateDisplay(desde)} — {formatDateDisplay(hasta)}</span>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {empresas.length > 0 && (
+            <InlineSelect
+              label="Todas las empresas"
+              value={selectedEmpresa}
+              onChange={(v) => setFilter('cod_empresa', v ? [v] : [])}
+              options={empresas}
+              valueKey="cod_empresa"
+              labelKey="nombre"
+            />
+          )}
+          {depositos.length > 0 && (
+            <InlineSelect
+              label="Todos los depósitos"
+              value={selectedDeposito}
+              onChange={(v) => setFilter('cod_deposito', v ? [v] : [])}
+              options={depositos}
+              valueKey="cod_deposito"
+              labelKey="nombre"
+            />
+          )}
+          {listas.length > 0 && (
+            <InlineSelect
+              label="Todas las listas"
+              value={selectedLista}
+              onChange={(v) => setFilter('cod_lista_precios', v ? [v] : [])}
+              options={listas}
+              valueKey="cod_lista"
+              labelKey="descripcion"
+            />
+          )}
+          <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
+            <Calendar size={14} className="text-slate-400" />
+            <span>{formatDateDisplay(desde)} — {formatDateDisplay(hasta)}</span>
+          </div>
         </div>
       </div>
 

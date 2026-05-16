@@ -1,13 +1,13 @@
 import {
   TrendingUp, TrendingDown, DollarSign, RefreshCw,
   ArrowUpCircle, ArrowDownCircle, Activity, BarChart2,
-  PieChart, List, Database,
+  PieChart, List, Receipt,
 } from 'lucide-react';
 import { createCajaKpiWidget } from './CajaKpiWidget';
 import FlujoWidget     from './FlujoWidget';
 import PorTipoWidget   from './PorTipoWidget';
 import MovimientosWidget from './MovimientosWidget';
-import { createInfomanagerReportsWidget, INFOMANAGER_REPORT_GROUPS } from '../../components/InfomanagerReportsWidget';
+import RecibosDelPeriodoWidget from '../../infomanager/widgets/RecibosDelPeriodoWidget';
 
 const CAJA_WIDGET_CATALOG = [
   // ── KPIs ──
@@ -20,10 +20,10 @@ const CAJA_WIDGET_CATALOG = [
   { type: 'caja-kpi-mayor-egreso',  name: 'Mayor egreso',        description: 'Egreso individual más alto del período',    icon: TrendingDown,    component: createCajaKpiWidget('caja-kpi-mayor-egreso'),  defaultSize: { w: 3, h: 2 }, category: 'kpi' },
   { type: 'caja-kpi-ratio',         name: 'Ratio cobro/pago',    description: 'Relación entre cobros y pagos del período', icon: Activity,        component: createCajaKpiWidget('caja-kpi-ratio'),         defaultSize: { w: 3, h: 2 }, category: 'kpi' },
   // ── Charts & Tables ──
-  { type: 'caja-flujo',        name: 'Flujo de caja',       description: 'Ingresos vs. egresos mensuales y saldo acumulado', icon: BarChart2, component: FlujoWidget,       defaultSize: { w: 12, h: 9  }, category: 'chart' },
-  { type: 'caja-por-tipo',     name: 'Por tipo',            description: 'Distribución de ingresos y egresos por tipo de movimiento', icon: PieChart, component: PorTipoWidget,  defaultSize: { w: 8,  h: 9  }, category: 'chart' },
-  { type: 'caja-movimientos',  name: 'Movimientos',         description: 'Listado paginado de movimientos de caja',        icon: List,     component: MovimientosWidget, defaultSize: { w: 12, h: 10 }, category: 'table' },
-  { type: 'caja-infomanager-reportes', name: 'Informes InfoManager', description: 'Reportes originales de caja exportables a Excel', icon: Database, component: createInfomanagerReportsWidget(INFOMANAGER_REPORT_GROUPS.caja), defaultSize: { w: 12, h: 7 }, category: 'table' },
+  { type: 'caja-flujo',       name: 'Flujo de caja',    description: 'Ingresos vs. egresos mensuales y saldo acumulado',            icon: BarChart2, component: FlujoWidget,            defaultSize: { w: 12, h: 9  }, category: 'chart' },
+  { type: 'caja-por-tipo',    name: 'Por tipo',         description: 'Distribución de ingresos y egresos por tipo de movimiento',   icon: PieChart,  component: PorTipoWidget,           defaultSize: { w: 8,  h: 9  }, category: 'chart' },
+  { type: 'caja-movimientos', name: 'Movimientos',      description: 'Listado paginado de movimientos de caja',                     icon: List,      component: MovimientosWidget,       defaultSize: { w: 12, h: 10 }, category: 'table' },
+  { type: 'caja-recibos-im',  name: 'Recibos (IM)',     description: 'Recibos sincronizados desde InfoManager con total cobrado',   icon: Receipt,   component: RecibosDelPeriodoWidget, defaultSize: { w: 12, h: 7  }, category: 'table' },
 ];
 
 export default CAJA_WIDGET_CATALOG;
@@ -44,7 +44,7 @@ export const CAJA_DEFAULT_WIDGETS = [
   { id: 'cj-9',  type: 'caja-flujo'             },
   { id: 'cj-10', type: 'caja-por-tipo'          },
   { id: 'cj-11', type: 'caja-movimientos'       },
-  { id: 'cj-12', type: 'caja-infomanager-reportes' },
+  { id: 'cj-12', type: 'caja-recibos-im'        },
 ];
 
 export const CAJA_DEFAULT_LAYOUTS = {
