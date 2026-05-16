@@ -1,5 +1,5 @@
 import { Outlet, NavLink, useNavigate, Link } from 'react-router-dom';
-import { LayoutDashboard, UploadCloud, Building2, LogOut, FileSpreadsheet, RefreshCw, TrendingUp, PackageSearch, Landmark, Users, Truck, Wallet, Package, UserCheck } from 'lucide-react';
+import { LayoutDashboard, UploadCloud, Building2, LogOut, FileSpreadsheet, RefreshCw, TrendingUp, PackageSearch, Landmark, Users, Truck, Wallet, Package, UserCheck, ClipboardList } from 'lucide-react';
 import useAuthStore from '../store/authStore';
 
 const MainLayout = () => {
@@ -20,6 +20,7 @@ const MainLayout = () => {
     { to: '/analytics/clientes', label: 'Clientes / Cta Cte', icon: Users },
     { to: '/analytics/proveedores', label: 'Proveedores', icon: Truck },
     { to: '/analytics/caja', label: 'Caja', icon: Wallet },
+    { to: '/reportes', label: 'Reportes', icon: ClipboardList },
   ];
 
   return (

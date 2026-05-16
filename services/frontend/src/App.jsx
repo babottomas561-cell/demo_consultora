@@ -7,6 +7,7 @@ import CompanyListView from './views/CompanyListView';
 import CompanyCreateView from './views/CompanyCreateView';
 import CompanyUsersView from './views/CompanyUsersView';
 import SyncExcelView from './views/SyncExcelView';
+import ReportesPage from './features/reportes/ReportesPage';
 import VentasAnalyticsView from './features/analytics/VentasAnalyticsView';
 import ComprasAnalyticsView from './features/analytics/ComprasAnalyticsView';
 import ResultadoAnalyticsView from './features/analytics/ResultadoAnalyticsView';
@@ -36,6 +37,7 @@ function App() {
           <Route path="/analytics/clientes" element={<ClientesAnalyticsView />} />
           <Route path="/analytics/proveedores" element={<ProveedoresAnalyticsView />} />
           <Route path="/analytics/caja" element={<CajaAnalyticsView />} />
+          <Route path="/reportes" element={<ReportesPage />} />
           
           {/* Admin Routes */}
           <Route element={<AdminRoute />}>

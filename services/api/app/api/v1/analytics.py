@@ -4502,3 +4502,370 @@ async def caja_movimientos(
             for r in rows
         ],
     }
+
+
+# ══════════════════════════════════════════════════════════════════
+# REPORTES — Widgets de cuentas corrientes, cobranza y proveedores
+# Fuente: tablas locales sincronizadas desde Infomanager (o Excel).
+# Funcionan sin conector activo si los datos ya fueron sincronizados.
+# ══════════════════════════════════════════════════════════════════
+
+async def _set_path(db, current_user, company_id):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+    return tenant_schema
+
+
+@router.get("/reportes/saldos-clientes")
+async def reportes_saldos_clientes(
+    limit: int = 100,
+    company_id: int = None,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await _set_path(db, current_user, company_id)
+
+    rows = (await db.execute(text("""
+        SELECT
+            cliente_id,
+            MAX(cliente_nombre)                                 AS nombre,
+            COALESCE(SUM(GREATEST(saldo::float, 0)), 0)         AS saldo_total,
+            COALESCE(SUM(GREATEST(importe_total::float, 0)), 0) AS facturado_total,
+            COALESCE(SUM(GREATEST(importe_pagado::float, 0)), 0) AS cobrado_total,
+            COUNT(*) FILTER (WHERE saldo::float > 0.01)         AS facturas_pendientes,
+            MAX(fecha)                                          AS ultimo_mov
+        FROM comprobantes_clientes
+        WHERE tipo IN ('FA', 'ND', 'RC', 'factura', 'saldo')
+        GROUP BY cliente_id
+        HAVING COALESCE(SUM(saldo::float), 0) > 0.01
+        ORDER BY SUM(saldo::float) DESC
+        LIMIT :limit
+    """), {"limit": limit})).mappings().all()
+
+    total_deuda = sum(float(r["saldo_total"] or 0) for r in rows)
+    total_clientes = len(rows)
+
+    return {
+        "kpi": {
+            "total_deuda": round(total_deuda, 2),
+            "clientes_con_deuda": total_clientes,
+        },
+        "filas": [
+            {
+                "cliente_id": r["cliente_id"],
+                "nombre": r["nombre"] or r["cliente_id"],
+                "saldo_total": round(float(r["saldo_total"] or 0), 2),
+                "facturado_total": round(float(r["facturado_total"] or 0), 2),
+                "cobrado_total": round(float(r["cobrado_total"] or 0), 2),
+                "facturas_pendientes": int(r["facturas_pendientes"] or 0),
+                "ultimo_mov": str(r["ultimo_mov"])[:10] if r["ultimo_mov"] else None,
+            }
+            for r in rows
+        ],
+    }
+
+
+@router.get("/reportes/comprob-pendientes")
+async def reportes_comprob_pendientes(
+    limit: int = 200,
+    company_id: int = None,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await _set_path(db, current_user, company_id)
+
+    rows = (await db.execute(text("""
+        SELECT
+            comprobante_id,
+            cliente_id,
+            cliente_nombre,
+            tipo,
+            numero,
+            punto_de_venta,
+            fecha,
+            fecha_vencimiento,
+            importe_total::float    AS importe_total,
+            importe_pagado::float   AS importe_pagado,
+            saldo::float            AS saldo,
+            CASE
+                WHEN fecha_vencimiento IS NOT NULL AND fecha_vencimiento::date < CURRENT_DATE
+                THEN (CURRENT_DATE - fecha_vencimiento::date)
+                ELSE 0
+            END                     AS dias_mora
+        FROM comprobantes_clientes
+        WHERE saldo::float > 0.01 AND tipo IN ('FA', 'ND', 'factura')
+        ORDER BY fecha_vencimiento ASC NULLS LAST, saldo::float DESC
+        LIMIT :limit
+    """), {"limit": limit})).mappings().all()
+
+    total_pendiente = sum(float(r["saldo"] or 0) for r in rows)
+    vencidas = sum(1 for r in rows if int(r["dias_mora"] or 0) > 0)
+
+    return {
+        "kpi": {
+            "total_pendiente": round(total_pendiente, 2),
+            "cantidad_facturas": len(rows),
+            "facturas_vencidas": vencidas,
+        },
+        "filas": [
+            {
+                "comprobante_id": r["comprobante_id"],
+                "cliente_id": r["cliente_id"],
+                "cliente_nombre": r["cliente_nombre"],
+                "tipo": r["tipo"],
+                "numero": r["numero"],
+                "fecha": str(r["fecha"])[:10] if r["fecha"] else None,
+                "fecha_vencimiento": str(r["fecha_vencimiento"])[:10] if r["fecha_vencimiento"] else None,
+                "importe_total": round(float(r["importe_total"] or 0), 2),
+                "importe_pagado": round(float(r["importe_pagado"] or 0), 2),
+                "saldo": round(float(r["saldo"] or 0), 2),
+                "dias_mora": int(r["dias_mora"] or 0),
+            }
+            for r in rows
+        ],
+    }
+
+
+@router.get("/reportes/disponible-credito")
+async def reportes_disponible_credito(
+    limit: int = 100,
+    company_id: int = None,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await _set_path(db, current_user, company_id)
+
+    rows = (await db.execute(text("""
+        SELECT
+            cc.cliente_id,
+            MAX(cc.cliente_nombre)                               AS nombre,
+            COALESCE(SUM(cc.importe_total::float), 0)           AS facturado_total,
+            COALESCE(SUM(cc.importe_pagado::float), 0)          AS cobrado_total,
+            COALESCE(SUM(GREATEST(cc.saldo::float, 0)), 0)      AS saldo_pendiente,
+            COUNT(*) FILTER (WHERE cc.saldo::float > 0.01)      AS facturas_abiertas
+        FROM comprobantes_clientes cc
+        WHERE cc.tipo IN ('FA', 'ND', 'factura')
+        GROUP BY cc.cliente_id
+        ORDER BY SUM(GREATEST(cc.saldo::float, 0)) DESC
+        LIMIT :limit
+    """), {"limit": limit})).mappings().all()
+
+    clientes_con_saldo = sum(1 for r in rows if float(r["saldo_pendiente"] or 0) > 0)
+
+    return {
+        "kpi": {
+            "clientes_con_saldo": clientes_con_saldo,
+            "total_clientes": len(rows),
+            "nota": "Limite de credito no disponible en datos locales; se muestra saldo actual.",
+        },
+        "filas": [
+            {
+                "cliente_id": r["cliente_id"],
+                "nombre": r["nombre"] or r["cliente_id"],
+                "facturado_total": round(float(r["facturado_total"] or 0), 2),
+                "cobrado_total": round(float(r["cobrado_total"] or 0), 2),
+                "saldo_pendiente": round(float(r["saldo_pendiente"] or 0), 2),
+                "facturas_abiertas": int(r["facturas_abiertas"] or 0),
+                "pct_cobrado": round(
+                    float(r["cobrado_total"] or 0) / float(r["facturado_total"] or 1) * 100, 1
+                ) if float(r["facturado_total"] or 0) > 0 else 0,
+            }
+            for r in rows
+        ],
+    }
+
+
+@router.get("/reportes/facturas-con-pagos")
+async def reportes_facturas_con_pagos(
+    limit: int = 200,
+    company_id: int = None,
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await _set_path(db, current_user, company_id)
+
+    rows = (await db.execute(text("""
+        SELECT
+            cc.comprobante_id,
+            cc.cliente_id,
+            cc.cliente_nombre,
+            cc.tipo,
+            cc.numero,
+            cc.fecha,
+            cc.importe_total::float     AS importe_total,
+            cc.importe_pagado::float    AS importe_pagado,
+            cc.saldo::float             AS saldo,
+            CASE
+                WHEN cc.importe_total::float > 0
+                THEN ROUND((cc.importe_pagado::float / cc.importe_total::float * 100)::numeric, 1)
+                ELSE 0
+            END                         AS pct_cobrado,
+            MAX(pc.fecha)               AS ultimo_pago,
+            MAX(pc.forma_pago)          AS forma_pago
+        FROM comprobantes_clientes cc
+        LEFT JOIN pagos_clientes pc ON cc.comprobante_id = pc.comprobante_id
+        WHERE cc.tipo IN ('FA', 'ND', 'factura')
+          AND cc.importe_total::float > 0
+          AND (:desde IS NULL OR cc.fecha::date >= :desde)
+          AND (:hasta IS NULL OR cc.fecha::date <= :hasta)
+        GROUP BY cc.comprobante_id, cc.cliente_id, cc.cliente_nombre,
+                 cc.tipo, cc.numero, cc.fecha, cc.importe_total, cc.importe_pagado, cc.saldo
+        ORDER BY cc.fecha DESC
+        LIMIT :limit
+    """), {
+        "desde": filters.desde,
+        "hasta": filters.hasta,
+        "limit": limit,
+    })).mappings().all()
+
+    total_facturado = sum(float(r["importe_total"] or 0) for r in rows)
+    total_cobrado   = sum(float(r["importe_pagado"] or 0) for r in rows)
+    cobradas_100    = sum(1 for r in rows if float(r["saldo"] or 0) < 0.01)
+    pct_eficiencia  = round(total_cobrado / total_facturado * 100, 1) if total_facturado > 0 else 0
+
+    return {
+        "kpi": {
+            "total_facturado": round(total_facturado, 2),
+            "total_cobrado": round(total_cobrado, 2),
+            "pct_eficiencia_cobranza": pct_eficiencia,
+            "facturas_cobradas": cobradas_100,
+            "total_facturas": len(rows),
+        },
+        "filas": [
+            {
+                "comprobante_id": r["comprobante_id"],
+                "cliente_id": r["cliente_id"],
+                "cliente_nombre": r["cliente_nombre"],
+                "tipo": r["tipo"],
+                "numero": r["numero"],
+                "fecha": str(r["fecha"])[:10] if r["fecha"] else None,
+                "importe_total": round(float(r["importe_total"] or 0), 2),
+                "importe_pagado": round(float(r["importe_pagado"] or 0), 2),
+                "saldo": round(float(r["saldo"] or 0), 2),
+                "pct_cobrado": float(r["pct_cobrado"] or 0),
+                "ultimo_pago": str(r["ultimo_pago"])[:10] if r["ultimo_pago"] else None,
+                "forma_pago": r["forma_pago"],
+            }
+            for r in rows
+        ],
+    }
+
+
+@router.get("/reportes/vencimientos-compras")
+async def reportes_vencimientos_compras(
+    limit: int = 200,
+    company_id: int = None,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await _set_path(db, current_user, company_id)
+
+    rows = (await db.execute(text("""
+        SELECT
+            comprobante_id,
+            proveedor_id,
+            proveedor_nombre,
+            tipo,
+            numero,
+            punto_de_venta,
+            fecha,
+            fecha_vencimiento,
+            importe_total::float    AS importe_total,
+            importe_pagado::float   AS importe_pagado,
+            saldo::float            AS saldo,
+            CASE
+                WHEN fecha_vencimiento IS NOT NULL
+                THEN (fecha_vencimiento::date - CURRENT_DATE)
+                ELSE NULL
+            END                     AS dias_para_vencer,
+            CASE
+                WHEN fecha_vencimiento IS NOT NULL AND fecha_vencimiento::date < CURRENT_DATE
+                THEN (CURRENT_DATE - fecha_vencimiento::date)
+                ELSE 0
+            END                     AS dias_vencido
+        FROM comprobantes_proveedores
+        WHERE saldo::float > 0.01
+        ORDER BY fecha_vencimiento ASC NULLS LAST
+        LIMIT :limit
+    """), {"limit": limit})).mappings().all()
+
+    total_saldo         = sum(float(r["saldo"] or 0) for r in rows)
+    vencer_30d          = sum(
+        float(r["saldo"] or 0) for r in rows
+        if r["dias_para_vencer"] is not None and -30 <= int(r["dias_para_vencer"]) <= 30
+    )
+
+    return {
+        "kpi": {
+            "total_a_pagar": round(total_saldo, 2),
+            "a_pagar_30_dias": round(vencer_30d, 2),
+            "cantidad_facturas": len(rows),
+        },
+        "filas": [
+            {
+                "comprobante_id": r["comprobante_id"],
+                "proveedor_id": r["proveedor_id"],
+                "proveedor_nombre": r["proveedor_nombre"],
+                "tipo": r["tipo"],
+                "numero": r["numero"],
+                "fecha": str(r["fecha"])[:10] if r["fecha"] else None,
+                "fecha_vencimiento": str(r["fecha_vencimiento"])[:10] if r["fecha_vencimiento"] else None,
+                "importe_total": round(float(r["importe_total"] or 0), 2),
+                "importe_pagado": round(float(r["importe_pagado"] or 0), 2),
+                "saldo": round(float(r["saldo"] or 0), 2),
+                "dias_para_vencer": int(r["dias_para_vencer"]) if r["dias_para_vencer"] is not None else None,
+                "dias_vencido": int(r["dias_vencido"] or 0),
+            }
+            for r in rows
+        ],
+    }
+
+
+@router.get("/reportes/empresas-resumen")
+async def reportes_empresas_resumen(
+    company_id: int = None,
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await _set_path(db, current_user, company_id)
+
+    rows = (await db.execute(text("""
+        SELECT
+            COALESCE(v.cod_empresa, 1)                                                             AS cod_empresa,
+            COALESCE(ei.nombre, 'Empresa ' || COALESCE(v.cod_empresa, 1)::text)                    AS nombre,
+            COALESCE(SUM(CASE WHEN v.tipo_comprobante='FA' THEN ABS(v.total) ELSE 0 END), 0)       AS facturado,
+            COALESCE(SUM(CASE WHEN v.tipo_comprobante='NC' THEN ABS(v.total) ELSE 0 END), 0)       AS notas_credito,
+            COALESCE(SUM(CASE WHEN v.tipo_comprobante IN ('FA','ND') THEN ABS(v.total)
+                              WHEN v.tipo_comprobante='NC' THEN -ABS(v.total) ELSE 0 END), 0)     AS neto,
+            COUNT(DISTINCT v.cliente_id)                                                           AS clientes
+        FROM ventas v
+        LEFT JOIN empresas_infomanager ei ON ei.cod_empresa = COALESCE(v.cod_empresa, 1)
+        WHERE v.fecha::date >= :desde AND v.fecha::date <= :hasta
+          AND v.anulada = 'N'
+        GROUP BY COALESCE(v.cod_empresa, 1), ei.nombre
+        ORDER BY neto DESC
+    """), {"desde": filters.desde, "hasta": filters.hasta})).mappings().all()
+
+    total_neto = sum(float(r["neto"] or 0) for r in rows)
+
+    return {
+        "kpi": {
+            "total_neto": round(total_neto, 2),
+            "empresas": len(rows),
+            "una_sola_empresa": len(rows) <= 1,
+        },
+        "filas": [
+            {
+                "cod_empresa": int(r["cod_empresa"] or 1),
+                "nombre": r["nombre"] or f"Empresa {r['cod_empresa']}",
+                "facturado": round(float(r["facturado"] or 0), 2),
+                "notas_credito": round(float(r["notas_credito"] or 0), 2),
+                "neto": round(float(r["neto"] or 0), 2),
+                "clientes": int(r["clientes"] or 0),
+                "pct": round(float(r["neto"] or 0) / total_neto * 100, 1) if total_neto > 0 else 0,
+            }
+            for r in rows
+        ],
+    }

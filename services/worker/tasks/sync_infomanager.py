@@ -298,6 +298,29 @@ def sync_company(self, company_id: int, connector_id: int):
 
         _set_tenant_search_path(cur, tenant)
 
+        # --- Empresas master data ---
+        empresas_raw = im.fetch_paginated("/api/v1/empresas", max_pages=1)
+        for emp in empresas_raw:
+            cod = int(emp.get("cod_empresa") or 1)
+            cur.execute(
+                """
+                INSERT INTO empresas_infomanager (cod_empresa, nombre, cuit, direccion, email, habilitada)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                ON CONFLICT (cod_empresa) DO UPDATE SET
+                  nombre=EXCLUDED.nombre, cuit=EXCLUDED.cuit,
+                  direccion=EXCLUDED.direccion, email=EXCLUDED.email,
+                  habilitada=EXCLUDED.habilitada
+                """,
+                (
+                    cod,
+                    emp.get("nombre") or emp.get("nombre_1") or f"Empresa {cod}",
+                    emp.get("cuit"),
+                    emp.get("direccion"),
+                    emp.get("email"),
+                    str(emp.get("habilitada", "S")) in ("S", "1", "True", "true"),
+                ),
+            )
+
         vendedores = im.sync_vendedores()
         vendedor_lookup: dict[int, str] = {}
         for vendedor in vendedores:
