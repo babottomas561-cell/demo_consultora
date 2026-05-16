@@ -109,7 +109,11 @@ def _sync_loop() -> None:
                     if needs_full:
                         celery_app.send_task(
                             "tasks.sync_infomanager.sync_completo",
-                            kwargs={"tenant_schema": schema, "erp_config": erp_config},
+                            kwargs={
+                                "tenant_schema": schema,
+                                "erp_config": erp_config,
+                                "connector_id": tenant["connector_id"],
+                            },
                         )
                         _last_full_sync[schema] = datetime.now()
                         logger.info(f"[SyncLoop] FULL → {schema}")

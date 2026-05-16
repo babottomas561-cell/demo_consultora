@@ -1268,7 +1268,7 @@ def sync_incremental(tenant_schema: str, erp_config: dict) -> dict:
 
 
 @celery_app.task(name="tasks.sync_infomanager.sync_completo")
-def sync_completo(tenant_schema: str, erp_config: dict) -> dict:
+def sync_completo(tenant_schema: str, erp_config: dict, connector_id: int = None) -> dict:
     """Full sync once a day: 90 days + price lists + accounting."""
     import time
     t0 = time.time()
@@ -1341,14 +1341,39 @@ def sync_completo(tenant_schema: str, erp_config: dict) -> dict:
         counts["stock_disponible"] = _insert_stock_disponible(cur, stock)
 
         conn.commit()
+
+        # Update connector status if connector_id provided
+        if connector_id:
+            cur2 = conn.cursor()
+            cur2.execute(
+                "UPDATE public.company_connectors SET sync_status='ok', last_sync_at=NOW() WHERE id=%s",
+                (connector_id,),
+            )
+            conn.commit()
+            cur2.close()
+
+        elapsed = round(time.time() - t0, 2)
+        logger.info(f"[sync_completo] {tenant_schema} OK in {elapsed}s — {counts}")
         return {
             "tenant_schema": tenant_schema,
             "status": "ok",
             "tablas": counts,
-            "duracion_segundos": round(time.time() - t0, 2),
+            "duracion_segundos": elapsed,
         }
     except Exception as exc:
         conn.rollback()
+        if connector_id:
+            try:
+                cur2 = conn.cursor()
+                cur2.execute(
+                    "UPDATE public.company_connectors SET sync_status='error', sync_error=%s WHERE id=%s",
+                    (str(exc)[:500], connector_id),
+                )
+                conn.commit()
+                cur2.close()
+            except Exception:
+                pass
+        logger.error(f"[sync_completo] {tenant_schema} FAILED: {exc}")
         raise
     finally:
         cur.close()

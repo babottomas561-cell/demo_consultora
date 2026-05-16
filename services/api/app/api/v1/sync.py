@@ -1,6 +1,8 @@
 import os
 import uuid
 import shutil
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 from pydantic import BaseModel
 from typing import Literal
@@ -127,7 +129,11 @@ async def sync_infomanager(
     if body.mode == "full":
         task = celery_client.send_task(
             "tasks.sync_infomanager.sync_completo",
-            kwargs={"tenant_schema": company.tenant_schema, "erp_config": erp_config},
+            kwargs={
+                "tenant_schema": company.tenant_schema,
+                "erp_config": erp_config,
+                "connector_id": connector.id,
+            },
         )
     else:
         task = celery_client.send_task(
@@ -136,3 +142,55 @@ async def sync_infomanager(
         )
 
     return {"job_id": task.id, "status": "processing", "mode": body.mode}
+
+
+@router.post("/infomanager/direct")
+async def sync_infomanager_direct(
+    body: InfomanagerSyncRequest,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Run sync_completo synchronously (bypasses Celery — use if worker is down)."""
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    result = await db.execute(select(Company).where(Company.id == body.company_id))
+    company = result.scalar_one_or_none()
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+
+    conn_result = await db.execute(
+        select(CompanyConnector).where(
+            CompanyConnector.company_id == body.company_id,
+            CompanyConnector.connector_type == "INFOMANAGER",
+        )
+    )
+    connector = conn_result.scalar_one_or_none()
+    if not connector:
+        raise HTTPException(status_code=404, detail="Connector not found")
+
+    erp_config = {
+        "client_id": connector.client_id,
+        "client_secret": connector.client_secret,
+        "base_url": connector.base_url,
+    }
+    tenant_schema = company.tenant_schema
+
+    def _run_sync():
+        import sys
+        # Worker code co-located in /app/services/worker or /worker
+        for p in ["/app/services/worker", "/worker", "/app/worker"]:
+            if os.path.exists(p) and p not in sys.path:
+                sys.path.insert(0, p)
+        from tasks.sync_infomanager import sync_completo
+        return sync_completo(tenant_schema=tenant_schema, erp_config=erp_config, connector_id=connector.id)
+
+    loop = asyncio.get_event_loop()
+    executor = ThreadPoolExecutor(max_workers=1)
+    try:
+        sync_result = await loop.run_in_executor(executor, _run_sync)
+        return {"status": "ok", "result": sync_result}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        executor.shutdown(wait=False)
