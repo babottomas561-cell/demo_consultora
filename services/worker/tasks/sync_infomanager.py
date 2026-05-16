@@ -762,21 +762,21 @@ def sync_company(self, company_id: int, connector_id: int):
                     continue
                 items = im.obtener_items_lista_precios(cod_lista, desde_fa, hasta_fa)
                 items_count += _upsert_items_lista(cur, items, cod_lista)
-            logger.info(f"[sync_company] items_listas={items_count}")
+            print(f"[sync_company] items_listas={items_count}")
 
             fv = im.obtener_facturas_venta(desde_fa, hasta_fa)
             n_fv = _upsert_facturas_venta(cur, fv)
-            logger.info(f"[sync_company] facturas_venta={n_fv}")
+            print(f"[sync_company] facturas_venta={n_fv}")
 
             fc = im.obtener_facturas_compra(desde_fa, hasta_fa)
             n_fc = _upsert_facturas_compra(cur, fc)
-            logger.info(f"[sync_company] facturas_compra={n_fc}")
+            print(f"[sync_company] facturas_compra={n_fc}")
 
             fcr = im.obtener_facturas_con_recibos(desde_fa, hasta_fa)
             n_fcr = _upsert_facturas_con_recibos(cur, fcr)
-            logger.info(f"[sync_company] facturas_con_recibos={n_fcr}")
+            print(f"[sync_company] facturas_con_recibos={n_fcr}")
         except Exception as fa_exc:
-            logger.warning(f"[sync_company] facturas sync skipped: {fa_exc}")
+            print(f"[sync_company] facturas sync skipped: {fa_exc}")
 
         cur.execute(
             """
@@ -1385,7 +1385,7 @@ def sync_completo(tenant_schema: str, erp_config: dict, connector_id: int = None
             cur2.close()
 
         elapsed = round(time.time() - t0, 2)
-        logger.info(f"[sync_completo] {tenant_schema} OK in {elapsed}s — {counts}")
+        print(f"[sync_completo] {tenant_schema} OK in {elapsed}s — {counts}")
         return {
             "tenant_schema": tenant_schema,
             "status": "ok",
@@ -1405,7 +1405,7 @@ def sync_completo(tenant_schema: str, erp_config: dict, connector_id: int = None
                 cur2.close()
             except Exception:
                 pass
-        logger.error(f"[sync_completo] {tenant_schema} FAILED: {exc}")
+        print(f"[sync_completo] {tenant_schema} FAILED: {exc}")
         raise
     finally:
         cur.close()
