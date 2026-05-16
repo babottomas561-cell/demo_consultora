@@ -5071,11 +5071,11 @@ async def get_movimientos_stock(
     if desde:
         date_cond_v = "v.fecha::date >= :desde"
         date_cond_c = "c.fecha::date >= :desde"
-        params["desde"] = desde
+        params["desde"] = date.fromisoformat(desde)
     if hasta:
         date_cond_v += " AND v.fecha::date <= :hasta" if desde else "v.fecha::date <= :hasta"
         date_cond_c += " AND c.fecha::date <= :hasta" if desde else "c.fecha::date <= :hasta"
-        params["hasta"] = hasta
+        params["hasta"] = date.fromisoformat(hasta)
 
     rows = (await db.execute(text(f"""
         SELECT
@@ -5135,11 +5135,11 @@ async def get_interdepositos(
     conditions = ["1=1"]
     params: dict = {}
     if desde:
-        conditions.append("fecha >= :desde")
-        params["desde"] = desde
+        conditions.append("fecha::date >= :desde")
+        params["desde"] = date.fromisoformat(desde)
     if hasta:
-        conditions.append("fecha <= :hasta")
-        params["hasta"] = hasta
+        conditions.append("fecha::date <= :hasta")
+        params["hasta"] = date.fromisoformat(hasta)
 
     where = " AND ".join(conditions)
     rows = (await db.execute(text(f"""
@@ -5227,11 +5227,11 @@ async def get_libro_mayor(
         conditions.append("cuenta::text LIKE :cod_cuenta")
         params["cod_cuenta"] = f"{cod_cuenta}%"
     if desde:
-        conditions.append("fecha >= :desde")
-        params["desde"] = desde
+        conditions.append("fecha::date >= :desde")
+        params["desde"] = date.fromisoformat(desde)
     if hasta:
-        conditions.append("fecha <= :hasta")
-        params["hasta"] = hasta
+        conditions.append("fecha::date <= :hasta")
+        params["hasta"] = date.fromisoformat(hasta)
 
     where = " AND ".join(conditions)
     count_params = {k: v for k, v in params.items() if k not in ("offset", "limit")}
@@ -5281,11 +5281,11 @@ async def get_recibos_periodo(
         conditions.append("fa_cod_empresa = :cod_empresa")
         params["cod_empresa"] = cod_empresa
     if desde:
-        conditions.append("rc_fecha >= :desde")
-        params["desde"] = desde
+        conditions.append("rc_fecha::date >= :desde")
+        params["desde"] = date.fromisoformat(desde)
     if hasta:
-        conditions.append("rc_fecha <= :hasta")
-        params["hasta"] = hasta
+        conditions.append("rc_fecha::date <= :hasta")
+        params["hasta"] = date.fromisoformat(hasta)
 
     where = " AND ".join(conditions)
     count_params_r = {k: v for k, v in params.items() if k not in ("offset", "limit")}
