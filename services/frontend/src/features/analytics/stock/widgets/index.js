@@ -1,13 +1,14 @@
 import {
   Package, TrendingUp, TrendingDown, AlertTriangle, Archive,
-  BarChart3, List, RefreshCw, ShoppingBag, Database,
+  BarChart3, List, ShoppingBag, Activity,
 } from 'lucide-react';
 import { createStockKpiWidget } from './StockKpiWidget';
 import InventarioWidget from './InventarioWidget';
 import AlertasStockWidget from './AlertasStockWidget';
 import ReposicionWidget from './ReposicionWidget';
 import RotacionAbcWidget from './RotacionAbcWidget';
-import { createInfomanagerReportsWidget, INFOMANAGER_REPORT_GROUPS } from '../../components/InfomanagerReportsWidget';
+import StockDisponibleWidget from '../../infomanager/widgets/StockDisponibleWidget';
+import MovimientosStockWidget from '../../infomanager/widgets/MovimientosStockWidget';
 
 const STOCK_WIDGET_CATALOG = [
   // ── KPIs ──
@@ -24,7 +25,8 @@ const STOCK_WIDGET_CATALOG = [
   { type: 'stock-rotacion-abc', name: 'Rotación ABC', description: 'Clasificación ABC con gráfico de valor', icon: BarChart3, component: RotacionAbcWidget, defaultSize: { w: 7, h: 6 }, category: 'chart' },
   { type: 'stock-alertas', name: 'Alertas de stock', description: 'Alertas críticas, advertencias e informativas', icon: AlertTriangle, component: AlertasStockWidget, defaultSize: { w: 5, h: 6 }, category: 'chart' },
   { type: 'stock-reposicion', name: 'Reposición', description: 'Sugerencias de compra con costo estimado', icon: ShoppingBag, component: ReposicionWidget, defaultSize: { w: 12, h: 5 }, category: 'table' },
-  { type: 'stock-infomanager-reportes', name: 'Informes InfoManager', description: 'Reportes originales de stock exportables a Excel', icon: Database, component: createInfomanagerReportsWidget(INFOMANAGER_REPORT_GROUPS.stock), defaultSize: { w: 12, h: 7 }, category: 'table' },
+  { type: 'stock-disponible-im', name: 'Stock Disponible (IM)', description: 'Stock sincronizado desde InfoManager con alertas de reposición', icon: Package, component: StockDisponibleWidget, defaultSize: { w: 12, h: 6 }, category: 'table' },
+  { type: 'stock-movimientos-im', name: 'Movimientos de Stock (IM)', description: 'Entradas y salidas sincronizadas desde InfoManager', icon: Activity, component: MovimientosStockWidget, defaultSize: { w: 12, h: 6 }, category: 'table' },
 ];
 
 export default STOCK_WIDGET_CATALOG;
@@ -46,7 +48,8 @@ export const STOCK_DEFAULT_WIDGETS = [
   { id: 's-10', type: 'stock-rotacion-abc' },
   { id: 's-11', type: 'stock-alertas' },
   { id: 's-12', type: 'stock-reposicion' },
-  { id: 's-13', type: 'stock-infomanager-reportes' },
+  { id: 's-13', type: 'stock-disponible-im' },
+  { id: 's-14', type: 'stock-movimientos-im' },
 ];
 
 export const STOCK_DEFAULT_LAYOUTS = {
@@ -63,7 +66,8 @@ export const STOCK_DEFAULT_LAYOUTS = {
     { i: 's-10', x: 0, y: 10, w: 7, h: 6, minW: 4, minH: 4 },
     { i: 's-11', x: 7, y: 10, w: 5, h: 6, minW: 3, minH: 4 },
     { i: 's-12', x: 0, y: 16, w: 12, h: 5, minW: 6, minH: 3 },
-    { i: 's-13', x: 0, y: 21, w: 12, h: 7, minW: 6, minH: 4 },
+    { i: 's-13', x: 0, y: 21, w: 12, h: 6, minW: 6, minH: 4 },
+    { i: 's-14', x: 0, y: 27, w: 12, h: 6, minW: 6, minH: 4 },
   ],
   md: [
     { i: 's-1', x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2 },
@@ -78,7 +82,8 @@ export const STOCK_DEFAULT_LAYOUTS = {
     { i: 's-10', x: 0, y: 10, w: 7, h: 6, minW: 4, minH: 4 },
     { i: 's-11', x: 7, y: 10, w: 5, h: 6, minW: 3, minH: 4 },
     { i: 's-12', x: 0, y: 16, w: 12, h: 5, minW: 6, minH: 3 },
-    { i: 's-13', x: 0, y: 21, w: 12, h: 7, minW: 6, minH: 4 },
+    { i: 's-13', x: 0, y: 21, w: 12, h: 6, minW: 6, minH: 4 },
+    { i: 's-14', x: 0, y: 27, w: 12, h: 6, minW: 6, minH: 4 },
   ],
   sm: [
     { i: 's-1', x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2 },
@@ -93,6 +98,7 @@ export const STOCK_DEFAULT_LAYOUTS = {
     { i: 's-10', x: 0, y: 14, w: 6, h: 6, minW: 3, minH: 4 },
     { i: 's-11', x: 0, y: 20, w: 6, h: 5, minW: 3, minH: 4 },
     { i: 's-12', x: 0, y: 25, w: 6, h: 5, minW: 3, minH: 3 },
-    { i: 's-13', x: 0, y: 30, w: 6, h: 7, minW: 3, minH: 4 },
+    { i: 's-13', x: 0, y: 30, w: 6, h: 6, minW: 3, minH: 4 },
+    { i: 's-14', x: 0, y: 36, w: 6, h: 6, minW: 3, minH: 4 },
   ],
 };

@@ -920,6 +920,130 @@ class InfomanagerConnector:
 
         return presupuestos
 
+    # ── New specific-report methods ─────────────────────────────────────────
+
+    def obtener_empresas(self) -> list[dict[str, Any]]:
+        return self.fetch_paginated("/api/v1/empresas", max_pages=1)
+
+    def obtener_depositos(self) -> list[dict[str, Any]]:
+        return self.fetch_paginated("/api/v1/depositos", max_pages=1)
+
+    def obtener_vendedores(self) -> list[dict[str, Any]]:
+        return self.fetch_paginated("/api/v1/vendedores", max_pages=1)
+
+    def obtener_listas_precios(self) -> list[dict[str, Any]]:
+        return self.fetch_paginated("/api/v1/listaprecios/cabeceras/all", max_pages=1)
+
+    def obtener_items_lista_precios(self, cod_lista: int, desde, hasta) -> list[dict[str, Any]]:
+        params = {
+            "codLista": cod_lista,
+            "fechaDesde": desde.strftime("%Y%m%d"),
+            "fechaHasta": hasta.strftime("%Y%m%d"),
+        }
+        return self.fetch_paginated("/api/v1/reportes/lista_precio_por_codigo", params, max_pages=50)
+
+    def obtener_facturas_venta(self, desde, hasta, cod_empresa: int = 0) -> list[dict[str, Any]]:
+        params = {
+            "fechaDesde": desde.strftime("%Y%m%d"),
+            "fechaHasta": hasta.strftime("%Y%m%d"),
+            "tag": "T",
+            "codEmpresa": cod_empresa,
+        }
+        return self.fetch_paginated("/api/v1/reportes/facturas", params, max_pages=200)
+
+    def obtener_facturas_compra(self, desde, hasta, cod_empresa: int = 0) -> list[dict[str, Any]]:
+        params = {
+            "fechaDesde": desde.strftime("%Y%m%d"),
+            "fechaHasta": hasta.strftime("%Y%m%d"),
+            "tag": "T",
+            "codEmpresa": cod_empresa,
+            "codProveedor": 0,
+        }
+        return self.fetch_paginated("/api/v1/reportes/facturas_compras", params, max_pages=200)
+
+    def obtener_facturas_con_recibos(self, desde, hasta, cod_empresa: int = 0) -> list[dict[str, Any]]:
+        params = {
+            "fechaDesde": desde.strftime("%Y%m%d"),
+            "fechaHasta": hasta.strftime("%Y%m%d"),
+            "tag": "T",
+            "codEmpresa": cod_empresa,
+        }
+        return self.fetch_paginated("/api/v1/reportes/facturas_con_recibos", params, max_pages=200)
+
+    def obtener_saldos_clientes(self, cod_empresa: int = 0) -> list[dict[str, Any]]:
+        params = {"TAG": "T", "codCliente": 0, "codEmpresa": cod_empresa}
+        return self.fetch_paginated("/api/v1/reportes/saldos_clientes", params, max_pages=200)
+
+    def obtener_comprobantes_pendientes(self, cod_empresa: int = 0) -> list[dict[str, Any]]:
+        params = {"tag": "T", "codCliente": 0, "codEmpresa": cod_empresa}
+        return self.fetch_paginated("/api/v1/reportes/comprob_pendientes_clientes", params, max_pages=200)
+
+    def obtener_disponible_cliente(self, cod_cliente: int) -> dict[str, Any]:
+        params = {"codCliente": cod_cliente}
+        rows = self.fetch_paginated("/api/v1/reportes/disponible_por_cliente", params, max_pages=1)
+        return rows[0] if rows else {}
+
+    def obtener_stock_disponible(self) -> list[dict[str, Any]]:
+        return self.fetch_paginated("/api/v1/articulos/stock", max_pages=50)
+
+    def obtener_movimientos_stock(self, cod_articulo: int, cod_deposito: int, desde, hasta) -> list[dict[str, Any]]:
+        self.ensure_token()
+        params = {
+            "cod_articulo": cod_articulo,
+            "cod_deposito": cod_deposito,
+            "fecha_desde": desde.isoformat(),
+            "fecha_hasta": hasta.isoformat(),
+        }
+        all_items: list[dict[str, Any]] = []
+        page = 1
+        while page <= 500:
+            request_params = {**params, "page": page, "limit": 100}
+            resp = requests.get(
+                f"{self.base_url}/api/v1/articulos/movimientos-por-articulo",
+                headers=self.headers(),
+                params=request_params,
+                timeout=60,
+            )
+            if resp.status_code == 404:
+                break
+            resp.raise_for_status()
+            items = self._extract_items(resp.json())
+            if not items:
+                break
+            all_items.extend(items)
+            if len(items) < 100:
+                break
+            page += 1
+        return all_items
+
+    def obtener_interdepositos(self, desde, hasta) -> list[dict[str, Any]]:
+        params = {
+            "fechaDesde": desde.strftime("%Y%m%d"),
+            "fechaHasta": hasta.strftime("%Y%m%d"),
+        }
+        return self.fetch_paginated("/api/v1/interdeposito", params, max_pages=200)
+
+    def obtener_movimientos_contables(self, desde, hasta, cod_cuenta: str, cod_empresa: int, tag: str = "T") -> list[dict[str, Any]]:
+        params = {
+            "fechaDesde": desde.strftime("%Y%m%d"),
+            "fechaHasta": hasta.strftime("%Y%m%d"),
+            "tag": tag,
+            "saldoAnterior": "N",
+            "codEmpresa": cod_empresa,
+            "codCuenta": cod_cuenta,
+        }
+        return self.fetch_paginated("/api/v1/planes/mayor", params, max_pages=200)
+
+    def obtener_presupuestos_confirmados(self) -> list[dict[str, Any]]:
+        raw = self.fetch_paginated("/api/v1/presupuestos/confirmados", max_pages=100)
+        return [r.get("venta") or r for r in raw]
+
+    def obtener_presupuestos_no_confirmados(self) -> list[dict[str, Any]]:
+        raw = self.fetch_paginated("/api/v1/presupuestos/no_confirmados", max_pages=100)
+        return [r.get("venta") or r for r in raw]
+
+    # ── End new methods ──────────────────────────────────────────────────────
+
     def sync_recibos(self, fecha_desde, fecha_hasta) -> list[dict[str, Any]]:
         data = self.fetch_paginated(
             "/api/v1/reportes/facturas_con_recibos",

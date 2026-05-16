@@ -30,6 +30,7 @@ const arrayFilterKeys = [
   'cod_cliente',
   'cod_articulo',
   'cod_deposito',
+  'cod_lista_precios',
 ];
 
 const appendArrayFilter = (params, key, values) => {
