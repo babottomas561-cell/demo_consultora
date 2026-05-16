@@ -19,8 +19,14 @@ export default function StockDataProvider({ children }) {
 
   const filters = useMemo(
     () => filterStore.getApiFilters(),
-    [filterStore.periodo, filterStore.desde, filterStore.hasta,
-     filterStore.cod_empresa, filterStore.cod_deposito, filterStore.cod_rubro]
+    [
+      filterStore.periodo, filterStore.desde, filterStore.hasta,
+      filterStore.comparar_anterior, filterStore.cod_empresa, filterStore.tag,
+      filterStore.punto_de_venta, filterStore.cod_vendedor, filterStore.cod_rubro,
+      filterStore.cod_subrubro, filterStore.tipo_comprobante, filterStore.condicion_venta,
+      filterStore.cod_cliente, filterStore.cod_articulo, filterStore.cod_deposito,
+      filterStore.cod_lista_precios, filterStore.incluir_anuladas,
+    ]
   );
 
   const qs = buildQueryParams(user, activeCompany, filters);

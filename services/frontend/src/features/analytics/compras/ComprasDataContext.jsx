@@ -22,7 +22,11 @@ export default function ComprasDataProvider({ children }) {
     () => filterStore.getApiFilters(),
     [
       filterStore.periodo, filterStore.desde, filterStore.hasta,
-      filterStore.comparar_anterior, filterStore.cod_empresa,
+      filterStore.comparar_anterior, filterStore.cod_empresa, filterStore.tag,
+      filterStore.punto_de_venta, filterStore.cod_vendedor, filterStore.cod_rubro,
+      filterStore.cod_subrubro, filterStore.tipo_comprobante, filterStore.condicion_venta,
+      filterStore.cod_cliente, filterStore.cod_articulo, filterStore.cod_deposito,
+      filterStore.cod_lista_precios, filterStore.incluir_anuladas,
     ]
   );
 

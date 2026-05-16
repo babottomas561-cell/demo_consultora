@@ -26,7 +26,7 @@ export default function VentasDataProvider({ children }) {
       filterStore.punto_de_venta, filterStore.cod_vendedor, filterStore.cod_rubro,
       filterStore.cod_subrubro, filterStore.tipo_comprobante, filterStore.condicion_venta,
       filterStore.cod_cliente, filterStore.cod_articulo, filterStore.cod_deposito,
-      filterStore.incluir_anuladas,
+      filterStore.cod_lista_precios, filterStore.incluir_anuladas,
     ]
   );
 

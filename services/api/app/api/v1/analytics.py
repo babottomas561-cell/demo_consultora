@@ -4624,6 +4624,88 @@ async def get_depositos(
     return {"depositos": [dict(r) for r in rows]}
 
 
+@router.get("/listas-precios")
+async def get_listas_precios(
+    company_id: int = None,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+    rows = (await db.execute(text(
+        "SELECT cod_lista, descripcion FROM listas_precios ORDER BY cod_lista"
+    ))).mappings().all()
+    return {"listas": [dict(r) for r in rows]}
+
+
+@router.get("/rubros")
+async def get_rubros(
+    company_id: int = None,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+    rows = (await db.execute(text(
+        "SELECT DISTINCT cod_rubro, rubro AS nombre FROM stock WHERE cod_rubro IS NOT NULL ORDER BY cod_rubro"
+    ))).mappings().all()
+    return {"rubros": [dict(r) for r in rows]}
+
+
+@router.get("/vendedores-lookup")
+async def get_vendedores_lookup(
+    company_id: int = None,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+    rows = (await db.execute(text(
+        "SELECT cod_vendedor, nombre FROM vendedores ORDER BY nombre"
+    ))).mappings().all()
+    return {"vendedores": [dict(r) for r in rows]}
+
+
+@router.get("/clientes-lookup")
+async def get_clientes_lookup(
+    company_id: int = None,
+    limit: int = 200,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+    rows = (await db.execute(text("""
+        SELECT DISTINCT cliente_id AS cod_cliente, MAX(cliente_nombre) AS nombre
+        FROM ventas
+        WHERE cliente_id IS NOT NULL
+        GROUP BY cliente_id
+        ORDER BY nombre
+        LIMIT :limit
+    """), {"limit": limit})).mappings().all()
+    return {"clientes": [dict(r) for r in rows]}
+
+
+@router.get("/proveedores-lookup")
+async def get_proveedores_lookup(
+    company_id: int = None,
+    limit: int = 200,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+    rows = (await db.execute(text("""
+        SELECT DISTINCT proveedor_id AS cod_proveedor, MAX(proveedor_nombre) AS nombre
+        FROM compras
+        WHERE proveedor_id IS NOT NULL
+        GROUP BY proveedor_id
+        ORDER BY nombre
+        LIMIT :limit
+    """), {"limit": limit})).mappings().all()
+    return {"proveedores": [dict(r) for r in rows]}
+
+
 @router.get("/reportes/saldos-clientes")
 async def reportes_saldos_clientes(
     limit: int = 100,

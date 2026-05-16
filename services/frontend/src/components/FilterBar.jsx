@@ -40,7 +40,10 @@ function InlineSelect({ label, value, onChange, options, valueKey, labelKey }) {
 }
 
 const FilterBar = () => {
-  const { periodo, desde, hasta, setPeriodo, setCustomRange, setFilter, cod_empresa, cod_deposito, cod_lista_precios } = useFilterStore();
+  const {
+    periodo, desde, hasta, setPeriodo, setCustomRange, setFilter,
+    cod_empresa, cod_deposito, cod_lista_precios, cod_vendedor, cod_rubro, cod_cliente,
+  } = useFilterStore();
   const user = useAuthStore((s) => s.user);
   const activeCompany = useAuthStore((s) => s.activeCompany);
 
@@ -50,6 +53,10 @@ const FilterBar = () => {
   const [empresas, setEmpresas] = useState([]);
   const [depositos, setDepositos] = useState([]);
   const [listas, setListas] = useState([]);
+  const [rubros, setRubros] = useState([]);
+  const [vendedores, setVendedores] = useState([]);
+  const [clientes, setClientes] = useState([]);
+  const [proveedores, setProveedores] = useState([]);
 
   const canFetch = Boolean(user?.company_id || (user?.is_admin && activeCompany));
 
@@ -60,10 +67,18 @@ const FilterBar = () => {
       apiClient.get(`/analytics/empresas${companyParam}`),
       apiClient.get(`/analytics/depositos${companyParam}`),
       apiClient.get(`/analytics/listas-precios${companyParam}`),
-    ]).then(([eRes, dRes, lRes]) => {
+      apiClient.get(`/analytics/rubros${companyParam}`),
+      apiClient.get(`/analytics/vendedores-lookup${companyParam}`),
+      apiClient.get(`/analytics/clientes-lookup${companyParam}`),
+      apiClient.get(`/analytics/proveedores-lookup${companyParam}`),
+    ]).then(([eRes, dRes, lRes, rRes, vRes, cRes, pRes]) => {
       setEmpresas(eRes.data?.empresas ?? []);
       setDepositos(dRes.data?.depositos ?? []);
       setListas(lRes.data?.listas ?? []);
+      setRubros(rRes.data?.rubros ?? []);
+      setVendedores(vRes.data?.vendedores ?? []);
+      setClientes(cRes.data?.clientes ?? []);
+      setProveedores(pRes.data?.proveedores ?? []);
     }).catch(() => {});
   }, [canFetch, user?.is_admin, activeCompany?.id]);
 
@@ -86,6 +101,9 @@ const FilterBar = () => {
   const selectedEmpresa = cod_empresa?.[0] ?? '';
   const selectedDeposito = cod_deposito?.[0] ?? '';
   const selectedLista = cod_lista_precios?.[0] ?? '';
+  const selectedVendedor = cod_vendedor?.[0] ?? '';
+  const selectedRubro = cod_rubro?.[0] ?? '';
+  const selectedCliente = cod_cliente?.[0] ?? '';
 
   return (
     <div className="sticky top-0 z-10 -mx-8 -mt-8 mb-6 border-b border-slate-200 bg-white px-6 shadow-sm">
@@ -107,13 +125,33 @@ const FilterBar = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {empresas.length > 0 && (
+          {empresas.length > 1 && (
             <InlineSelect
               label="Todas las empresas"
               value={selectedEmpresa}
               onChange={(v) => setFilter('cod_empresa', v ? [v] : [])}
               options={empresas}
               valueKey="cod_empresa"
+              labelKey="nombre"
+            />
+          )}
+          {vendedores.length > 0 && (
+            <InlineSelect
+              label="Todos los vendedores"
+              value={selectedVendedor}
+              onChange={(v) => setFilter('cod_vendedor', v ? [v] : [])}
+              options={vendedores}
+              valueKey="cod_vendedor"
+              labelKey="nombre"
+            />
+          )}
+          {rubros.length > 0 && (
+            <InlineSelect
+              label="Todos los rubros"
+              value={selectedRubro}
+              onChange={(v) => setFilter('cod_rubro', v ? [v] : [])}
+              options={rubros}
+              valueKey="cod_rubro"
               labelKey="nombre"
             />
           )}
