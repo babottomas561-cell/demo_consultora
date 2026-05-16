@@ -4452,7 +4452,7 @@ async def caja_kpis(
     return {
         "ingresos":      {"actual": round(ingresos, 2)},
         "egresos":       {"actual": round(egresos, 2)},
-        "flujo_neto":    {"actual": round(float(row["flujo_neto"] or 0), 2)},
+        "flujo_neto":    {"actual": round(ingresos - egresos, 2)},
         "movimientos":   {"actual": int(row["movimientos"] or 0)},
         "saldo_actual":  {"actual": round(float(saldo_row["saldo_actual"] or 0), 2)},
         "mayor_ingreso": {"actual": round(float(row["mayor_ingreso"] or 0), 2)},
