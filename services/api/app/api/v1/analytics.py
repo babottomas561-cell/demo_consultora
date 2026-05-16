@@ -1533,12 +1533,23 @@ async def caja_resumen(
     totals = (await db.execute(text(f"""
         SELECT
             COALESCE(SUM(CASE WHEN importe > 0 THEN importe ELSE 0 END), 0) AS ingresos,
-            COALESCE(SUM(CASE WHEN importe < 0 THEN ABS(importe) ELSE 0 END), 0) AS egresos,
+            COALESCE(SUM(CASE WHEN importe < 0 THEN ABS(importe) ELSE 0 END), 0) AS egresos_caja,
             COALESCE(SUM(importe), 0) AS saldo_neto,
             COUNT(*) AS movimientos
         FROM movimientos_caja
         WHERE {caja_where}
     """), params)).mappings().one()
+
+    # Include compras (pagos a proveedores) in egresos
+    _c_params: dict = {"desde": filters.desde, "hasta": filters.hasta_exclusive}
+    _c_cond = "fecha >= :desde AND fecha < :hasta AND COALESCE(anulada, 'N') <> 'S'"
+    if filters.cod_empresa:
+        _c_cond += " AND cod_empresa = ANY(:cod_empresa)"
+        _c_params["cod_empresa"] = filters.cod_empresa
+    _compras_egresos = float((await db.execute(text(f"""
+        SELECT COALESCE(SUM({compra_importe_neto_expr()}), 0) FROM compras WHERE {_c_cond}
+    """), _c_params)).scalar() or 0)
+
     series = (await db.execute(text(f"""
         SELECT to_char(date_trunc('month', fecha), 'YYYY-MM') AS periodo,
                COALESCE(SUM(CASE WHEN importe > 0 THEN importe ELSE 0 END), 0) AS cobros,
@@ -1570,7 +1581,7 @@ async def caja_resumen(
     return {
         "summary": {
             "ingresos": money(totals["ingresos"]),
-            "egresos": money(totals["egresos"]),
+            "egresos": round(float(totals["egresos_caja"] or 0) + _compras_egresos, 2),
             "saldo_neto": money(totals["saldo_neto"]),
             "movimientos": totals["movimientos"],
         },
@@ -4410,13 +4421,23 @@ async def caja_kpis(
     row = (await db.execute(text(f"""
         SELECT
             COALESCE(SUM(CASE WHEN importe > 0 THEN importe ELSE 0 END), 0)   AS ingresos,
-            COALESCE(SUM(CASE WHEN importe < 0 THEN ABS(importe) ELSE 0 END), 0) AS egresos,
+            COALESCE(SUM(CASE WHEN importe < 0 THEN ABS(importe) ELSE 0 END), 0) AS egresos_caja,
             COALESCE(SUM(importe), 0)                                           AS flujo_neto,
             COUNT(*)                                                             AS movimientos,
             COALESCE(MAX(CASE WHEN importe > 0 THEN importe ELSE 0 END), 0)   AS mayor_ingreso,
             COALESCE(MAX(CASE WHEN importe < 0 THEN ABS(importe) ELSE 0 END), 0) AS mayor_egreso
         FROM movimientos_caja WHERE {caja_where}
     """), params)).mappings().one()
+
+    # Egresos = negative caja movements + compras (pagos a proveedores)
+    compras_params: dict = {"desde": filters.desde, "hasta": filters.hasta_exclusive}
+    compras_cond = "fecha >= :desde AND fecha < :hasta AND COALESCE(anulada, 'N') <> 'S'"
+    if filters.cod_empresa:
+        compras_cond += " AND cod_empresa = ANY(:cod_empresa)"
+        compras_params["cod_empresa"] = filters.cod_empresa
+    compras_egresos = float((await db.execute(text(f"""
+        SELECT COALESCE(SUM({compra_importe_neto_expr()}), 0) FROM compras WHERE {compras_cond}
+    """), compras_params)).scalar() or 0)
 
     # Current balance (latest row by fecha)
     saldo_row = (await db.execute(text(
@@ -4426,7 +4447,7 @@ async def caja_kpis(
         saldo_row = {"saldo_actual": 0}
 
     ingresos = float(row["ingresos"] or 0)
-    egresos = float(row["egresos"] or 0)
+    egresos = float(row["egresos_caja"] or 0) + compras_egresos
 
     return {
         "ingresos":      {"actual": round(ingresos, 2)},
@@ -5475,4 +5496,111 @@ async def get_comprobantes_pendientes(
             }
             for r in rows
         ],
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Catalog list endpoints (for FilterBar and widget dropdowns)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/vendedores")
+async def get_vendedores_catalog(
+    company_id: int = None,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+    rows = (await db.execute(text(
+        "SELECT cod_vendedor, nombre, email, habilitado FROM vendedores ORDER BY nombre"
+    ))).mappings().all()
+    return {"vendedores": [dict(r) for r in rows], "total": len(rows)}
+
+
+@router.get("/clientes")
+async def get_clientes_catalog(
+    company_id: int = None,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+    rows = (await db.execute(text("""
+        SELECT cod_cliente, nombre
+        FROM saldos_clientes
+        ORDER BY nombre
+        LIMIT 5000
+    """))).mappings().all()
+    if not rows:
+        rows = (await db.execute(text("""
+            SELECT DISTINCT cliente_id AS cod_cliente, cliente_nombre AS nombre
+            FROM ventas
+            WHERE cliente_id IS NOT NULL AND cliente_nombre IS NOT NULL
+            ORDER BY nombre
+            LIMIT 5000
+        """))).mappings().all()
+    return {"clientes": [dict(r) for r in rows], "total": len(rows)}
+
+
+@router.get("/articulos")
+async def get_articulos_catalog(
+    company_id: int = None,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+    rows = (await db.execute(text("""
+        SELECT DISTINCT ON (cod_articulo)
+            cod_articulo, descripcion, cod_rubro, rubro, cod_subrubro, subrubro,
+            precio_compra, precio_venta, habilitado
+        FROM stock_disponible
+        ORDER BY cod_articulo, descripcion
+        LIMIT 2000
+    """))).mappings().all()
+    return {"articulos": [dict(r) for r in rows], "total": len(rows)}
+
+
+@router.get("/caja/egresos")
+async def get_caja_egresos(
+    company_id: int = None,
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+
+    params: dict = {"desde": filters.desde, "hasta": filters.hasta_exclusive}
+    cond = "fecha >= :desde AND fecha < :hasta AND COALESCE(anulada, 'N') <> 'S'"
+    if filters.cod_empresa:
+        cond += " AND cod_empresa = ANY(:cod_empresa)"
+        params["cod_empresa"] = filters.cod_empresa
+
+    rows = (await db.execute(text(f"""
+        SELECT
+            proveedor_id,
+            COALESCE(MAX(proveedor_nombre), proveedor_id::text) AS nombre,
+            COUNT(*) AS ordenes,
+            COALESCE(SUM({compra_importe_neto_expr()}), 0) AS total_pagado
+        FROM compras
+        WHERE {cond}
+        GROUP BY proveedor_id
+        ORDER BY total_pagado DESC
+        LIMIT 200
+    """), params)).mappings().all()
+
+    total_egresos = sum(float(r["total_pagado"] or 0) for r in rows)
+    return {
+        "total_egresos": round(total_egresos, 2),
+        "proveedores": [
+            {
+                "proveedor_id": r["proveedor_id"],
+                "nombre": r["nombre"],
+                "ordenes": int(r["ordenes"] or 0),
+                "total_pagado": round(float(r["total_pagado"] or 0), 2),
+            }
+            for r in rows
+        ],
+        "total": len(rows),
     }
