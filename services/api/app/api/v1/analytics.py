@@ -4709,8 +4709,8 @@ async def reportes_facturas_con_pagos(
         LEFT JOIN pagos_clientes pc ON cc.comprobante_id = pc.comprobante_id
         WHERE cc.tipo IN ('FA', 'ND', 'factura')
           AND cc.importe_total::float > 0
-          AND (:desde::date IS NULL OR cc.fecha::date >= :desde::date)
-          AND (:hasta::date IS NULL OR cc.fecha::date <= :hasta::date)
+          AND (:desde IS NULL OR cc.fecha::date >= CAST(:desde AS date))
+          AND (:hasta IS NULL OR cc.fecha::date <= CAST(:hasta AS date))
         GROUP BY cc.comprobante_id, cc.cliente_id, cc.cliente_nombre,
                  cc.tipo, cc.numero, cc.fecha, cc.importe_total, cc.importe_pagado, cc.saldo
         ORDER BY cc.fecha DESC
