@@ -2230,6 +2230,56 @@ async def ventas_transacciones(
     }
 
 
+@router.get("/ventas/facturas")
+async def ventas_facturas(
+    company_id: int = None,
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=100, ge=1, le=500),
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+
+    params: dict = {"limit": limit, "offset": (page - 1) * limit}
+    date_cond = ""
+    if filters.desde:
+        date_cond += " AND fa_fecha::date >= :desde"
+        params["desde"] = filters.desde
+    if filters.hasta:
+        date_cond += " AND fa_fecha::date <= :hasta"
+        params["hasta"] = filters.hasta
+    empresa_cond = ""
+    if filters.cod_empresa:
+        empresa_cond = " AND fa_cod_empresa = ANY(:cod_empresa)"
+        params["cod_empresa"] = filters.cod_empresa
+
+    _sql = f"""
+        SELECT fa_id, fa_fecha, tipo_comprobante, fa_cc,
+               fa_pto_vta, fa_nro, cod_cliente, fa_total_moneda_local,
+               saldo_fa, ult_fec_vto,
+               CASE
+                 WHEN saldo_fa IS NULL OR saldo_fa <= 0 THEN 1
+                 WHEN ult_fec_vto IS NULL OR ult_fec_vto >= CURRENT_DATE THEN 1
+                 WHEN CURRENT_DATE - ult_fec_vto <= 30 THEN 2
+                 WHEN CURRENT_DATE - ult_fec_vto <= 60 THEN 3
+                 ELSE 4
+               END AS color
+        FROM facturas_venta
+        WHERE 1=1 {date_cond} {empresa_cond}
+        ORDER BY fa_fecha DESC NULLS LAST
+        LIMIT :limit OFFSET :offset
+    """
+    rows = (await db.execute(text(_sql), params)).mappings().all()
+
+    count_params = {k: v for k, v in params.items() if k not in ("limit", "offset")}
+    count_sql = f"SELECT COUNT(*) FROM facturas_venta WHERE 1=1 {date_cond} {empresa_cond}"
+    total = (await db.execute(text(count_sql), count_params)).scalar() or 0
+
+    return {"facturas": [dict(r) for r in rows], "total": total, "page": page, "limit": limit}
+
+
 @router.get("/ventas/exportar")
 async def ventas_exportar(
     company_id: int = None,
