@@ -746,6 +746,38 @@ def sync_company(self, company_id: int, connector_id: int):
                 ),
             )
 
+        # --- Infomanager-specific tables (facturas, items de listas) ---
+        try:
+            desde_fa = date.today() - timedelta(days=90)
+            hasta_fa = date.today()
+
+            listas = im.obtener_listas_precios()
+            _upsert_listas_precios(cur, listas)
+            items_count = 0
+            for lista in listas:
+                if not _as_bool(lista.get("habilitado"), True):
+                    continue
+                cod_lista = _as_int(lista.get("cod_lista"))
+                if not cod_lista:
+                    continue
+                items = im.obtener_items_lista_precios(cod_lista, desde_fa, hasta_fa)
+                items_count += _upsert_items_lista(cur, items, cod_lista)
+            logger.info(f"[sync_company] items_listas={items_count}")
+
+            fv = im.obtener_facturas_venta(desde_fa, hasta_fa)
+            n_fv = _upsert_facturas_venta(cur, fv)
+            logger.info(f"[sync_company] facturas_venta={n_fv}")
+
+            fc = im.obtener_facturas_compra(desde_fa, hasta_fa)
+            n_fc = _upsert_facturas_compra(cur, fc)
+            logger.info(f"[sync_company] facturas_compra={n_fc}")
+
+            fcr = im.obtener_facturas_con_recibos(desde_fa, hasta_fa)
+            n_fcr = _upsert_facturas_con_recibos(cur, fcr)
+            logger.info(f"[sync_company] facturas_con_recibos={n_fcr}")
+        except Exception as fa_exc:
+            logger.warning(f"[sync_company] facturas sync skipped: {fa_exc}")
+
         cur.execute(
             """
             UPDATE public.company_connectors
