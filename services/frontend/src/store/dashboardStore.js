@@ -12,6 +12,7 @@ const DEFAULT_WIDGETS = [
   { id: 'default-8', type: 'top-productos' },
   { id: 'default-9', type: 'tendencia-ventas' },
   { id: 'default-10', type: 'stock-alertas' },
+  { id: 'default-11', type: 'ventas-por-empresa' },
 ];
 
 const DEFAULT_LAYOUTS = {
@@ -26,6 +27,7 @@ const DEFAULT_LAYOUTS = {
     { i: 'default-8', x: 4, y: 6, w: 4, h: 4, minW: 3, minH: 3 },
     { i: 'default-9', x: 8, y: 6, w: 4, h: 4, minW: 3, minH: 3 },
     { i: 'default-10', x: 0, y: 10, w: 12, h: 4, minW: 4, minH: 3 },
+    { i: 'default-11', x: 0, y: 14, w: 6, h: 4, minW: 3, minH: 3 },
   ],
   md: [
     { i: 'default-1', x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2 },
@@ -38,6 +40,7 @@ const DEFAULT_LAYOUTS = {
     { i: 'default-8', x: 4, y: 6, w: 4, h: 4, minW: 3, minH: 3 },
     { i: 'default-9', x: 8, y: 6, w: 4, h: 4, minW: 3, minH: 3 },
     { i: 'default-10', x: 0, y: 10, w: 12, h: 4, minW: 4, minH: 3 },
+    { i: 'default-11', x: 0, y: 14, w: 6, h: 4, minW: 3, minH: 3 },
   ],
   sm: [
     { i: 'default-1', x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2 },
@@ -50,6 +53,7 @@ const DEFAULT_LAYOUTS = {
     { i: 'default-8', x: 0, y: 16, w: 6, h: 4, minW: 3, minH: 3 },
     { i: 'default-9', x: 0, y: 20, w: 6, h: 4, minW: 3, minH: 3 },
     { i: 'default-10', x: 0, y: 24, w: 6, h: 4, minW: 3, minH: 3 },
+    { i: 'default-11', x: 0, y: 28, w: 6, h: 4, minW: 3, minH: 3 },
   ],
 };
 

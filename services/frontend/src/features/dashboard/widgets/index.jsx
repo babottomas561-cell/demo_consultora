@@ -1,4 +1,4 @@
-import { DollarSign, Users, ShoppingCart, TrendingUp, BarChart3, Trophy, PieChart, Package, Activity, AlertTriangle } from 'lucide-react';
+import { DollarSign, Users, ShoppingCart, TrendingUp, BarChart3, Trophy, PieChart, Package, Activity, AlertTriangle, Building2 } from 'lucide-react';
 import KpiCard from './KpiCard';
 import VentasMensualesChart from './VentasMensualesChart';
 import TopClientesWidget from './TopClientesWidget';
@@ -6,6 +6,7 @@ import VentasPorVendedorChart from './VentasPorVendedorChart';
 import TopProductosChart from './TopProductosChart';
 import TendenciaVentasChart from './TendenciaVentasChart';
 import StockAlertasWidget from './StockAlertasWidget';
+import VentasPorEmpresaWidget from '../../analytics/reportes/widgets/VentasPorEmpresaWidget';
 
 const WIDGET_CATALOG = [
   {
@@ -96,6 +97,15 @@ const WIDGET_CATALOG = [
     icon: AlertTriangle,
     component: StockAlertasWidget,
     defaultSize: { w: 12, h: 4 },
+    category: 'table',
+  },
+  {
+    type: 'ventas-por-empresa',
+    name: 'Ventas por Empresa',
+    description: 'Distribución entre razones sociales (se oculta si hay una sola)',
+    icon: Building2,
+    component: VentasPorEmpresaWidget,
+    defaultSize: { w: 6, h: 4 },
     category: 'table',
   },
 ];

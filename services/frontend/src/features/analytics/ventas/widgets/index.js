@@ -15,6 +15,7 @@ import ComprobantesTipoWidget from './ComprobantesTipoWidget';
 import TransaccionesWidget from './TransaccionesWidget';
 import FacturasVentaWidget from '../../infomanager/widgets/FacturasVentaWidget';
 import MargenPorListaWidget from '../../infomanager/widgets/MargenPorListaWidget';
+import EficienciaCobranzaWidget from '../../reportes/widgets/EficienciaCobranzaWidget';
 
 const VENTAS_WIDGET_CATALOG = [
   // ── KPIs ──
@@ -200,6 +201,15 @@ const VENTAS_WIDGET_CATALOG = [
     defaultSize: { w: 12, h: 7 },
     category: 'table',
   },
+  {
+    type: 'ventas-cobranza',
+    name: 'Eficiencia de Cobranza',
+    description: 'Facturas del período: % cobrado vs. pendiente',
+    icon: Receipt,
+    component: EficienciaCobranzaWidget,
+    defaultSize: { w: 12, h: 7 },
+    category: 'table',
+  },
 ];
 
 export default VENTAS_WIDGET_CATALOG;
@@ -230,6 +240,7 @@ export const VENTAS_DEFAULT_WIDGETS = [
   { id: 'v-18', type: 'ventas-transacciones' },
   { id: 'v-19', type: 'ventas-facturas-im' },
   { id: 'v-20', type: 'ventas-margen-lista' },
+  { id: 'v-21', type: 'ventas-cobranza'     },
 ];
 
 export const VENTAS_DEFAULT_LAYOUTS = {
@@ -262,6 +273,7 @@ export const VENTAS_DEFAULT_LAYOUTS = {
     { i: 'v-18', x: 0, y: 26, w: 12, h: 5, minW: 6, minH: 3 },
     { i: 'v-19', x: 0, y: 31, w: 12, h: 6, minW: 6, minH: 4 },
     { i: 'v-20', x: 0, y: 37, w: 12, h: 7, minW: 6, minH: 4 },
+    { i: 'v-21', x: 0, y: 44, w: 12, h: 7, minW: 6, minH: 4 },
   ],
   md: [
     { i: 'v-1', x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2 },
@@ -284,6 +296,7 @@ export const VENTAS_DEFAULT_LAYOUTS = {
     { i: 'v-18', x: 0, y: 26, w: 12, h: 5, minW: 6, minH: 3 },
     { i: 'v-19', x: 0, y: 31, w: 12, h: 6, minW: 6, minH: 4 },
     { i: 'v-20', x: 0, y: 37, w: 12, h: 7, minW: 6, minH: 4 },
+    { i: 'v-21', x: 0, y: 44, w: 12, h: 7, minW: 6, minH: 4 },
   ],
   sm: [
     { i: 'v-1', x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2 },
@@ -306,5 +319,6 @@ export const VENTAS_DEFAULT_LAYOUTS = {
     { i: 'v-18', x: 0, y: 46, w: 6, h: 5, minW: 3, minH: 3 },
     { i: 'v-19', x: 0, y: 51, w: 6, h: 6, minW: 3, minH: 4 },
     { i: 'v-20', x: 0, y: 57, w: 6, h: 7, minW: 3, minH: 4 },
+    { i: 'v-21', x: 0, y: 64, w: 6, h: 7, minW: 3, minH: 4 },
   ],
 };

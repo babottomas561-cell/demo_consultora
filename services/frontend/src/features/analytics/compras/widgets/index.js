@@ -11,6 +11,7 @@ import CalendarioPagosWidget from './CalendarioPagosWidget';
 import VariacionPreciosWidget from './VariacionPreciosWidget';
 import TransaccionesComprasWidget from './TransaccionesComprasWidget';
 import FacturasCompraWidget from '../../infomanager/widgets/FacturasCompraWidget';
+import VencimientosProveedoresWidget from '../../reportes/widgets/VencimientosProveedoresWidget';
 
 const COMPRAS_WIDGET_CATALOG = [
   // ── KPIs ──
@@ -31,6 +32,7 @@ const COMPRAS_WIDGET_CATALOG = [
   { type: 'compras-proveedores', name: 'Ranking proveedores', description: 'Tabla con totales y variación de precios', icon: List, component: RankingProveedoresWidget, defaultSize: { w: 12, h: 4 }, category: 'table' },
   { type: 'compras-transacciones', name: 'Transacciones', description: 'Detalle paginado de compras', icon: FileText, component: TransaccionesComprasWidget, defaultSize: { w: 12, h: 5 }, category: 'table' },
   { type: 'compras-facturas-im', name: 'Facturas de Compra (IM)', description: 'Facturas sincronizadas desde InfoManager', icon: Receipt, component: FacturasCompraWidget, defaultSize: { w: 12, h: 6 }, category: 'table' },
+  { type: 'compras-vencimientos-prov', name: 'Próximos Vencimientos a Proveedores', description: 'Facturas pendientes ordenadas por urgencia', icon: Clock, component: VencimientosProveedoresWidget, defaultSize: { w: 12, h: 7 }, category: 'table' },
 ];
 
 export default COMPRAS_WIDGET_CATALOG;
@@ -55,6 +57,7 @@ export const COMPRAS_DEFAULT_WIDGETS = [
   { id: 'c-13', type: 'compras-calendario' },
   { id: 'c-14', type: 'compras-transacciones' },
   { id: 'c-15', type: 'compras-facturas-im' },
+  { id: 'c-16', type: 'compras-vencimientos-prov' },
 ];
 
 export const COMPRAS_DEFAULT_LAYOUTS = {
@@ -74,6 +77,7 @@ export const COMPRAS_DEFAULT_LAYOUTS = {
     { i: 'c-13', x: 6, y: 13, w: 6, h: 5, minW: 4, minH: 3 },
     { i: 'c-14', x: 0, y: 18, w: 12, h: 5, minW: 6, minH: 3 },
     { i: 'c-15', x: 0, y: 23, w: 12, h: 6, minW: 6, minH: 4 },
+    { i: 'c-16', x: 0, y: 29, w: 12, h: 7, minW: 6, minH: 4 },
   ],
   md: [
     { i: 'c-1', x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2 },
@@ -91,6 +95,7 @@ export const COMPRAS_DEFAULT_LAYOUTS = {
     { i: 'c-13', x: 6, y: 13, w: 6, h: 5, minW: 4, minH: 3 },
     { i: 'c-14', x: 0, y: 18, w: 12, h: 5, minW: 6, minH: 3 },
     { i: 'c-15', x: 0, y: 23, w: 12, h: 6, minW: 6, minH: 4 },
+    { i: 'c-16', x: 0, y: 29, w: 12, h: 7, minW: 6, minH: 4 },
   ],
   sm: [
     { i: 'c-1', x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2 },
@@ -108,5 +113,6 @@ export const COMPRAS_DEFAULT_LAYOUTS = {
     { i: 'c-13', x: 0, y: 26, w: 6, h: 5, minW: 3, minH: 3 },
     { i: 'c-14', x: 0, y: 31, w: 6, h: 5, minW: 3, minH: 3 },
     { i: 'c-15', x: 0, y: 36, w: 6, h: 6, minW: 3, minH: 4 },
+    { i: 'c-16', x: 0, y: 42, w: 6, h: 7, minW: 3, minH: 4 },
   ],
 };
