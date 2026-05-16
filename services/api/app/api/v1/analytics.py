@@ -5349,10 +5349,10 @@ async def get_facturas_venta(
     params: dict = {"offset": (page - 1) * limit, "limit": limit}
     if desde:
         conditions.append("fa_fecha::date >= :desde")
-        params["desde"] = desde
+        params["desde"] = date.fromisoformat(desde)
     if hasta:
         conditions.append("fa_fecha::date <= :hasta")
-        params["hasta"] = hasta
+        params["hasta"] = date.fromisoformat(hasta)
     if cod_empresa is not None:
         conditions.append("fa_cod_empresa = :cod_empresa")
         params["cod_empresa"] = cod_empresa
