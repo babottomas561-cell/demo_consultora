@@ -63,7 +63,7 @@ export default function StockDataProvider({ children }) {
   const fetchMovimientos = useCallback(async () => {
     if (!canFetch || movimientos) return;
     setLoadingMovimientos(true);
-    try { const r = await apiClient.get(`/analytics/stock/movimientos${qs}`); setMovimientos(r.data); }
+    try { const r = await apiClient.get(`/analytics/stock/movimientos-series${qs}`); setMovimientos(r.data); }
     catch (e) { console.error(e); } finally { setLoadingMovimientos(false); }
   }, [qs, canFetch, movimientos]);
 

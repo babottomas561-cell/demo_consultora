@@ -3094,8 +3094,8 @@ async def stock_por_producto(
     return {"productos": productos, "por_deposito": list(dep_map.values())}
 
 
-@router.get("/stock/movimientos")
-async def stock_movimientos(
+@router.get("/stock/movimientos-series")
+async def stock_movimientos_series(
     company_id: int = None,
     cod_articulo: Optional[int] = None,
     filters: GlobalFilters = Depends(get_global_filters),
@@ -5031,32 +5031,73 @@ async def get_movimientos_stock(
     tenant_schema = await get_tenant_schema(current_user, db, company_id)
     await set_tenant_search_path(db, tenant_schema)
 
-    conditions = ["1=1"]
     params: dict = {}
+    art_cond_v = ""
+    art_cond_c = ""
+    dep_cond_v = ""
+    dep_cond_c = ""
+    date_cond_v = "1=1"
+    date_cond_c = "1=1"
+
     if cod_articulo is not None:
-        conditions.append("cod_articulo = :cod_articulo")
-        params["cod_articulo"] = cod_articulo
+        art_cond_v = "AND v.producto_id::text = :cod_articulo::text"
+        art_cond_c = "AND c.producto_id::text = :cod_articulo::text"
+        params["cod_articulo"] = str(cod_articulo)
     if cod_deposito is not None:
-        conditions.append("cod_deposito = :cod_deposito")
+        dep_cond_v = "AND v.cod_deposito = :cod_deposito"
+        dep_cond_c = "AND c.cod_deposito = :cod_deposito"
         params["cod_deposito"] = cod_deposito
     if desde:
-        conditions.append("fecha >= :desde")
+        date_cond_v = "v.fecha::date >= :desde"
+        date_cond_c = "c.fecha::date >= :desde"
         params["desde"] = desde
     if hasta:
-        conditions.append("fecha <= :hasta")
+        date_cond_v += " AND v.fecha::date <= :hasta" if desde else "v.fecha::date <= :hasta"
+        date_cond_c += " AND c.fecha::date <= :hasta" if desde else "c.fecha::date <= :hasta"
         params["hasta"] = hasta
 
-    where = " AND ".join(conditions)
     rows = (await db.execute(text(f"""
-        SELECT id, cod_articulo, descripcion, fecha, tipo_movimiento,
-               cantidad, precio, total, cod_deposito, cod_empresa
-        FROM movimientos_stock
-        WHERE {where}
+        SELECT
+            row_number() OVER () AS id,
+            producto_id::integer AS cod_articulo,
+            producto_nombre AS descripcion,
+            fecha,
+            'salida' AS tipo_movimiento,
+            -ABS(cantidad) AS cantidad,
+            precio_unitario AS precio,
+            total,
+            cod_deposito,
+            cod_empresa
+        FROM ventas v
+        WHERE {date_cond_v} AND tipo_comprobante = 'FA' AND anulada != 'S'
+          {art_cond_v} {dep_cond_v}
+          AND producto_id IS NOT NULL AND producto_id ~ '^[0-9]+$'
+        UNION ALL
+        SELECT
+            row_number() OVER () AS id,
+            producto_id::integer AS cod_articulo,
+            producto_nombre AS descripcion,
+            fecha,
+            'entrada' AS tipo_movimiento,
+            ABS(cantidad) AS cantidad,
+            precio_unitario AS precio,
+            total,
+            cod_deposito,
+            cod_empresa
+        FROM compras c
+        WHERE {date_cond_c} AND tipo_comprobante IN ('FA', 'FC') AND anulada != 'S'
+          {art_cond_c} {dep_cond_c}
+          AND producto_id IS NOT NULL AND producto_id ~ '^[0-9]+$'
         ORDER BY fecha DESC
         LIMIT 500
     """), params)).mappings().all()
 
-    return {"total": len(rows), "movimientos": [dict(r) for r in rows]}
+    return {"total": len(rows), "movimientos": [
+        {**dict(r), "cantidad": round(float(r["cantidad"] or 0), 3),
+         "precio": round(float(r["precio"] or 0), 2),
+         "total": round(float(r["total"] or 0), 2)}
+        for r in rows
+    ]}
 
 
 @router.get("/stock/interdepositos")
@@ -5172,7 +5213,8 @@ async def get_libro_mayor(
         params["hasta"] = hasta
 
     where = " AND ".join(conditions)
-    total = (await db.execute(text(f"SELECT COUNT(*) FROM movimientos_contables WHERE {where}"), params)).scalar()
+    count_params = {k: v for k, v in params.items() if k not in ("offset", "limit")}
+    total = (await db.execute(text(f"SELECT COUNT(*) FROM movimientos_contables WHERE {where}"), count_params)).scalar()
     rows = (await db.execute(text(f"""
         SELECT id, fecha, cuenta, plan_descripcion, debe, haber,
                tipo_comprobante, numero, descripcion, cod_empresa, tag
@@ -5225,7 +5267,8 @@ async def get_recibos_periodo(
         params["hasta"] = hasta
 
     where = " AND ".join(conditions)
-    total = (await db.execute(text(f"SELECT COUNT(*) FROM facturas_con_recibos WHERE {where}"), params)).scalar()
+    count_params_r = {k: v for k, v in params.items() if k not in ("offset", "limit")}
+    total = (await db.execute(text(f"SELECT COUNT(*) FROM facturas_con_recibos WHERE {where}"), count_params_r)).scalar()
     rows = (await db.execute(text(f"""
         SELECT fa_id, tipo_comp, fa_fecha, cod_cliente,
                fa_total, fa_total_moneda_local,
@@ -5247,6 +5290,188 @@ async def get_recibos_periodo(
                 **dict(r),
                 "importe": round(float(r["importe"] or 0), 2),
                 "fa_total": round(float(r["fa_total"] or 0), 2),
+            }
+            for r in rows
+        ],
+    }
+
+
+@router.get("/listas-precios")
+async def get_listas_precios(
+    company_id: int = None,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+    rows = (await db.execute(text(
+        "SELECT cod_lista, descripcion, aplica_a, cod_empresa, habilitado FROM listas_precios ORDER BY cod_lista"
+    ))).mappings().all()
+    return {"listas": [dict(r) for r in rows]}
+
+
+@router.get("/ventas/facturas")
+async def get_facturas_venta(
+    company_id: int = None,
+    desde: Optional[str] = None,
+    hasta: Optional[str] = None,
+    cod_empresa: Optional[int] = None,
+    page: int = 1,
+    limit: int = 200,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+
+    conditions = ["1=1"]
+    params: dict = {"offset": (page - 1) * limit, "limit": limit}
+    if desde:
+        conditions.append("fa_fecha >= :desde")
+        params["desde"] = desde
+    if hasta:
+        conditions.append("fa_fecha <= :hasta")
+        params["hasta"] = hasta
+    if cod_empresa is not None:
+        conditions.append("fa_cod_empresa = :cod_empresa")
+        params["cod_empresa"] = cod_empresa
+
+    where = " AND ".join(conditions)
+    count_params = {k: v for k, v in params.items() if k not in ("offset", "limit")}
+    total = (await db.execute(text(f"SELECT COUNT(*) FROM facturas_venta WHERE {where}"), count_params)).scalar() or 0
+    rows = (await db.execute(text(f"""
+        SELECT fa_id, tipo_comprobante, tipo_factura, fa_cod_empresa,
+               fa_fecha, fa_cc, fa_pto_vta, fa_nro, fa_moneda,
+               cod_cliente, cod_vendedor, fa_total, fa_total_moneda_local,
+               primer_fec_vto, ult_fec_vto, rc_imp_pagado, saldo_fa,
+               ultimo_recibo, remitos_asociados
+        FROM facturas_venta
+        WHERE {where}
+        ORDER BY fa_fecha DESC NULLS LAST
+        LIMIT :limit OFFSET :offset
+    """), params)).mappings().all()
+
+    return {
+        "total": int(total),
+        "page": page,
+        "limit": limit,
+        "facturas": [
+            {
+                **dict(r),
+                "fa_total": round(float(r["fa_total"] or 0), 2),
+                "fa_total_moneda_local": round(float(r["fa_total_moneda_local"] or 0), 2),
+                "rc_imp_pagado": round(float(r["rc_imp_pagado"] or 0), 2),
+                "saldo_fa": round(float(r["saldo_fa"] or 0), 2),
+                "color": (
+                    1 if float(r["saldo_fa"] or 0) <= 0.01 else
+                    4 if float(r["saldo_fa"] or 0) >= float(r["fa_total"] or 0) * 0.9 else
+                    2
+                ),
+            }
+            for r in rows
+        ],
+    }
+
+
+@router.get("/clientes/saldos")
+async def get_saldos_clientes(
+    company_id: int = None,
+    cod_empresa: Optional[int] = None,
+    color: Optional[int] = None,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+
+    conditions = ["tot_saldo > 0 OR tot_entrada > 0"]
+    params: dict = {}
+    if cod_empresa is not None:
+        conditions.append("cod_empresa = :cod_empresa")
+        params["cod_empresa"] = cod_empresa
+    if color is not None:
+        conditions.append("color = :color")
+        params["color"] = color
+
+    where = " AND ".join(conditions)
+    rows = (await db.execute(text(f"""
+        SELECT cod_cliente, nombre, fecha, dias_deuda,
+               tot_entrada, tot_salida, tot_saldo, color,
+               prevision, cod_cuenta, cta_descripcion, snapshot_at
+        FROM saldos_clientes
+        WHERE {where}
+        ORDER BY tot_saldo DESC
+        LIMIT 5000
+    """), params)).mappings().all()
+
+    total_saldo = sum(float(r["tot_saldo"] or 0) for r in rows)
+    return {
+        "total": len(rows),
+        "total_saldo": round(total_saldo, 2),
+        "saldos": [
+            {
+                **dict(r),
+                "tot_entrada": round(float(r["tot_entrada"] or 0), 2),
+                "tot_salida": round(float(r["tot_salida"] or 0), 2),
+                "tot_saldo": round(float(r["tot_saldo"] or 0), 2),
+                "prevision": round(float(r["prevision"] or 0), 2),
+            }
+            for r in rows
+        ],
+    }
+
+
+@router.get("/clientes/pendientes")
+async def get_comprobantes_pendientes(
+    company_id: int = None,
+    cod_empresa: Optional[int] = None,
+    color: Optional[int] = None,
+    aging: Optional[str] = None,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+
+    conditions = ["saldo > 0"]
+    params: dict = {}
+    if cod_empresa is not None:
+        conditions.append("cod_empresa = :cod_empresa")
+        params["cod_empresa"] = cod_empresa
+    if color is not None:
+        conditions.append("color = :color")
+        params["color"] = color
+    if aging == "0-30":
+        conditions.append("dias_deuda BETWEEN 0 AND 30")
+    elif aging == "31-60":
+        conditions.append("dias_deuda BETWEEN 31 AND 60")
+    elif aging == "61-90":
+        conditions.append("dias_deuda BETWEEN 61 AND 90")
+    elif aging == "+90":
+        conditions.append("dias_deuda > 90")
+
+    where = " AND ".join(conditions)
+    rows = (await db.execute(text(f"""
+        SELECT comprobante_id, tipo_comprobante, cod_cliente, nombre,
+               cod_empresa, cod_vendedor, punto_de_venta, numero,
+               importe_factura, importe_pagado, saldo,
+               fecha_factura, dias_deuda, color, moneda_fa, detalle
+        FROM comprobantes_pendientes_clientes
+        WHERE {where}
+        ORDER BY dias_deuda DESC NULLS LAST, saldo DESC
+        LIMIT 2000
+    """), params)).mappings().all()
+
+    total_saldo = sum(float(r["saldo"] or 0) for r in rows)
+    return {
+        "total": len(rows),
+        "total_saldo": round(total_saldo, 2),
+        "pendientes": [
+            {
+                **dict(r),
+                "importe_factura": round(float(r["importe_factura"] or 0), 2),
+                "importe_pagado": round(float(r["importe_pagado"] or 0), 2),
+                "saldo": round(float(r["saldo"] or 0), 2),
             }
             for r in rows
         ],
