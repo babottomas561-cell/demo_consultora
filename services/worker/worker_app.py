@@ -62,7 +62,11 @@ def _get_active_infomanager_tenants() -> list[dict]:
             JOIN public.companies c ON c.id = cc.company_id
             WHERE cc.connector_type = 'INFOMANAGER'
               AND c.is_provisioned = TRUE
-              AND cc.sync_status <> 'running'
+              AND (
+                cc.sync_status <> 'running'
+                OR cc.last_sync_at IS NULL
+                OR cc.last_sync_at < NOW() - INTERVAL '30 minutes'
+              )
             """
         )
         rows = cur.fetchall()

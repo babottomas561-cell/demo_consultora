@@ -101,11 +101,12 @@ async def get_connector(
 @router.post("/{company_id}/sync", response_model=ConnectorResponse)
 async def sync_connector(
     company_id: int,
+    force: bool = False,
     db: AsyncSession = Depends(get_db),
     admin=Depends(get_current_admin),
 ):
     connector = await _get_connector(db, company_id)
-    if connector.sync_status == "running":
+    if connector.sync_status == "running" and not force:
         return connector
 
     connector.sync_status = "pending"
@@ -113,6 +114,21 @@ async def sync_connector(
     await db.commit()
     await db.refresh(connector)
     dispatch_infomanager_sync(connector.company_id, connector.id)
+    return connector
+
+
+@router.post("/{company_id}/reset-sync", response_model=ConnectorResponse)
+async def reset_sync_status(
+    company_id: int,
+    db: AsyncSession = Depends(get_db),
+    admin=Depends(get_current_admin),
+):
+    """Force-reset a stuck sync (status=running) back to idle."""
+    connector = await _get_connector(db, company_id)
+    connector.sync_status = "idle"
+    connector.sync_error = "manually reset"
+    await db.commit()
+    await db.refresh(connector)
     return connector
 
 
