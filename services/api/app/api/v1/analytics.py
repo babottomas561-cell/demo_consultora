@@ -4683,9 +4683,11 @@ async def reportes_facturas_con_pagos(
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    from fastapi import HTTPException
     await _set_path(db, current_user, company_id)
 
-    rows = (await db.execute(text("""
+    try:
+        rows = (await db.execute(text("""
         SELECT
             cc.comprobante_id,
             cc.cliente_id,
@@ -4699,7 +4701,7 @@ async def reportes_facturas_con_pagos(
             CASE
                 WHEN cc.importe_total::float > 0
                 THEN ROUND((cc.importe_pagado::float / cc.importe_total::float * 100)::numeric, 1)
-                ELSE 0
+                ELSE 0::numeric
             END                         AS pct_cobrado,
             MAX(pc.fecha)               AS ultimo_pago,
             MAX(pc.forma_pago)          AS forma_pago
@@ -4707,17 +4709,20 @@ async def reportes_facturas_con_pagos(
         LEFT JOIN pagos_clientes pc ON cc.comprobante_id = pc.comprobante_id
         WHERE cc.tipo IN ('FA', 'ND', 'factura')
           AND cc.importe_total::float > 0
-          AND (:desde IS NULL OR cc.fecha::date >= :desde)
-          AND (:hasta IS NULL OR cc.fecha::date <= :hasta)
+          AND (:desde::date IS NULL OR cc.fecha::date >= :desde::date)
+          AND (:hasta::date IS NULL OR cc.fecha::date <= :hasta::date)
         GROUP BY cc.comprobante_id, cc.cliente_id, cc.cliente_nombre,
                  cc.tipo, cc.numero, cc.fecha, cc.importe_total, cc.importe_pagado, cc.saldo
         ORDER BY cc.fecha DESC
         LIMIT :limit
     """), {
-        "desde": filters.desde,
-        "hasta": filters.hasta,
-        "limit": limit,
-    })).mappings().all()
+            "desde": filters.desde,
+            "hasta": filters.hasta,
+            "limit": limit,
+        })).mappings().all()
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=f"SQL error en facturas-con-pagos: {type(e).__name__}: {e}")
 
     total_facturado = sum(float(r["importe_total"] or 0) for r in rows)
     total_cobrado   = sum(float(r["importe_pagado"] or 0) for r in rows)
