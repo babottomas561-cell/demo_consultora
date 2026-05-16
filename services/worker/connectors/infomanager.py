@@ -431,7 +431,7 @@ class InfomanagerConnector:
                 "nombre": c.get("nombre") or c.get("razon_social") or f"Cliente {c.get('cod_cliente')}",
                 "razon_social": c.get("razon_social") or c.get("nombre") or "",
                 "cuit": c.get("cuit") or "",
-                "email": c.get("email") or "",
+                "email": c.get("mail") or c.get("email") or "",
                 "cod_vendedor": _as_int(c.get("cod_vendedor")),
                 "habilitado": str(c.get("habilitado", "1")) not in ("0", "false", "False", "N"),
             }
@@ -492,7 +492,8 @@ class InfomanagerConnector:
                 # API returns current stock in "existencia", not "cantidad"
                 "cantidad": _as_float(s.get("existencia") or s.get("cantidad")),
                 "precio_compra_actual": _as_float(s.get("precio_compra")),
-                "stock_minimo": _as_float(_first_present(s, "stock_minimo", "stock_min", "punto_pedido")),
+                # Real API field is "pto_de_reposicion"; keep legacy names as fallback
+                "stock_minimo": _as_float(_first_present(s, "pto_de_reposicion", "stock_minimo", "stock_min", "punto_pedido")),
             }
             for s in data
         ]
@@ -591,9 +592,10 @@ class InfomanagerConnector:
             cab = headers.get(_as_int(item.get("id_comprobante")))
             if not cab:
                 continue
-            item_total = abs(_as_float(item.get("importe")) or (
-                abs(_as_float(item.get("cantidad"))) * abs(_as_float(item.get("precio")))
-            ))
+            # API returns importe=0 in compras items; real total is cantidad × precio_con_iva.
+            _qty = abs(_as_float(item.get("cantidad")))
+            _pcu = abs(_as_float(item.get("precio_con_iva")) or _as_float(item.get("precio")))
+            item_total = abs(_as_float(item.get("importe"))) or (_qty * _pcu)
             header_total = abs(_as_float(_first_present(
                 cab, "total", "importe", "importe_total", "total_comprobante", "fa_total"
             )))
