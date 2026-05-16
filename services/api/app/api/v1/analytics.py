@@ -1190,6 +1190,62 @@ async def compras_transacciones(
     return await query_compras_transacciones(db, filters, page, limit)
 
 
+@router.get("/compras/facturas")
+async def compras_facturas(
+    company_id: int = None,
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=100, ge=1, le=500),
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+
+    params: dict = {"limit": limit, "offset": (page - 1) * limit}
+    date_cond = ""
+    if filters.desde:
+        date_cond += " AND fecha::date >= :desde"
+        params["desde"] = filters.desde
+    if filters.hasta:
+        date_cond += " AND fecha::date <= :hasta"
+        params["hasta"] = filters.hasta
+    empresa_cond = ""
+    if filters.cod_empresa:
+        empresa_cond = " AND cod_empresa = ANY(:cod_empresa)"
+        params["cod_empresa"] = filters.cod_empresa
+    deposito_cond = ""
+    if filters.cod_deposito:
+        deposito_cond = " AND cod_deposito = ANY(:cod_deposito)"
+        params["cod_deposito"] = filters.cod_deposito
+
+    _sql = f"""
+        SELECT id, fecha, tipo_comprobante, tipo_factura,
+               punto_de_venta, numero, proveedor, moneda,
+               importe_total, importe_iva, anulada, cod_empresa, cod_deposito
+        FROM facturas_compra
+        WHERE 1=1
+        {date_cond} {empresa_cond} {deposito_cond}
+        ORDER BY fecha DESC NULLS LAST
+        LIMIT :limit OFFSET :offset
+    """
+    rows = (await db.execute(text(_sql), params)).mappings().all()
+
+    count_sql = f"""
+        SELECT COUNT(*) FROM facturas_compra
+        WHERE 1=1 {date_cond} {empresa_cond} {deposito_cond}
+    """
+    count_params = {k: v for k, v in params.items() if k not in ("limit", "offset")}
+    total = (await db.execute(text(count_sql), count_params)).scalar() or 0
+
+    return {
+        "facturas": [dict(r) for r in rows],
+        "total": total,
+        "page": page,
+        "limit": limit,
+    }
+
+
 @router.get("/compras/exportar")
 async def compras_exportar(
     company_id: int = None,
