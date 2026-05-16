@@ -4686,8 +4686,16 @@ async def reportes_facturas_con_pagos(
     from fastapi import HTTPException
     await _set_path(db, current_user, company_id)
 
-    try:
-        rows = (await db.execute(text("""
+    params: dict = {"limit": limit}
+    date_cond = ""
+    if filters.desde:
+        date_cond += " AND cc.fecha::date >= :desde"
+        params["desde"] = filters.desde
+    if filters.hasta:
+        date_cond += " AND cc.fecha::date <= :hasta"
+        params["hasta"] = filters.hasta
+
+    _sql = f"""
         SELECT
             cc.comprobante_id,
             cc.cliente_id,
@@ -4709,17 +4717,14 @@ async def reportes_facturas_con_pagos(
         LEFT JOIN pagos_clientes pc ON cc.comprobante_id = pc.comprobante_id
         WHERE cc.tipo IN ('FA', 'ND', 'factura')
           AND cc.importe_total::float > 0
-          AND (:desde IS NULL OR cc.fecha::date >= CAST(:desde AS date))
-          AND (:hasta IS NULL OR cc.fecha::date <= CAST(:hasta AS date))
+          {date_cond}
         GROUP BY cc.comprobante_id, cc.cliente_id, cc.cliente_nombre,
                  cc.tipo, cc.numero, cc.fecha, cc.importe_total, cc.importe_pagado, cc.saldo
         ORDER BY cc.fecha DESC
         LIMIT :limit
-    """), {
-            "desde": filters.desde,
-            "hasta": filters.hasta,
-            "limit": limit,
-        })).mappings().all()
+    """
+    try:
+        rows = (await db.execute(text(_sql), params)).mappings().all()
     except Exception as e:
         await db.rollback()
         raise HTTPException(status_code=500, detail=f"SQL error en facturas-con-pagos: {type(e).__name__}: {e}")
