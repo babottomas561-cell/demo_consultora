@@ -118,9 +118,21 @@ async def sync_infomanager(
     connector.sync_error = None
     await db.commit()
 
-    task = celery_client.send_task(
-        "tasks.sync_infomanager.sync_company",
-        args=[body.company_id, connector.id],
-    )
+    erp_config = {
+        "client_id": connector.client_id,
+        "client_secret": connector.client_secret,
+        "base_url": connector.base_url,
+    }
+
+    if body.mode == "full":
+        task = celery_client.send_task(
+            "tasks.sync_infomanager.sync_completo",
+            kwargs={"tenant_schema": company.tenant_schema, "erp_config": erp_config},
+        )
+    else:
+        task = celery_client.send_task(
+            "tasks.sync_infomanager.sync_company",
+            args=[body.company_id, connector.id],
+        )
 
     return {"job_id": task.id, "status": "processing", "mode": body.mode}
