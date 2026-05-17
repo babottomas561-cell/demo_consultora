@@ -5,7 +5,7 @@ import { formatCurrency, formatNumber } from '../../analyticsUtils';
 import { useVentasData } from '../VentasDataContext';
 
 const columns = [
-  { key: 'fecha', label: 'Fecha', render: (r) => r.fecha?.slice(0, 10) },
+  { key: 'fecha', label: 'Fecha', render: (r) => { const d = r.fecha?.slice(0, 10); return d ? d.split('-').reverse().join('/') : '-'; } },
   { key: 'tipo_comprobante', label: 'Tipo' },
   { key: 'tipo_factura', label: 'Letra' },
   { key: 'punto_de_venta', label: 'Pto.Vta' },

@@ -100,7 +100,7 @@ const DashboardView = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-[-0.02em] text-slate-900">
-            Hola, {user?.email}
+            Hola, {user?.email?.split('@')[0]}
           </h1>
           <p className="mt-1 text-sm text-slate-500">
             {activeCompany ? activeCompany.name : 'Tu empresa'} — Dashboard personalizable

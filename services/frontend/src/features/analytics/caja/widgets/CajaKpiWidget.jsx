@@ -1,6 +1,6 @@
-import { Loader2 } from 'lucide-react';
+
 import { useCajaData } from '../CajaDataContext';
-import { formatCurrency, formatNumber } from '../../analyticsUtils';
+import { formatCurrencyShort, formatNumberShort } from '../../analyticsUtils';
 
 const KPI_DEFS = {
   'caja-kpi-ingresos':      { label: 'Ingresos totales',   getValue: (k) => k?.ingresos,        format: 'currency', severity: 'success' },
@@ -23,8 +23,8 @@ const SEVERITY_CLASSES = {
 function formatValue(raw, format) {
   const v = raw?.actual ?? raw;
   if (v == null || (typeof v === 'number' && isNaN(v))) return '—';
-  if (format === 'currency') return formatCurrency(v);
-  if (format === 'number')   return formatNumber(v);
+  if (format === 'currency') return formatCurrencyShort(v);
+  if (format === 'number')   return formatNumberShort(v);
   return String(v);
 }
 
@@ -34,7 +34,12 @@ function CajaKpiWidget({ type }) {
   if (!def) return null;
 
   if (loadingKpis) {
-    return <div className="flex h-full items-center justify-center"><Loader2 className="animate-spin text-slate-400" size={24} /></div>;
+        return (
+      <div className="h-full flex flex-col justify-center rounded-xl border border-slate-200 bg-white p-4 animate-pulse">
+        <div className="h-2.5 w-2/3 rounded bg-slate-200 mb-3" />
+        <div className="h-7 w-1/2 rounded bg-slate-200" />
+      </div>
+    );
   }
 
   const raw = def.getValue(kpis);

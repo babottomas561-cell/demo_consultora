@@ -1,6 +1,6 @@
-import { Loader2 } from 'lucide-react';
+
 import { useVendedoresData } from '../VendedoresDataContext';
-import { formatCurrency, formatNumber } from '../../analyticsUtils';
+import { formatCurrencyShort, formatNumberShort } from '../../analyticsUtils';
 
 const KPI_DEFS = {
   'v-kpi-total-vendedores': {
@@ -56,8 +56,8 @@ const SEVERITY_CLASSES = {
 
 function formatValue(raw, format) {
   const actual = raw?.actual ?? raw ?? 0;
-  if (format === 'currency') return formatCurrency(actual);
-  if (format === 'number')   return formatNumber(actual);
+  if (format === 'currency') return formatCurrencyShort(actual);
+  if (format === 'number')   return formatNumberShort(actual);
   if (format === 'percent')  return `${Number(actual).toFixed(1)}%`;
   if (format === 'text')     return actual ? String(actual) : '—';
   return String(actual ?? '—');
@@ -71,8 +71,9 @@ function VendedoresKpiWidget({ type }) {
 
   if (loadingKpis) {
     return (
-      <div className="flex h-full items-center justify-center">
-        <Loader2 className="animate-spin text-slate-400" size={24} />
+      <div className="h-full flex flex-col justify-center rounded-xl border border-slate-200 bg-white p-4 animate-pulse">
+        <div className="h-2.5 w-2/3 rounded bg-slate-200 mb-3" />
+        <div className="h-7 w-1/2 rounded bg-slate-200" />
       </div>
     );
   }
