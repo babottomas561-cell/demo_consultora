@@ -7,10 +7,12 @@ import usePanelLayoutStore from '../../store/panelLayoutStore';
 import FilterBar from '../../components/FilterBar';
 import EditablePanel from '../../components/EditablePanel';
 import AddPanelWidgetModal from '../../components/AddPanelWidgetModal';
+import PeriodComparator from '../../components/analytics/PeriodComparator';
 import SavedViews from '../../components/analytics/SavedViews';
 import ExportButton from '../../components/analytics/ExportButton';
-
 import CrossFilterProvider from '../../components/analytics/CrossFilterProvider';
+import DrillThroughBreadcrumbs from '../../components/analytics/DrillThroughBreadcrumbs';
+
 import ResultadoDataProvider, { useResultadoData } from './resultado/ResultadoDataContext';
 import RESULTADO_WIDGET_CATALOG, {
   getResultadoWidgetDef,
@@ -85,32 +87,33 @@ const ResultadoPanelInner = () => {
                 MayoresDescuentos: descuentos?.mayores_descuentos,
               })}
               filename="resultado"
+              panelRef={panelRef}
             />
           </div>
         </div>
+
+        <PeriodComparator />
+        <DrillThroughBreadcrumbs />
 
         <EditablePanel
           panelId={PANEL_ID}
           catalog={RESULTADO_WIDGET_CATALOG}
           getWidgetDef={getResultadoWidgetDef}
-          onAddWidget={() => setShowAddModal(true)}
-          title="Panel Resultado"
+          onAddClick={() => setShowAddModal(true)}
         />
-      </div>
 
-      {showAddModal && (
-        <AddPanelWidgetModal
-          catalog={RESULTADO_WIDGET_CATALOG}
-          panelId={PANEL_ID}
-          onClose={() => setShowAddModal(false)}
-        />
-      )}
+        {showAddModal && (
+          <AddPanelWidgetModal
+            catalog={RESULTADO_WIDGET_CATALOG}
+            panelId={PANEL_ID}
+            onClose={() => setShowAddModal(false)}
+          />
+        )}
+      </div>
     </div>
   );
 };
 
-// CrossFilterProvider wraps the whole panel so scatter-chart clicks propagate
-// through the filter store; ResultadoDataProvider wraps inside for data access.
 const ResultadoAnalyticsView = () => (
   <CrossFilterProvider>
     <ResultadoDataProvider>

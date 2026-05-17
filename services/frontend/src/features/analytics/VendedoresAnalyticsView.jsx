@@ -7,8 +7,11 @@ import usePanelLayoutStore from '../../store/panelLayoutStore';
 import FilterBar from '../../components/FilterBar';
 import EditablePanel from '../../components/EditablePanel';
 import AddPanelWidgetModal from '../../components/AddPanelWidgetModal';
+import PeriodComparator from '../../components/analytics/PeriodComparator';
 import SavedViews from '../../components/analytics/SavedViews';
 import ExportButton from '../../components/analytics/ExportButton';
+import CrossFilterProvider from '../../components/analytics/CrossFilterProvider';
+import DrillThroughBreadcrumbs from '../../components/analytics/DrillThroughBreadcrumbs';
 
 import VendedoresDataProvider, { useVendedoresData } from './vendedores/VendedoresDataContext';
 import VENDEDORES_WIDGET_CATALOG, {
@@ -84,34 +87,39 @@ const VendedoresPanelInner = () => {
                 Comisiones: comisiones?.comisiones,
               })}
               filename="vendedores_ranking"
+              panelRef={panelRef}
             />
           </div>
         </div>
+
+        <PeriodComparator />
+        <DrillThroughBreadcrumbs />
 
         <EditablePanel
           panelId={PANEL_ID}
           catalog={VENDEDORES_WIDGET_CATALOG}
           getWidgetDef={getVendedoresWidgetDef}
-          onAddWidget={() => setShowAddModal(true)}
-          title="Panel Vendedores"
+          onAddClick={() => setShowAddModal(true)}
         />
-      </div>
 
-      {showAddModal && (
-        <AddPanelWidgetModal
-          catalog={VENDEDORES_WIDGET_CATALOG}
-          panelId={PANEL_ID}
-          onClose={() => setShowAddModal(false)}
-        />
-      )}
+        {showAddModal && (
+          <AddPanelWidgetModal
+            catalog={VENDEDORES_WIDGET_CATALOG}
+            panelId={PANEL_ID}
+            onClose={() => setShowAddModal(false)}
+          />
+        )}
+      </div>
     </div>
   );
 };
 
 const VendedoresAnalyticsView = () => (
-  <VendedoresDataProvider>
-    <VendedoresPanelInner />
-  </VendedoresDataProvider>
+  <CrossFilterProvider>
+    <VendedoresDataProvider>
+      <VendedoresPanelInner />
+    </VendedoresDataProvider>
+  </CrossFilterProvider>
 );
 
 export default VendedoresAnalyticsView;
