@@ -566,6 +566,7 @@ class InfomanagerConnector:
                     "anulada": cab.get("anulada", "N"),
                     "cod_deposito": _as_int(cab.get("cod_deposito"), 1),
                     "cod_rubro": _as_int(item.get("cod_rubro")) if item.get("cod_rubro") is not None else None,
+                    "cod_lista_precios": _as_int(item.get("cod_lista_precios")) if item.get("cod_lista_precios") is not None else None,
                     "precio_compra_actual": _as_float(item.get("precio_compra_actual")),
                     "descuento_porc": _as_float(item.get("descuento_porc") or item.get("descuento")),
                 }

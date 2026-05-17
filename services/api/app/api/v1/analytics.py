@@ -1940,6 +1940,89 @@ async def ventas_productos(
     return {"ranking": ranking, "por_rubro": rubros, "pareto": pareto}
 
 
+@router.get("/ventas/por-lista")
+async def ventas_por_lista(
+    company_id: int = None,
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+
+    params = filters.sql_params()
+    where = _ventas_base_where(filters)
+
+    lista_names: dict = {}
+    try:
+        lp_rows = (await db.execute(text(
+            "SELECT cod_lista, descripcion FROM listas_precios"
+        ))).mappings().all()
+        lista_names = {r["cod_lista"]: r["descripcion"] for r in lp_rows}
+    except Exception:
+        pass
+
+    por_lista = (await db.execute(text(f"""
+        SELECT
+            cod_lista_precios,
+            COALESCE(SUM({venta_importe_neto_expr()}), 0) AS facturado,
+            COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END) AS tickets,
+            COUNT(DISTINCT cliente_id) AS clientes_unicos,
+            COUNT(DISTINCT cod_vendedor) AS vendedores_unicos,
+            COALESCE(SUM({venta_importe_neto_expr()} - {venta_costo_neto_expr()}), 0) AS margen_abs,
+            COALESCE(SUM(CASE WHEN precio_compra_actual IS NOT NULL THEN ABS(total) ELSE 0 END), 0) AS total_con_costo
+        FROM ventas
+        WHERE {where} AND cod_lista_precios IS NOT NULL
+        GROUP BY cod_lista_precios
+        ORDER BY facturado DESC
+    """), params)).mappings().all()
+
+    por_vendedor_lista = (await db.execute(text(f"""
+        SELECT
+            cod_vendedor, cod_lista_precios,
+            COALESCE(SUM({venta_importe_neto_expr()}), 0) AS facturado,
+            COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END) AS tickets
+        FROM ventas
+        WHERE {where} AND cod_lista_precios IS NOT NULL AND cod_vendedor IS NOT NULL
+        GROUP BY cod_vendedor, cod_lista_precios
+        ORDER BY cod_vendedor, facturado DESC
+    """), params)).mappings().all()
+
+    vendedor_names: dict = {}
+    try:
+        vd_rows = (await db.execute(text("SELECT cod_vendedor, nombre FROM vendedores"))).mappings().all()
+        vendedor_names = {r["cod_vendedor"]: r["nombre"] for r in vd_rows}
+    except Exception:
+        pass
+
+    total_fa = sum(float(r["facturado"] or 0) for r in por_lista) or 1
+    listas_out = []
+    for r in por_lista:
+        d = dict(r)
+        d["facturado"] = money(d["facturado"])
+        d["margen_abs"] = money(d["margen_abs"])
+        tc = money(d.pop("total_con_costo"))
+        d["margen_pct"] = round(d["margen_abs"] / tc * 100, 1) if tc else 0
+        d["pct_total"] = round(d["facturado"] / total_fa * 100, 2)
+        d["ticket_promedio"] = round(d["facturado"] / d["tickets"], 2) if d["tickets"] else 0
+        d["nombre"] = lista_names.get(d["cod_lista_precios"], f"Lista {d['cod_lista_precios']}")
+        listas_out.append(d)
+
+    vendedores_out = []
+    for r in por_vendedor_lista:
+        d = dict(r)
+        d["facturado"] = money(d["facturado"])
+        d["vendedor_nombre"] = vendedor_names.get(d["cod_vendedor"], f"Vendedor {d['cod_vendedor']}")
+        d["lista_nombre"] = lista_names.get(d["cod_lista_precios"], f"Lista {d['cod_lista_precios']}")
+        vendedores_out.append(d)
+
+    return {
+        "por_lista": listas_out,
+        "por_vendedor_lista": vendedores_out,
+        "total_facturado": round(total_fa, 2),
+    }
+
+
 @router.get("/ventas/por-vendedor")
 async def ventas_por_vendedor(
     company_id: int = None,
@@ -5127,6 +5210,7 @@ async def get_movimientos_stock(
     cod_articulo: Optional[int] = None,
     q: Optional[str] = None,
     cod_deposito: Optional[int] = None,
+    cod_empresa: Optional[int] = None,
     desde: Optional[str] = None,
     hasta: Optional[str] = None,
     current_user=Depends(get_current_user),
@@ -5140,6 +5224,8 @@ async def get_movimientos_stock(
     art_cond_c = ""
     dep_cond_v = ""
     dep_cond_c = ""
+    emp_cond_v = ""
+    emp_cond_c = ""
     date_cond_v = "1=1"
     date_cond_c = "1=1"
 
@@ -5155,6 +5241,10 @@ async def get_movimientos_stock(
         dep_cond_v = "AND v.cod_deposito = :cod_deposito"
         dep_cond_c = "AND c.cod_deposito = :cod_deposito"
         params["cod_deposito"] = cod_deposito
+    if cod_empresa is not None:
+        emp_cond_v = "AND v.cod_empresa = :cod_empresa"
+        emp_cond_c = "AND c.cod_empresa = :cod_empresa"
+        params["cod_empresa"] = cod_empresa
     if desde:
         date_cond_v = "v.fecha::date >= :desde"
         date_cond_c = "c.fecha::date >= :desde"
@@ -5178,7 +5268,7 @@ async def get_movimientos_stock(
             cod_empresa
         FROM ventas v
         WHERE {date_cond_v} AND tipo_comprobante = 'FA' AND anulada != 'S'
-          {art_cond_v} {dep_cond_v}
+          {art_cond_v} {dep_cond_v} {emp_cond_v}
           AND producto_id IS NOT NULL AND producto_id ~ '^[0-9]+$'
         UNION ALL
         SELECT
@@ -5194,7 +5284,7 @@ async def get_movimientos_stock(
             cod_empresa
         FROM compras c
         WHERE {date_cond_c} AND tipo_comprobante IN ('FA', 'FC') AND anulada != 'S'
-          {art_cond_c} {dep_cond_c}
+          {art_cond_c} {dep_cond_c} {emp_cond_c}
           AND producto_id IS NOT NULL AND producto_id ~ '^[0-9]+$'
         ORDER BY fecha DESC
         LIMIT 500
@@ -5245,6 +5335,7 @@ async def get_interdepositos(
 async def get_resultado_listas_precios(
     company_id: int = None,
     cod_lista_precios: Optional[int] = None,
+    cod_empresa: Optional[int] = None,
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -5256,6 +5347,9 @@ async def get_resultado_listas_precios(
     if cod_lista_precios is not None:
         conditions.append("i.cod_lista = :cod_lista")
         params["cod_lista"] = cod_lista_precios
+    if cod_empresa is not None:
+        conditions.append("l.cod_empresa = :cod_empresa")
+        params["cod_empresa"] = cod_empresa
 
     where = " AND ".join(conditions)
     rows = (await db.execute(text(f"""

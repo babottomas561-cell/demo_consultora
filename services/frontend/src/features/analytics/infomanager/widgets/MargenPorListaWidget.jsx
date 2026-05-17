@@ -5,6 +5,7 @@ import { useInfomanagerFetch } from '../useInfomanagerFetch';
 export default function MargenPorListaWidget() {
   const { data, loading, error, refetch } = useInfomanagerFetch('resultado/listas-precios', (f) => ({
     cod_lista_precios: f.cod_lista_precios?.[0] ?? undefined,
+    cod_empresa: f.cod_empresa?.[0] ?? undefined,
   }));
 
   const items = data?.items ?? [];

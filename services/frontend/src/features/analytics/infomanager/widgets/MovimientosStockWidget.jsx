@@ -11,6 +11,7 @@ export default function MovimientosStockWidget() {
     desde: f.desde,
     hasta: f.hasta,
     cod_deposito: f.cod_deposito?.[0] ?? undefined,
+    cod_empresa: f.cod_empresa?.[0] ?? undefined,
     q: codArticuloFiltro || undefined,
   }));
 

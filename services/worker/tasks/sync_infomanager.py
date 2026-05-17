@@ -414,7 +414,7 @@ def sync_company(self, company_id: int, connector_id: int):
                   cantidad, precio_unitario, total, tipo_comprobante, tipo_factura,
                   punto_de_venta, cod_vendedor, cod_empresa, tag,
                   condicion_venta_tipo, neto, iva_importe, anulada,
-                  cod_deposito, cod_rubro, precio_compra_actual, descuento_porc
+                  cod_deposito, cod_rubro, cod_lista_precios, precio_compra_actual, descuento_porc
                 )
                 VALUES (
                   %(fecha)s, %(cliente_id)s, %(cliente_nombre)s, %(producto_id)s,
@@ -422,7 +422,7 @@ def sync_company(self, company_id: int, connector_id: int):
                   %(tipo_comprobante)s, %(tipo_factura)s, %(punto_de_venta)s,
                   %(cod_vendedor)s, %(cod_empresa)s, %(tag)s,
                   %(condicion_venta_tipo)s, %(neto)s, %(iva_importe)s,
-                  %(anulada)s, %(cod_deposito)s, %(cod_rubro)s,
+                  %(anulada)s, %(cod_deposito)s, %(cod_rubro)s, %(cod_lista_precios)s,
                   %(precio_compra_actual)s, %(descuento_porc)s
                 )
                 ON CONFLICT (fecha, cliente_id, producto_id, tipo_comprobante) DO UPDATE SET
@@ -433,6 +433,7 @@ def sync_company(self, company_id: int, connector_id: int):
                   precio_unitario=EXCLUDED.precio_unitario,
                   neto=EXCLUDED.neto,
                   iva_importe=EXCLUDED.iva_importe,
+                  cod_lista_precios=EXCLUDED.cod_lista_precios,
                   precio_compra_actual=EXCLUDED.precio_compra_actual,
                   descuento_porc=EXCLUDED.descuento_porc
                 """,

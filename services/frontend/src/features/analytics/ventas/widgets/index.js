@@ -15,6 +15,7 @@ import ComprobantesTipoWidget from './ComprobantesTipoWidget';
 import TransaccionesWidget from './TransaccionesWidget';
 import FacturasVentaWidget from '../../infomanager/widgets/FacturasVentaWidget';
 import MargenPorListaWidget from '../../infomanager/widgets/MargenPorListaWidget';
+import VentasPorListaWidget from './VentasPorListaWidget';
 import EficienciaCobranzaWidget from '../../reportes/widgets/EficienciaCobranzaWidget';
 
 const VENTAS_WIDGET_CATALOG = [
@@ -202,6 +203,15 @@ const VENTAS_WIDGET_CATALOG = [
     category: 'table',
   },
   {
+    type: 'ventas-por-lista',
+    name: 'Análisis Ventas por Lista',
+    description: 'Facturado, margen y vendedores por lista de precios usada',
+    icon: Layers,
+    component: VentasPorListaWidget,
+    defaultSize: { w: 12, h: 7 },
+    category: 'table',
+  },
+  {
     type: 'ventas-cobranza',
     name: 'Eficiencia de Cobranza',
     description: 'Facturas del período: % cobrado vs. pendiente',
@@ -240,7 +250,8 @@ export const VENTAS_DEFAULT_WIDGETS = [
   { id: 'v-18', type: 'ventas-transacciones' },
   { id: 'v-19', type: 'ventas-facturas-im' },
   { id: 'v-20', type: 'ventas-margen-lista' },
-  { id: 'v-21', type: 'ventas-cobranza'     },
+  { id: 'v-21', type: 'ventas-por-lista'    },
+  { id: 'v-22', type: 'ventas-cobranza'     },
 ];
 
 export const VENTAS_DEFAULT_LAYOUTS = {
@@ -274,6 +285,7 @@ export const VENTAS_DEFAULT_LAYOUTS = {
     { i: 'v-19', x: 0, y: 31, w: 12, h: 6, minW: 6, minH: 4 },
     { i: 'v-20', x: 0, y: 37, w: 12, h: 7, minW: 6, minH: 4 },
     { i: 'v-21', x: 0, y: 44, w: 12, h: 7, minW: 6, minH: 4 },
+    { i: 'v-22', x: 0, y: 51, w: 12, h: 7, minW: 6, minH: 4 },
   ],
   md: [
     { i: 'v-1', x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2 },
@@ -297,6 +309,7 @@ export const VENTAS_DEFAULT_LAYOUTS = {
     { i: 'v-19', x: 0, y: 31, w: 12, h: 6, minW: 6, minH: 4 },
     { i: 'v-20', x: 0, y: 37, w: 12, h: 7, minW: 6, minH: 4 },
     { i: 'v-21', x: 0, y: 44, w: 12, h: 7, minW: 6, minH: 4 },
+    { i: 'v-22', x: 0, y: 51, w: 12, h: 7, minW: 6, minH: 4 },
   ],
   sm: [
     { i: 'v-1', x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2 },
@@ -320,5 +333,6 @@ export const VENTAS_DEFAULT_LAYOUTS = {
     { i: 'v-19', x: 0, y: 51, w: 6, h: 6, minW: 3, minH: 4 },
     { i: 'v-20', x: 0, y: 57, w: 6, h: 7, minW: 3, minH: 4 },
     { i: 'v-21', x: 0, y: 64, w: 6, h: 7, minW: 3, minH: 4 },
+    { i: 'v-22', x: 0, y: 71, w: 6, h: 7, minW: 3, minH: 4 },
   ],
 };
