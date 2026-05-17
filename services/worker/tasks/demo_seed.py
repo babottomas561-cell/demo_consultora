@@ -654,3 +654,43 @@ def seed_tenant_demo(self, tenant_schema: str, meses: int = 12):
     except Exception as e:
         print(traceback.format_exc())
         raise Exception(f"Failed to seed demo: {str(e)}")
+
+
+@celery_app.task(bind=True, name="tasks.demo_seed.refresh_all_demo_infomanager_tables")
+def refresh_all_demo_infomanager_tables(self):
+    """Re-seed InfoManager-specific tables for all demo tenants (runs every 23 hours)."""
+    session = SessionLocal()
+    try:
+        result = session.execute(text(
+            "SELECT tenant_schema FROM public.companies"
+            " WHERE erp_type = 'infomanager_demo' AND is_provisioned = TRUE"
+        ))
+        schemas = [row[0] for row in result.fetchall()]
+        logger.info("[RefreshDemo] %d demo tenant(s) found: %s", len(schemas), schemas)
+
+        refreshed = []
+        errors = []
+        for tenant_schema in schemas:
+            try:
+                session.execute(text(f'SET search_path TO "{tenant_schema}"'))
+                # Tables without unique constraints must be cleared before re-insert
+                session.execute(text("DELETE FROM saldos_clientes"))
+                session.execute(text("DELETE FROM comprobantes_pendientes_clientes"))
+                session.commit()
+
+                _seed_infomanager_tables(session, tenant_schema)
+                session.commit()
+                refreshed.append(tenant_schema)
+                logger.info("[RefreshDemo] Refreshed %s", tenant_schema)
+            except Exception as exc:
+                session.rollback()
+                errors.append({"schema": tenant_schema, "error": str(exc)})
+                logger.error("[RefreshDemo] Error refreshing %s: %s", tenant_schema, exc)
+
+        return {"refreshed": refreshed, "errors": errors}
+    except Exception as exc:
+        session.rollback()
+        logger.error("[RefreshDemo] Fatal error: %s", exc)
+        raise
+    finally:
+        session.close()

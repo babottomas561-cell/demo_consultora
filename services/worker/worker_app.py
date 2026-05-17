@@ -44,6 +44,10 @@ celery_app.conf.beat_schedule = {
         "task": "tasks.sync_infomanager.sync_all_companies",
         "schedule": crontab(minute=0, hour="*/6"),
     },
+    "refresh-demo-infomanager": {
+        "task": "tasks.demo_seed.refresh_all_demo_infomanager_tables",
+        "schedule": timedelta(hours=23),
+    },
 }
 
 
