@@ -748,7 +748,7 @@ def sync_company(self, company_id: int, connector_id: int):
 
         # --- Infomanager-specific tables (facturas, items de listas) ---
         try:
-            desde_fa = date.today() - timedelta(days=90)
+            desde_fa = date.today() - timedelta(days=365)
             hasta_fa = date.today()
 
             listas = im.obtener_listas_precios()
@@ -1316,7 +1316,7 @@ def sync_completo(tenant_schema: str, erp_config: dict, connector_id: int = None
 
         _set_tenant_search_path(cur, tenant_schema)
 
-        desde = date.today() - timedelta(days=90)
+        desde = date.today() - timedelta(days=365)
         hasta = date.today()
 
         _upsert_empresas(cur, im.obtener_empresas())
