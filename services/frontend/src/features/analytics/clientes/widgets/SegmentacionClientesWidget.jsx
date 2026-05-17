@@ -2,7 +2,7 @@ import {
   Bar, BarChart, CartesianGrid, Cell, Pie, PieChart,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
-import { Loader2 } from 'lucide-react';
+import { ChartSkeleton } from '../../../../components/ui/WidgetSkeleton';
 import { useClientesData } from '../ClientesDataContext';
 import { formatCurrency } from '../../analyticsUtils';
 
@@ -12,7 +12,7 @@ export default function SegmentacionClientesWidget() {
   const { ranking, loadingRanking } = useClientesData();
 
   if (loadingRanking) {
-    return <div className="flex h-full items-center justify-center"><Loader2 className="animate-spin text-slate-400" size={24} /></div>;
+    return <ChartSkeleton />;
   }
 
   const clientes = ranking?.clientes ?? [];

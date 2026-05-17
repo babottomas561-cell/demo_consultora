@@ -1,7 +1,7 @@
 import {
   Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
-import { Loader2 } from 'lucide-react';
+import { TableSkeleton } from '../../../../components/ui/WidgetSkeleton';
 import { useClientesData } from '../ClientesDataContext';
 import { formatCurrency, formatNumber } from '../../analyticsUtils';
 
@@ -22,7 +22,7 @@ export default function RankingClientesWidget() {
   const { ranking, loadingRanking } = useClientesData();
 
   if (loadingRanking) {
-    return <div className="flex h-full items-center justify-center"><Loader2 className="animate-spin text-slate-400" size={24} /></div>;
+    return <TableSkeleton />;
   }
 
   const clientes = ranking?.clientes ?? [];

@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import {
   Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend,
 } from 'recharts';
-import { Loader2 } from 'lucide-react';
+import { ChartSkeleton } from '../../../../components/ui/WidgetSkeleton';
 import { useVendedoresData } from '../VendedoresDataContext';
 import { formatNumber } from '../../analyticsUtils';
 
@@ -14,7 +14,7 @@ export default function ConversionVendedoresWidget() {
   useEffect(() => { fetchTemporal(); }, [fetchTemporal]);
 
   if (loadingRanking) {
-    return <div className="flex h-full items-center justify-center"><Loader2 className="animate-spin text-slate-400" size={24} /></div>;
+    return <ChartSkeleton />;
   }
 
   const vendedores = (ranking?.vendedores ?? []).filter((v) => v.presupuestos_emitidos > 0);

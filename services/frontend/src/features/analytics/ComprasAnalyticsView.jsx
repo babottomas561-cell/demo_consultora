@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ShoppingCart } from 'lucide-react';
+import { ShoppingCart, RefreshCw } from 'lucide-react';
 
 import useAuthStore from '../../store/authStore';
 import usePanelLayoutStore from '../../store/panelLayoutStore';
@@ -71,7 +71,14 @@ const ComprasPanelInner = () => {
             <p className="text-sm text-slate-500">Compras, proveedores, vencimientos y variación de precios.</p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <SavedViews />
+            <button
+              onClick={refetch}
+              title="Actualizar datos"
+              className="inline-flex items-center rounded-lg border border-slate-200 bg-white p-2 text-slate-500 hover:bg-slate-50 hover:text-indigo-600 transition-colors"
+            >
+              <RefreshCw size={15} />
+            </button>
+                        <SavedViews />
             <ExportButton
               data={buildExportData({
                 KPIs: kpis,

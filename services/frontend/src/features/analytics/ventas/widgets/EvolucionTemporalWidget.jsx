@@ -1,7 +1,7 @@
 import {
   ComposedChart, Bar, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
-import { Loader2 } from 'lucide-react';
+import { ChartSkeleton } from '../../../../components/ui/WidgetSkeleton';
 import { useVentasData } from '../VentasDataContext';
 
 const MONTHS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
@@ -65,7 +65,7 @@ export default function EvolucionTemporalWidget() {
   const { temporal, loadingTemporal, granularidad, setGranularidad, comparar } = useVentasData();
 
   if (loadingTemporal) {
-    return <div className="flex h-full items-center justify-center"><Loader2 className="animate-spin text-indigo-400" size={24} /></div>;
+    return <ChartSkeleton />;
   }
 
   const rawSeries = temporal?.series ?? [];

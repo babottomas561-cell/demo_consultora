@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Loader2 } from 'lucide-react';
+import { ChartSkeleton } from '../../../../components/ui/WidgetSkeleton';
 import { useResultadoData } from '../ResultadoDataContext';
 import { formatCurrency, formatNumber } from '../../analyticsUtils';
 
@@ -17,7 +17,7 @@ export default function DescuentosResultadoWidget() {
   useEffect(() => { fetchDescuentos(); }, [fetchDescuentos]);
 
   if (loadingDescuentos) {
-    return <div className="flex h-full items-center justify-center"><Loader2 className="animate-spin text-slate-400" size={24} /></div>;
+    return <ChartSkeleton />;
   }
   if (!descuentos) {
     return <p className="p-4 text-sm text-slate-400">Sin datos de descuentos.</p>;

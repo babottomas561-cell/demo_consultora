@@ -1,5 +1,6 @@
 import { Loader2, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { useComprasData } from '../ComprasDataContext';
+import { TableSkeleton } from '../../../../components/ui/WidgetSkeleton';
 
 const fmtCurrency = (v) =>
   new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(Number(v ?? 0));
@@ -16,7 +17,7 @@ export default function RankingProveedoresWidget() {
   const { proveedores, loadingProveedores } = useComprasData();
 
   if (loadingProveedores) {
-    return <div className="flex h-full items-center justify-center"><Loader2 className="animate-spin text-teal-400" size={24} /></div>;
+    return <TableSkeleton />;
   }
 
   const rows = Array.isArray(proveedores?.proveedores) ? proveedores.proveedores : (Array.isArray(proveedores) ? proveedores : []);

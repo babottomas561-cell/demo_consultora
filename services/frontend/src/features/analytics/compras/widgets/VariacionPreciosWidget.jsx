@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { Loader2, AlertTriangle } from 'lucide-react';
 import { useComprasData } from '../ComprasDataContext';
+import { ChartSkeleton } from '../../../../components/ui/WidgetSkeleton';
 
 const fmtPct = (v) => `${Number(v ?? 0).toFixed(1)}%`;
 
@@ -11,7 +12,7 @@ export default function VariacionPreciosWidget() {
   useEffect(() => { fetchPrecios(); }, [fetchPrecios]);
 
   if (loadingPrecios) {
-    return <div className="flex h-full items-center justify-center"><Loader2 className="animate-spin text-teal-400" size={24} /></div>;
+    return <ChartSkeleton />;
   }
 
   const rows = Array.isArray(precios) ? precios : [];

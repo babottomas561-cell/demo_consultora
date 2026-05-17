@@ -1,7 +1,7 @@
 import {
   ComposedChart, Bar, Line, CartesianGrid, XAxis, YAxis, Tooltip, ReferenceLine, ResponsiveContainer,
 } from 'recharts';
-import { Loader2 } from 'lucide-react';
+import { TableSkeleton } from '../../../../components/ui/WidgetSkeleton';
 import ChartTooltip from '../../../../components/analytics/ChartTooltip';
 import { useVentasData } from '../VentasDataContext';
 
@@ -16,7 +16,7 @@ export default function ParetoProductosWidget() {
   const { productos, loadingProductos } = useVentasData();
 
   if (loadingProductos) {
-    return <div className="flex h-full items-center justify-center"><Loader2 className="animate-spin text-indigo-400" size={24} /></div>;
+    return <TableSkeleton />;
   }
 
   const pareto = productos?.pareto ?? [];

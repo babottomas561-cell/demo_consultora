@@ -1,4 +1,4 @@
-import { Loader2 } from 'lucide-react';
+import { TableSkeleton } from '../../../../components/ui/WidgetSkeleton';
 import { useStockData } from '../StockDataContext';
 import { formatCurrency, formatNumber } from '../../analyticsUtils';
 
@@ -16,7 +16,7 @@ export default function InventarioWidget() {
   const { inventario, loadingInventario } = useStockData();
 
   if (loadingInventario) {
-    return <div className="flex h-full items-center justify-center"><Loader2 className="animate-spin text-slate-400" size={24} /></div>;
+    return <TableSkeleton />;
   }
 
   const productos = inventario?.productos ?? [];

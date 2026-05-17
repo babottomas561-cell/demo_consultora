@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { Responsive, WidthProvider } from 'react-grid-layout/legacy';
-import { Activity, Plus, Pencil, RotateCcw, ShoppingCart, RefreshCcw, X, Lock } from 'lucide-react';
+import { Activity, Plus, Pencil, RotateCcw, ShoppingCart, X, Lock } from 'lucide-react';
 import useAuthStore from '../store/authStore';
 import useDashboardStore from '../store/dashboardStore';
 import { getWidgetDef } from '../features/dashboard/widgets';
@@ -80,52 +80,58 @@ const DashboardView = () => {
 
   if (!dataLoading && kpis?.total_transacciones === 0) {
     return (
-      <div className="py-20 flex flex-col items-center justify-center text-center space-y-6">
-        <div className="h-24 w-24 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-600">
-          <ShoppingCart size={48} />
+      <div className="py-20 flex flex-col items-center justify-center text-center space-y-4">
+        <div className="h-20 w-20 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-400">
+          <ShoppingCart size={40} />
         </div>
         <div>
-          <h2 className="text-3xl font-bold text-slate-900">Aún no hay datos</h2>
-          <p className="text-slate-500 mt-2 max-w-md mx-auto">Sincronizá tu primer archivo para comenzar.</p>
+          <h2 className="text-2xl font-bold text-slate-900">Sin datos aún</h2>
+          <p className="text-slate-500 mt-2 max-w-sm mx-auto text-sm">Cuando InfoManager sincronice los datos, aparecerán aquí automáticamente.</p>
         </div>
-        <Link to="/dashboard/sync" className="inline-flex items-center px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors shadow-sm font-medium">
-          <RefreshCcw size={18} className="mr-2" /> Sincronizar
-        </Link>
       </div>
     );
   }
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-bold tracking-[-0.02em] text-slate-900">
+          <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
             Hola, {user?.email?.split('@')[0]}
           </h1>
-          <p className="mt-1 text-sm text-slate-500">
-            {activeCompany ? activeCompany.name : 'Tu empresa'} — Dashboard personalizable
+          <p className="text-xs text-slate-500 sm:text-sm">
+            {activeCompany ? activeCompany.name : 'Tu empresa'}
           </p>
         </div>
         <div className="flex items-center gap-2">
           {editing && (
             <>
-              <button onClick={() => setShowAddModal(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-white px-3 py-2 text-sm font-medium text-indigo-600 hover:bg-indigo-50 transition-colors">
-                <Plus size={16} /> Agregar widget
+              <button
+                onClick={() => setShowAddModal(true)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-white px-2.5 py-1.5 text-xs font-medium text-indigo-600 hover:bg-indigo-50 transition-colors sm:px-3 sm:py-2 sm:text-sm"
+              >
+                <Plus size={14} />
+                <span className="hidden sm:inline">Agregar widget</span>
               </button>
-              <button onClick={resetToDefault} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors">
-                <RotateCcw size={16} /> Resetear
+              <button
+                onClick={resetToDefault}
+                title="Resetear al diseño original"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 transition-colors sm:px-3 sm:py-2 sm:text-sm"
+              >
+                <RotateCcw size={14} />
+                <span className="hidden sm:inline">Resetear</span>
               </button>
             </>
           )}
           <button
             onClick={toggleEditing}
-            className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+            className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors sm:px-3 sm:py-2 sm:text-sm ${
               editing
                 ? 'bg-indigo-600 text-white hover:bg-indigo-700'
                 : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
             }`}
           >
-            {editing ? <><Lock size={16} /> Guardar</> : <><Pencil size={16} /> Editar</>}
+            {editing ? <><Lock size={14} /> <span className="hidden sm:inline">Guardar</span></> : <><Pencil size={14} /> <span className="hidden sm:inline">Editar</span></>}
           </button>
         </div>
       </div>

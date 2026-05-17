@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Users } from 'lucide-react';
+import { Users, RefreshCw } from 'lucide-react';
 
 import useAuthStore from '../../store/authStore';
 import usePanelLayoutStore from '../../store/panelLayoutStore';
@@ -71,7 +71,14 @@ const ClientesPanelInner = () => {
             <p className="text-sm text-slate-500">Ranking, segmentación ABC, temporal y detalle por cliente.</p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <SavedViews />
+            <button
+              onClick={refetch}
+              title="Actualizar datos"
+              className="inline-flex items-center rounded-lg border border-slate-200 bg-white p-2 text-slate-500 hover:bg-slate-50 hover:text-indigo-600 transition-colors"
+            >
+              <RefreshCw size={15} />
+            </button>
+                        <SavedViews />
             <ExportButton
               label="Exportar ranking"
               endpoint={`/analytics/clientes/ranking${qs}`}

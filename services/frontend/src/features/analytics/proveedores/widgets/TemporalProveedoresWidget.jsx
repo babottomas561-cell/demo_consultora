@@ -3,7 +3,7 @@ import {
   Bar, BarChart, CartesianGrid, Line, LineChart,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
-import { Loader2 } from 'lucide-react';
+import { ChartSkeleton } from '../../../../components/ui/WidgetSkeleton';
 import { useProveedoresData } from '../ProveedoresDataContext';
 import { formatCurrency, formatNumber } from '../../analyticsUtils';
 
@@ -29,7 +29,7 @@ export default function TemporalProveedoresWidget() {
   useEffect(() => { fetchTemporal(); }, [fetchTemporal]);
 
   if (loadingTemporal) {
-    return <div className="flex h-full items-center justify-center"><Loader2 className="animate-spin text-slate-400" size={24} /></div>;
+    return <ChartSkeleton />;
   }
 
   const series = temporal?.series ?? [];

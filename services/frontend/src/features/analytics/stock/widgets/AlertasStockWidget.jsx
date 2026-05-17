@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { Loader2, CheckCircle } from 'lucide-react';
 import { useStockData } from '../StockDataContext';
 import { formatNumber } from '../../analyticsUtils';
+import { ChartSkeleton } from '../../../../components/ui/WidgetSkeleton';
 
 const SEV_STYLES = {
   critical: { bar: 'border-l-4 border-red-500 bg-red-50', badge: 'bg-red-100 text-red-700', icon: '🔴' },
@@ -15,7 +16,7 @@ export default function AlertasStockWidget() {
   useEffect(() => { fetchAlertas(); }, [fetchAlertas]);
 
   if (loadingAlertas) {
-    return <div className="flex h-full items-center justify-center"><Loader2 className="animate-spin text-slate-400" size={24} /></div>;
+    return <ChartSkeleton />;
   }
 
   const lista = alertas?.alertas ?? [];

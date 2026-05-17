@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useComprasData } from '../ComprasDataContext';
+import { TableSkeleton } from '../../../../components/ui/WidgetSkeleton';
 
 const fmtCurrency = (v) =>
   new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(Number(v ?? 0));
@@ -30,7 +31,7 @@ export default function TransaccionesComprasWidget() {
   useEffect(() => { fetchTransacciones(page); }, [fetchTransacciones, page]);
 
   if (loadingTransacciones) {
-    return <div className="flex h-full items-center justify-center"><Loader2 className="animate-spin text-teal-400" size={24} /></div>;
+    return <TableSkeleton />;
   }
 
   const rows = transacciones?.data ?? [];
