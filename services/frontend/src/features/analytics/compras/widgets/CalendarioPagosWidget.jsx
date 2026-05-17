@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Loader2, AlertCircle } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 import { useComprasData } from '../ComprasDataContext';
 import { ChartSkeleton } from '../../../../components/ui/WidgetSkeleton';
 

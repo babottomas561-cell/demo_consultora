@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { Loader2, AlertTriangle } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 import { useComprasData } from '../ComprasDataContext';
 import { ChartSkeleton } from '../../../../components/ui/WidgetSkeleton';
 

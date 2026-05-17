@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useComprasData } from '../ComprasDataContext';
 import { TableSkeleton } from '../../../../components/ui/WidgetSkeleton';
 

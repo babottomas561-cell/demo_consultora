@@ -1,4 +1,4 @@
-import { Loader2, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { useComprasData } from '../ComprasDataContext';
 import { TableSkeleton } from '../../../../components/ui/WidgetSkeleton';
 

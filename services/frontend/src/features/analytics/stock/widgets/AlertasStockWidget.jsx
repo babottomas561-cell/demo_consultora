@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Loader2, CheckCircle } from 'lucide-react';
+import { CheckCircle } from 'lucide-react';
 import { useStockData } from '../StockDataContext';
 import { formatNumber } from '../../analyticsUtils';
 import { ChartSkeleton } from '../../../../components/ui/WidgetSkeleton';
