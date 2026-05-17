@@ -11,7 +11,7 @@ export default function StockDisponibleWidget() {
     cod_rubro: f.cod_rubro?.[0] ?? undefined,
     cod_empresa: f.cod_empresa?.[0] ?? undefined,
     solo_alertas: soloAlertas || undefined,
-  }));
+  }), [soloAlertas]);
 
   const articulos = data?.articulos ?? [];
   const alertas = articulos.filter((a) => a.alerta_reposicion).length;

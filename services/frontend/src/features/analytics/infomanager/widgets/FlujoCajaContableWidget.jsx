@@ -19,7 +19,7 @@ export default function FlujoCajaContableWidget() {
     hasta: f.hasta,
     cod_empresa: f.cod_empresa?.[0] ?? undefined,
     prefijo_cuenta: prefijoCuenta || undefined,
-  }));
+  }), [prefijoCuenta]);
 
   const cuentas = data?.por_cuenta ?? [];
   const porDia = data?.por_dia ?? [];

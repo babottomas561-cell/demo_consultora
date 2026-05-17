@@ -13,7 +13,7 @@ export default function MovimientosStockWidget() {
     cod_deposito: f.cod_deposito?.[0] ?? undefined,
     cod_empresa: f.cod_empresa?.[0] ?? undefined,
     q: codArticuloFiltro || undefined,
-  }));
+  }), [codArticuloFiltro]);
 
   const movimientos = data?.movimientos ?? [];
   const entradas = movimientos.filter((m) => Number(m.cantidad) > 0).reduce((s, m) => s + Number(m.total || 0), 0);

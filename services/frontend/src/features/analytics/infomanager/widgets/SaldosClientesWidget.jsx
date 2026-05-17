@@ -23,7 +23,7 @@ export default function SaldosClientesWidget() {
   const { data, loading, error, refetch } = useInfomanagerFetch('clientes/saldos', (f) => ({
     cod_empresa: f.cod_empresa?.[0] ?? undefined,
     solo_con_saldo: soloConSaldo || undefined,
-  }));
+  }), [soloConSaldo]);
 
   const saldos = data?.saldos ?? [];
   const totalSaldo = saldos.reduce((s, r) => s + Number(r.tot_saldo || 0), 0);

@@ -17,7 +17,7 @@ export default function ComprobantesVencidosWidget() {
   const { data, loading, error, refetch } = useInfomanagerFetch('clientes/pendientes', (f) => ({
     cod_empresa: f.cod_empresa?.[0] ?? undefined,
     aging: aging || undefined,
-  }));
+  }), [aging]);
 
   const comprobantes = data?.pendientes ?? [];
 
