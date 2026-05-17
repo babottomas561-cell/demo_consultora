@@ -1302,14 +1302,21 @@ def _upsert_movimientos_contables(cur, rows: list[dict]) -> int:
 
 
 @celery_app.task(name="tasks.sync_infomanager.sync_incremental")
-def sync_incremental(tenant_schema: str, erp_config: dict) -> dict:
-    """Fast sync every 3 min: last 2h of invoices + full snapshots."""
+def sync_incremental(tenant_schema: str, erp_config: dict, connector_id: int = None) -> dict:
+    """Fast incremental sync (~30 s): last 2 days of invoices + full snapshots."""
     import time
     t0 = time.time()
     conn = psycopg2.connect(DATABASE_URL)
     cur = conn.cursor()
     counts: dict[str, int] = {}
     try:
+        if connector_id:
+            cur.execute(
+                "UPDATE public.company_connectors SET sync_status='running' WHERE id = %s",
+                (connector_id,),
+            )
+            conn.commit()
+
         client_id = erp_config["client_id"]
         client_secret = erp_config["client_secret"]
         base_url = erp_config.get("base_url")
@@ -1377,15 +1384,34 @@ def sync_incremental(tenant_schema: str, erp_config: dict) -> dict:
         cur.execute("TRUNCATE TABLE stock_disponible")
         counts["stock_disponible"] = _insert_stock_disponible(cur, stock)
 
+        if connector_id:
+            cur.execute(
+                "UPDATE public.company_connectors"
+                " SET sync_status='ok', last_sync_at=NOW(), sync_error=NULL"
+                " WHERE id = %s",
+                (connector_id,),
+            )
+
         conn.commit()
+        duracion = round(time.time() - t0, 2)
         return {
             "tenant_schema": tenant_schema,
             "status": "ok",
             "tablas": counts,
-            "duracion_segundos": round(time.time() - t0, 2),
+            "duracion_segundos": duracion,
         }
     except Exception as exc:
         conn.rollback()
+        if connector_id:
+            try:
+                cur.execute(
+                    "UPDATE public.company_connectors"
+                    " SET sync_status='error', sync_error=%s WHERE id = %s",
+                    (str(exc)[:500], connector_id),
+                )
+                conn.commit()
+            except Exception:
+                pass
         raise
     finally:
         cur.close()
