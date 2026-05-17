@@ -4163,10 +4163,27 @@ async def proveedores_kpis(
 
     # Best supplier by total
     best = (await db.execute(text(f"""
-        SELECT proveedor_id, proveedor_nombre, COALESCE(SUM({compra_importe_neto_expr()}), 0) AS total
+        SELECT proveedor_id, COALESCE(SUM({compra_importe_neto_expr()}), 0) AS total
         FROM compras WHERE {compras_where}
-        GROUP BY proveedor_id, proveedor_nombre ORDER BY total DESC LIMIT 1
+        GROUP BY proveedor_id ORDER BY total DESC LIMIT 1
     """), params)).mappings().one_or_none()
+
+    # Resolve best supplier name from master table
+    best_nombre = ""
+    if best:
+        best_prov_id = str(best["proveedor_id"])
+        try:
+            maestro_best = (await db.execute(text(
+                "SELECT nombre FROM proveedores WHERE cod_proveedor = :pid"
+            ), {"pid": best_prov_id})).scalar_one_or_none()
+        except Exception:
+            maestro_best = None
+        if not maestro_best:
+            cc_best = (await db.execute(text(
+                "SELECT MAX(proveedor_nombre) AS nombre FROM cuentas_corrientes_proveedores WHERE proveedor_id = :pid AND proveedor_nombre <> '' AND proveedor_nombre NOT LIKE 'Proveedor %'"
+            ), {"pid": best_prov_id})).scalar_one_or_none()
+            maestro_best = cc_best
+        best_nombre = maestro_best or f"Proveedor {best_prov_id}"
 
     # Cuenta corriente proveedores: saldo total y deuda vencida
     ccrow = (await db.execute(text("""
@@ -4190,7 +4207,7 @@ async def proveedores_kpis(
         "total_comprado":       {"actual": round(float(crow["total_comprado"] or 0), 2)},
         "ordenes":              {"actual": int(crow["ordenes"] or 0)},
         "ticket_promedio":      {"actual": round(float(crow["ticket_prom"] or 0), 2)},
-        "mejor_proveedor":      {"actual": best["proveedor_nombre"] if best else ""},
+        "mejor_proveedor":      {"actual": best_nombre},
         "saldo_cta_cte":        {"actual": round(float(ccrow["saldo_total"] or 0), 2)},
         "deuda_vencida":        {"actual": round(float(ccrow["deuda_vencida"] or 0), 2)},
         "proximos_30d":         {"actual": round(float(proximos["total"] or 0), 2)},
@@ -4222,10 +4239,17 @@ async def proveedores_ranking(
         GROUP BY proveedor_id ORDER BY total_comprado DESC
     """), params)).mappings().all()
 
-    # Fallback names from cuentas_corrientes_proveedores (may have better data from IM saldos sync)
+    # Primary name source: proveedores master table (populated on every sync)
+    try:
+        maestro_rows = (await db.execute(text("SELECT cod_proveedor, nombre FROM proveedores"))).mappings().all()
+        maestro_map = {r["cod_proveedor"]: r["nombre"] for r in maestro_rows if r["nombre"]}
+    except Exception:
+        maestro_map = {}
+
+    # Secondary fallback: cuentas_corrientes_proveedores
     cc_name_rows = (await db.execute(text("""
         SELECT proveedor_id,
-               MAX(CASE WHEN proveedor_nombre NOT LIKE 'Proveedor %%' THEN proveedor_nombre END) AS nombre
+               MAX(CASE WHEN proveedor_nombre <> '' AND proveedor_nombre NOT LIKE 'Proveedor %%' THEN proveedor_nombre END) AS nombre
         FROM cuentas_corrientes_proveedores
         GROUP BY proveedor_id
     """))).mappings().all()
@@ -4249,9 +4273,13 @@ async def proveedores_ranking(
         cumsum += pct
         segmento = "A" if cumsum <= 80 else "B" if cumsum <= 95 else "C"
 
-        raw_nombre = r["nombre"]
-        if not raw_nombre or raw_nombre.startswith("Proveedor "):
-            raw_nombre = cc_name_map.get(r["proveedor_id"]) or raw_nombre or f"Proveedor {r['proveedor_id']}"
+        prov_id = str(r["proveedor_id"])
+        raw_nombre = (
+            maestro_map.get(prov_id)
+            or cc_name_map.get(prov_id)
+            or r["nombre"]
+            or f"Proveedor {prov_id}"
+        )
         resultado.append({
             "proveedor_id": r["proveedor_id"],
             "nombre": raw_nombre,
