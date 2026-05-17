@@ -69,7 +69,8 @@ export default function MargenPorListaWidget() {
                     <tr>
                       <th className="border-b border-slate-100 px-4 py-2">Artículo</th>
                       <th className="border-b border-slate-100 px-4 py-2 text-right">P. Compra</th>
-                      <th className="border-b border-slate-100 px-4 py-2 text-right">P. Venta Lista</th>
+                      <th className="border-b border-slate-100 px-4 py-2 text-right">P. Venta s/IVA</th>
+                      <th className="border-b border-slate-100 px-4 py-2 text-right">P. Venta c/IVA</th>
                       <th className="border-b border-slate-100 px-4 py-2 text-right">Margen %</th>
                       <th className="border-b border-slate-100 px-4 py-2 text-right">Dto. %</th>
                     </tr>
@@ -77,9 +78,10 @@ export default function MargenPorListaWidget() {
                   <tbody className="divide-y divide-slate-50">
                     {lista.items.map((item) => (
                       <tr key={`${item.cod_lista}-${item.cod_articulo}`} className="hover:bg-slate-50">
-                        <td className="max-w-[220px] truncate px-4 py-1.5 text-slate-700">{item.art_descripcion}</td>
+                        <td className="max-w-[200px] truncate px-4 py-1.5 text-slate-700">{item.art_descripcion}</td>
                         <td className="whitespace-nowrap px-4 py-1.5 text-right text-slate-500">{formatCurrency(item.art_precio_compra)}</td>
                         <td className="whitespace-nowrap px-4 py-1.5 text-right font-medium text-slate-700">{formatCurrency(item.lista_precio_venta)}</td>
+                        <td className="whitespace-nowrap px-4 py-1.5 text-right text-indigo-700 font-medium">{formatCurrency(item.lista_precio_con_iva)}</td>
                         <td className={`whitespace-nowrap px-4 py-1.5 text-right font-semibold ${
                           item.margen_porc == null ? 'text-slate-400' :
                           Number(item.margen_porc) >= 30 ? 'text-green-600' :

@@ -11,10 +11,31 @@ export default function LibroMayorWidget() {
 
   const movimientos = data?.movimientos ?? [];
 
+  const totalDebe = movimientos.reduce((s, m) => s + Number(m.debe || 0), 0);
+  const totalHaber = movimientos.reduce((s, m) => s + Number(m.haber || 0), 0);
+  const saldoNeto = totalDebe - totalHaber;
+
+  let saldoAcum = 0;
+  const movimientosConSaldo = movimientos.map((m) => {
+    saldoAcum += Number(m.debe || 0) - Number(m.haber || 0);
+    return { ...m, saldo_acum: saldoAcum };
+  });
+
   return (
     <div className="flex h-full flex-col">
       <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-4 py-2">
-        <span className="text-xs text-slate-500">{data?.total ?? 0} asientos</span>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-slate-500">{data?.total ?? 0} asientos</span>
+          {movimientos.length > 0 && (
+            <>
+              <span className="text-xs text-slate-500">Debe: <span className="font-semibold text-slate-700">{formatCurrency(totalDebe)}</span></span>
+              <span className="text-xs text-slate-500">Haber: <span className="font-semibold text-slate-700">{formatCurrency(totalHaber)}</span></span>
+              <span className="text-xs text-slate-500">
+                Saldo: <span className={`font-semibold ${saldoNeto >= 0 ? 'text-slate-700' : 'text-red-600'}`}>{formatCurrency(Math.abs(saldoNeto))} {saldoNeto >= 0 ? 'D' : 'H'}</span>
+              </span>
+            </>
+          )}
+        </div>
         <button
           onClick={refetch}
           disabled={loading}
@@ -39,21 +60,29 @@ export default function LibroMayorWidget() {
                 <th className="border-b border-slate-100 px-3 py-2">Cuenta</th>
                 <th className="border-b border-slate-100 px-3 py-2">Descripción</th>
                 <th className="border-b border-slate-100 px-3 py-2">Tipo</th>
-                <th className="border-b border-slate-100 px-3 py-2">Nro.</th>
+                <th className="border-b border-slate-100 px-3 py-2">Nro. Comp.</th>
                 <th className="border-b border-slate-100 px-3 py-2 text-right">Debe</th>
                 <th className="border-b border-slate-100 px-3 py-2 text-right">Haber</th>
+                <th className="border-b border-slate-100 px-3 py-2 text-right">Saldo</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {movimientos.map((m) => (
+              {movimientosConSaldo.map((m) => (
                 <tr key={m.id} className="hover:bg-slate-50">
                   <td className="whitespace-nowrap px-3 py-1.5 text-slate-600">{m.fecha?.slice(0, 10)}</td>
-                  <td className="px-3 py-1.5 text-slate-500">{m.cuenta}</td>
-                  <td className="max-w-[200px] truncate px-3 py-1.5 text-slate-700">{m.plan_descripcion || m.descripcion}</td>
+                  <td className="px-3 py-1.5 text-slate-500 font-mono text-[10px]">{m.cuenta}</td>
+                  <td className="max-w-[220px] truncate px-3 py-1.5 text-slate-700">{m.plan_descripcion || m.descripcion}</td>
                   <td className="px-3 py-1.5 text-slate-400">{m.tipo_comprobante}</td>
-                  <td className="px-3 py-1.5 text-slate-400">{m.numero}</td>
-                  <td className="whitespace-nowrap px-3 py-1.5 text-right font-medium text-slate-700">{formatCurrency(m.debe)}</td>
-                  <td className="whitespace-nowrap px-3 py-1.5 text-right font-medium text-slate-700">{formatCurrency(m.haber)}</td>
+                  <td className="px-3 py-1.5 text-slate-400 font-mono text-[10px]">{m.numero}</td>
+                  <td className="whitespace-nowrap px-3 py-1.5 text-right font-medium text-slate-700">
+                    {Number(m.debe) > 0 ? formatCurrency(m.debe) : '-'}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-1.5 text-right font-medium text-slate-700">
+                    {Number(m.haber) > 0 ? formatCurrency(m.haber) : '-'}
+                  </td>
+                  <td className={`whitespace-nowrap px-3 py-1.5 text-right font-semibold ${m.saldo_acum >= 0 ? 'text-slate-700' : 'text-red-600'}`}>
+                    {formatCurrency(Math.abs(m.saldo_acum))} {m.saldo_acum >= 0 ? 'D' : 'H'}
+                  </td>
                 </tr>
               ))}
             </tbody>

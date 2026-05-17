@@ -5125,6 +5125,7 @@ async def get_stock_disponible(
 async def get_movimientos_stock(
     company_id: int = None,
     cod_articulo: Optional[int] = None,
+    q: Optional[str] = None,
     cod_deposito: Optional[int] = None,
     desde: Optional[str] = None,
     hasta: Optional[str] = None,
@@ -5146,6 +5147,10 @@ async def get_movimientos_stock(
         art_cond_v = "AND v.producto_id::text = :cod_articulo::text"
         art_cond_c = "AND c.producto_id::text = :cod_articulo::text"
         params["cod_articulo"] = str(cod_articulo)
+    elif q:
+        art_cond_v = "AND v.producto_nombre ILIKE :q"
+        art_cond_c = "AND c.producto_nombre ILIKE :q"
+        params["q"] = f"%{q}%"
     if cod_deposito is not None:
         dep_cond_v = "AND v.cod_deposito = :cod_deposito"
         dep_cond_c = "AND c.cod_deposito = :cod_deposito"
@@ -5360,27 +5365,29 @@ async def get_recibos_periodo(
     conditions = ["1=1"]
     params: dict = {"offset": (page - 1) * limit, "limit": limit}
     if cod_empresa is not None:
-        conditions.append("fa_cod_empresa = :cod_empresa")
+        conditions.append("fcr.fa_cod_empresa = :cod_empresa")
         params["cod_empresa"] = cod_empresa
     if desde:
-        conditions.append("rc_fecha::date >= :desde")
+        conditions.append("fcr.rc_fecha::date >= :desde")
         params["desde"] = date.fromisoformat(desde)
     if hasta:
-        conditions.append("rc_fecha::date <= :hasta")
+        conditions.append("fcr.rc_fecha::date <= :hasta")
         params["hasta"] = date.fromisoformat(hasta)
 
     where = " AND ".join(conditions)
     count_params_r = {k: v for k, v in params.items() if k not in ("offset", "limit")}
-    total = (await db.execute(text(f"SELECT COUNT(*) FROM facturas_con_recibos WHERE {where}"), count_params_r)).scalar()
+    total = (await db.execute(text(f"SELECT COUNT(*) FROM facturas_con_recibos fcr WHERE {where}"), count_params_r)).scalar()
     rows = (await db.execute(text(f"""
-        SELECT fa_id, tipo_comp, fa_fecha, cod_cliente,
-               fa_total, fa_total_moneda_local,
-               rc_id, rc_fecha, rc_nro,
-               imp_pag_moneda_local, cond_pago, importe,
-               cod_banco, cheque_numero, cheque_fec_pago, importe_retencion
-        FROM facturas_con_recibos
+        SELECT fcr.fa_id, fcr.tipo_comp, fcr.fa_fecha, fcr.cod_cliente,
+               COALESCE(c.nombre, fcr.cod_cliente::text) AS cliente_nombre,
+               fcr.fa_total, fcr.fa_total_moneda_local,
+               fcr.rc_id, fcr.rc_fecha, fcr.rc_nro,
+               fcr.imp_pag_moneda_local, fcr.cond_pago, fcr.importe,
+               fcr.cod_banco, fcr.cheque_numero, fcr.cheque_fec_pago, fcr.importe_retencion
+        FROM facturas_con_recibos fcr
+        LEFT JOIN clientes c ON c.external_id = fcr.cod_cliente::text
         WHERE {where}
-        ORDER BY rc_fecha DESC
+        ORDER BY fcr.rc_fecha DESC
         LIMIT :limit OFFSET :offset
     """), params)).mappings().all()
 
@@ -5430,27 +5437,29 @@ async def get_facturas_venta(
     conditions = ["1=1"]
     params: dict = {"offset": (page - 1) * limit, "limit": limit}
     if desde:
-        conditions.append("fa_fecha::date >= :desde")
+        conditions.append("fv.fa_fecha::date >= :desde")
         params["desde"] = date.fromisoformat(desde)
     if hasta:
-        conditions.append("fa_fecha::date <= :hasta")
+        conditions.append("fv.fa_fecha::date <= :hasta")
         params["hasta"] = date.fromisoformat(hasta)
     if cod_empresa is not None:
-        conditions.append("fa_cod_empresa = :cod_empresa")
+        conditions.append("fv.fa_cod_empresa = :cod_empresa")
         params["cod_empresa"] = cod_empresa
 
     where = " AND ".join(conditions)
     count_params = {k: v for k, v in params.items() if k not in ("offset", "limit")}
-    total = (await db.execute(text(f"SELECT COUNT(*) FROM facturas_venta WHERE {where}"), count_params)).scalar() or 0
+    total = (await db.execute(text(f"SELECT COUNT(*) FROM facturas_venta fv WHERE {where}"), count_params)).scalar() or 0
     rows = (await db.execute(text(f"""
-        SELECT fa_id, tipo_comprobante, tipo_factura, fa_cod_empresa,
-               fa_fecha, fa_cc, fa_pto_vta, fa_nro, fa_moneda,
-               cod_cliente, cod_vendedor, fa_total, fa_total_moneda_local,
-               primer_fec_vto, ult_fec_vto, rc_imp_pagado, saldo_fa,
-               ultimo_recibo, remitos_asociados
-        FROM facturas_venta
+        SELECT fv.fa_id, fv.tipo_comprobante, fv.tipo_factura, fv.fa_cod_empresa,
+               fv.fa_fecha, fv.fa_cc, fv.fa_pto_vta, fv.fa_nro, fv.fa_moneda,
+               fv.cod_cliente, COALESCE(c.nombre, fv.cod_cliente::text) AS cliente_nombre,
+               fv.cod_vendedor, fv.fa_total, fv.fa_total_moneda_local,
+               fv.primer_fec_vto, fv.ult_fec_vto, fv.rc_imp_pagado, fv.saldo_fa,
+               fv.ultimo_recibo, fv.remitos_asociados
+        FROM facturas_venta fv
+        LEFT JOIN clientes c ON c.external_id = fv.cod_cliente::text
         WHERE {where}
-        ORDER BY fa_fecha DESC NULLS LAST
+        ORDER BY fv.fa_fecha DESC NULLS LAST
         LIMIT :limit OFFSET :offset
     """), params)).mappings().all()
 

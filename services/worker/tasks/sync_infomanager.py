@@ -775,6 +775,10 @@ def sync_company(self, company_id: int, connector_id: int):
             fcr = im.obtener_facturas_con_recibos(desde_fa, hasta_fa)
             n_fcr = _upsert_facturas_con_recibos(cur, fcr)
             print(f"[sync_company] facturas_con_recibos={n_fcr}")
+
+            mc = im.obtener_movimientos_contables(desde_fa, hasta_fa, "", 0)
+            n_mc = _upsert_movimientos_contables(cur, mc)
+            print(f"[sync_company] movimientos_contables={n_mc}")
         except Exception as fa_exc:
             print(f"[sync_company] facturas sync skipped: {fa_exc}")
 
@@ -1224,6 +1228,52 @@ def _upsert_facturas_con_recibos(cur, rows: list[dict]) -> int:
     return len(values)
 
 
+def _upsert_movimientos_contables(cur, rows: list[dict]) -> int:
+    from psycopg2.extras import execute_values
+    values = []
+    seen: set = set()
+    for r in rows:
+        row_id = str(r.get("id") or "")
+        if not row_id or row_id in seen:
+            continue
+        seen.add(row_id)
+        values.append((
+            row_id,
+            r.get("fecha"),
+            _as_int(r.get("cuenta")),
+            r.get("plan_descripcion"),
+            _as_float(r.get("debe")),
+            _as_float(r.get("haber")),
+            r.get("tipo_comprobante"),
+            r.get("numero"),
+            r.get("descripcion") or r.get("concepto"),
+            _as_int(r.get("cod_empresa")),
+            r.get("tag"),
+            _as_int(r.get("cod_unidad_negocio")),
+            r.get("movimiento"),
+        ))
+    if not values:
+        return 0
+    execute_values(
+        cur,
+        """
+        INSERT INTO movimientos_contables (
+          id, fecha, cuenta, plan_descripcion, debe, haber,
+          tipo_comprobante, numero, descripcion, cod_empresa,
+          tag, cod_unidad_negocio, movimiento
+        ) VALUES %s
+        ON CONFLICT (id) DO UPDATE SET
+          debe=EXCLUDED.debe, haber=EXCLUDED.haber,
+          plan_descripcion=EXCLUDED.plan_descripcion,
+          descripcion=EXCLUDED.descripcion
+        """,
+        values,
+        template="(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+        page_size=500,
+    )
+    return len(values)
+
+
 @celery_app.task(name="tasks.sync_infomanager.sync_incremental")
 def sync_incremental(tenant_schema: str, erp_config: dict) -> dict:
     """Fast sync every 3 min: last 2h of invoices + full snapshots."""
@@ -1375,6 +1425,9 @@ def sync_completo(tenant_schema: str, erp_config: dict, connector_id: int = None
 
         fcr = im.obtener_facturas_con_recibos(desde, hasta)
         counts["facturas_con_recibos"] = _upsert_facturas_con_recibos(cur, fcr)
+
+        mc = im.obtener_movimientos_contables(desde, hasta, "", 0)
+        counts["movimientos_contables"] = _upsert_movimientos_contables(cur, mc)
 
         saldos = im.obtener_saldos_clientes()
         cur.execute("TRUNCATE TABLE saldos_clientes")
