@@ -8,6 +8,7 @@ import DevolucionesWidget from './DevolucionesWidget';
 import ParetoProductosWidget from './ParetoProductosWidget';
 import RankingProductosWidget from './RankingProductosWidget';
 import FacturacionRubroWidget from './FacturacionRubroWidget';
+import FacturacionSubrubroWidget from './FacturacionSubrubroWidget';
 import RankingVendedoresWidget from './RankingVendedoresWidget';
 import AbcClientesWidget from './AbcClientesWidget';
 import RankingClientesWidget from './RankingClientesWidget';
@@ -125,6 +126,15 @@ const VENTAS_WIDGET_CATALOG = [
     description: 'Distribución de ventas por rubro',
     icon: Layers,
     component: FacturacionRubroWidget,
+    defaultSize: { w: 4, h: 4 },
+    category: 'chart',
+  },
+  {
+    type: 'ventas-por-subrubro',
+    name: 'Facturación por Subrubro',
+    description: 'Desglose de ventas por subrubro de producto',
+    icon: Layers,
+    component: FacturacionSubrubroWidget,
     defaultSize: { w: 4, h: 4 },
     category: 'chart',
   },

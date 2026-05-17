@@ -1901,38 +1901,70 @@ async def ventas_productos(
         del d["total_con_costo"]
         ranking.append(d)
 
+    # por_rubro: join stock_disponible for names (more reliable than rubros catalog alone)
     rubros_rows = (await db.execute(text(f"""
         SELECT
-            cod_rubro,
-            COALESCE(SUM({venta_importe_neto_expr()}), 0) AS facturado,
-            COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END)                        AS tickets
-        FROM ventas
-        WHERE {where} AND cod_rubro IS NOT NULL
-        GROUP BY cod_rubro
+            v.cod_rubro,
+            COALESCE(
+                MAX(s.rubro),
+                MAX(r.nombre),
+                CONCAT('Rubro ', v.cod_rubro)
+            )                                                                         AS nombre,
+            COALESCE(SUM({venta_importe_neto_expr('v')}), 0)                         AS facturado,
+            COUNT(CASE WHEN v.tipo_comprobante='FA' THEN 1 END)                      AS tickets
+        FROM ventas v
+        LEFT JOIN (
+            SELECT DISTINCT ON (cod_articulo) cod_articulo, rubro
+            FROM stock_disponible
+            WHERE rubro IS NOT NULL
+            ORDER BY cod_articulo
+        ) s ON s.cod_articulo = v.producto_id
+        LEFT JOIN rubros r ON r.cod_rubro = v.cod_rubro
+        WHERE {where} AND v.cod_rubro IS NOT NULL
+        GROUP BY v.cod_rubro
         ORDER BY facturado DESC
     """), params)).mappings().all()
-
-    rubro_names = {}
-    try:
-        rn_rows = (await db.execute(text("SELECT cod_rubro, nombre FROM rubros"))).mappings().all()
-        rubro_names = {r["cod_rubro"]: r["nombre"] for r in rn_rows}
-    except Exception:
-        pass
 
     rubros = []
     for r in rubros_rows:
         d = dict(r)
         d["facturado"] = money(d["facturado"])
         d["pct_total"] = round(d["facturado"] / total_fa * 100, 2)
-        d["nombre"] = rubro_names.get(d["cod_rubro"], f"Rubro {d['cod_rubro']}")
         rubros.append(d)
+
+    # por_subrubro: join stock_disponible for subrubro dimension
+    subrubros_rows = (await db.execute(text(f"""
+        SELECT
+            s.cod_subrubro,
+            MAX(s.subrubro)                                                           AS nombre,
+            MAX(s.rubro)                                                              AS rubro_nombre,
+            COALESCE(SUM({venta_importe_neto_expr('v')}), 0)                         AS facturado,
+            COUNT(CASE WHEN v.tipo_comprobante='FA' THEN 1 END)                      AS tickets
+        FROM ventas v
+        JOIN (
+            SELECT DISTINCT ON (cod_articulo) cod_articulo, cod_subrubro, subrubro, rubro
+            FROM stock_disponible
+            WHERE cod_subrubro IS NOT NULL
+            ORDER BY cod_articulo
+        ) s ON s.cod_articulo = v.producto_id
+        WHERE {where}
+        GROUP BY s.cod_subrubro
+        ORDER BY facturado DESC
+    """), params)).mappings().all()
+
+    subrubros = []
+    for r in subrubros_rows:
+        d = dict(r)
+        d["facturado"] = money(d["facturado"])
+        d["pct_total"] = round(d["facturado"] / total_fa * 100, 2)
+        subrubros.append(d)
 
     pareto = [
         {"producto": r["nombre"], "facturado": r["facturado"], "acumulado_pct": r["acumulado_pct"]}
         for r in ranking[:20]
     ]
 
-    return {"ranking": ranking, "por_rubro": rubros, "pareto": pareto}
+    return {"ranking": ranking, "por_rubro": rubros, "por_subrubro": subrubros, "pareto": pareto}
 
 
 @router.get("/ventas/por-vendedor")
