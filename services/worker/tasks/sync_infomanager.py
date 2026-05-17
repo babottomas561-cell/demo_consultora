@@ -892,6 +892,10 @@ def _upsert_items_lista(cur, items: list[dict], cod_lista: int) -> int:
         ))
     if not values:
         return 0
+    seen: dict = {}
+    for v in values:
+        seen[(v[0], v[1])] = v
+    values = list(seen.values())
     execute_values(
         cur,
         """
@@ -1080,6 +1084,10 @@ def _upsert_facturas_venta(cur, rows: list[dict]) -> int:
         ))
     if not values:
         return 0
+    seen: dict = {}
+    for v in values:
+        seen[v[0]] = v
+    values = list(seen.values())
     execute_values(
         cur,
         """
@@ -1129,6 +1137,10 @@ def _upsert_facturas_compra(cur, rows: list[dict]) -> int:
         ))
     if not values:
         return 0
+    seen: dict = {}
+    for v in values:
+        seen[v[0]] = v
+    values = list(seen.values())
     execute_values(
         cur,
         """
@@ -1186,6 +1198,10 @@ def _upsert_facturas_con_recibos(cur, rows: list[dict]) -> int:
         ))
     if not values:
         return 0
+    seen: dict = {}
+    for v in values:
+        seen[(v[0], v[12])] = v
+    values = list(seen.values())
     execute_values(
         cur,
         """
