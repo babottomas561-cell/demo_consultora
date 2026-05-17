@@ -4602,12 +4602,15 @@ async def get_empresas(
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    tenant_schema = await get_tenant_schema(current_user, db, company_id)
-    await set_tenant_search_path(db, tenant_schema)
-    rows = (await db.execute(text(
-        "SELECT cod_empresa, nombre, nombre_1, cuit, habilitada FROM empresas_infomanager ORDER BY cod_empresa"
-    ))).mappings().all()
-    return {"empresas": [dict(r) for r in rows]}
+    try:
+        tenant_schema = await get_tenant_schema(current_user, db, company_id)
+        await set_tenant_search_path(db, tenant_schema)
+        rows = (await db.execute(text(
+            "SELECT cod_empresa, nombre, nombre_1, cuit, habilitada FROM empresas_infomanager ORDER BY cod_empresa"
+        ))).mappings().all()
+        return {"empresas": [dict(r) for r in rows]}
+    except Exception:
+        return {"empresas": []}
 
 
 @router.get("/depositos")
@@ -4616,12 +4619,15 @@ async def get_depositos(
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    tenant_schema = await get_tenant_schema(current_user, db, company_id)
-    await set_tenant_search_path(db, tenant_schema)
-    rows = (await db.execute(text(
-        "SELECT cod_deposito, nombre, habilitado FROM depositos ORDER BY cod_deposito"
-    ))).mappings().all()
-    return {"depositos": [dict(r) for r in rows]}
+    try:
+        tenant_schema = await get_tenant_schema(current_user, db, company_id)
+        await set_tenant_search_path(db, tenant_schema)
+        rows = (await db.execute(text(
+            "SELECT cod_deposito, nombre, habilitado FROM depositos ORDER BY cod_deposito"
+        ))).mappings().all()
+        return {"depositos": [dict(r) for r in rows]}
+    except Exception:
+        return {"depositos": []}
 
 
 @router.get("/listas-precios")
@@ -4630,12 +4636,15 @@ async def get_listas_precios(
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    tenant_schema = await get_tenant_schema(current_user, db, company_id)
-    await set_tenant_search_path(db, tenant_schema)
-    rows = (await db.execute(text(
-        "SELECT cod_lista, descripcion FROM listas_precios ORDER BY cod_lista"
-    ))).mappings().all()
-    return {"listas": [dict(r) for r in rows]}
+    try:
+        tenant_schema = await get_tenant_schema(current_user, db, company_id)
+        await set_tenant_search_path(db, tenant_schema)
+        rows = (await db.execute(text(
+            "SELECT cod_lista, descripcion FROM listas_precios ORDER BY cod_lista"
+        ))).mappings().all()
+        return {"listas": [dict(r) for r in rows]}
+    except Exception:
+        return {"listas": []}
 
 
 @router.get("/rubros")
@@ -4644,12 +4653,15 @@ async def get_rubros(
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    tenant_schema = await get_tenant_schema(current_user, db, company_id)
-    await set_tenant_search_path(db, tenant_schema)
-    rows = (await db.execute(text(
-        "SELECT DISTINCT cod_rubro, rubro AS nombre FROM stock WHERE cod_rubro IS NOT NULL ORDER BY cod_rubro"
-    ))).mappings().all()
-    return {"rubros": [dict(r) for r in rows]}
+    try:
+        tenant_schema = await get_tenant_schema(current_user, db, company_id)
+        await set_tenant_search_path(db, tenant_schema)
+        rows = (await db.execute(text(
+            "SELECT DISTINCT cod_rubro, rubro AS nombre FROM stock WHERE cod_rubro IS NOT NULL ORDER BY cod_rubro"
+        ))).mappings().all()
+        return {"rubros": [dict(r) for r in rows]}
+    except Exception:
+        return {"rubros": []}
 
 
 @router.get("/vendedores-lookup")
@@ -4658,12 +4670,15 @@ async def get_vendedores_lookup(
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    tenant_schema = await get_tenant_schema(current_user, db, company_id)
-    await set_tenant_search_path(db, tenant_schema)
-    rows = (await db.execute(text(
-        "SELECT cod_vendedor, nombre FROM vendedores ORDER BY nombre"
-    ))).mappings().all()
-    return {"vendedores": [dict(r) for r in rows]}
+    try:
+        tenant_schema = await get_tenant_schema(current_user, db, company_id)
+        await set_tenant_search_path(db, tenant_schema)
+        rows = (await db.execute(text(
+            "SELECT cod_vendedor, nombre FROM vendedores ORDER BY nombre"
+        ))).mappings().all()
+        return {"vendedores": [dict(r) for r in rows]}
+    except Exception:
+        return {"vendedores": []}
 
 
 @router.get("/clientes-lookup")
@@ -4673,17 +4688,20 @@ async def get_clientes_lookup(
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    tenant_schema = await get_tenant_schema(current_user, db, company_id)
-    await set_tenant_search_path(db, tenant_schema)
-    rows = (await db.execute(text("""
-        SELECT DISTINCT cliente_id AS cod_cliente, MAX(cliente_nombre) AS nombre
-        FROM ventas
-        WHERE cliente_id IS NOT NULL
-        GROUP BY cliente_id
-        ORDER BY nombre
-        LIMIT :limit
-    """), {"limit": limit})).mappings().all()
-    return {"clientes": [dict(r) for r in rows]}
+    try:
+        tenant_schema = await get_tenant_schema(current_user, db, company_id)
+        await set_tenant_search_path(db, tenant_schema)
+        rows = (await db.execute(text("""
+            SELECT DISTINCT cliente_id AS cod_cliente, MAX(cliente_nombre) AS nombre
+            FROM ventas
+            WHERE cliente_id IS NOT NULL
+            GROUP BY cliente_id
+            ORDER BY nombre
+            LIMIT :limit
+        """), {"limit": limit})).mappings().all()
+        return {"clientes": [dict(r) for r in rows]}
+    except Exception:
+        return {"clientes": []}
 
 
 @router.get("/proveedores-lookup")
@@ -4693,17 +4711,20 @@ async def get_proveedores_lookup(
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    tenant_schema = await get_tenant_schema(current_user, db, company_id)
-    await set_tenant_search_path(db, tenant_schema)
-    rows = (await db.execute(text("""
-        SELECT DISTINCT proveedor_id AS cod_proveedor, MAX(proveedor_nombre) AS nombre
-        FROM compras
-        WHERE proveedor_id IS NOT NULL
-        GROUP BY proveedor_id
-        ORDER BY nombre
-        LIMIT :limit
-    """), {"limit": limit})).mappings().all()
-    return {"proveedores": [dict(r) for r in rows]}
+    try:
+        tenant_schema = await get_tenant_schema(current_user, db, company_id)
+        await set_tenant_search_path(db, tenant_schema)
+        rows = (await db.execute(text("""
+            SELECT DISTINCT proveedor_id AS cod_proveedor, MAX(proveedor_nombre) AS nombre
+            FROM compras
+            WHERE proveedor_id IS NOT NULL
+            GROUP BY proveedor_id
+            ORDER BY nombre
+            LIMIT :limit
+        """), {"limit": limit})).mappings().all()
+        return {"proveedores": [dict(r) for r in rows]}
+    except Exception:
+        return {"proveedores": []}
 
 
 @router.get("/reportes/saldos-clientes")
