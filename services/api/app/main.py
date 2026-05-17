@@ -15,7 +15,8 @@ app.add_middleware(
         "http://127.0.0.1:5173",
         frontend_url,
     ],
-    allow_origin_regex=r"http://(localhost|127\.0\.0\.1):517\d+",
+    # allow_origin_regex echoes the exact Origin header, so credentials work correctly
+    allow_origin_regex=r".*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

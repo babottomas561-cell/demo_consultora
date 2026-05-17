@@ -184,6 +184,14 @@ export const useFilterStore = create(
     {
       name: 'bi-filters',
       version: 4,
+      // Refresh dates on load so preset periods (anio, mes, etc.) always reflect today
+      onRehydrateStorage: () => (state) => {
+        if (state && state.periodo && state.periodo !== 'custom') {
+          const fresh = getDefaultDates(state.periodo);
+          state.desde = fresh.desde;
+          state.hasta = fresh.hasta;
+        }
+      },
       partialize: (state) => ({
         ...pickFilterState(state),
         savedViews: state.savedViews,
