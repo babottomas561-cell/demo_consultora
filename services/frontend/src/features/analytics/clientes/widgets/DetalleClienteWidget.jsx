@@ -82,7 +82,7 @@ export default function DetalleClienteWidget() {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-base font-bold text-slate-900 truncate">{detalle.cliente?.nombre}</p>
-                <p className="text-xs text-slate-500">Última compra: {detalle.cliente?.ultima_compra?.slice(0, 10) ?? '-'}</p>
+                <p className="text-xs text-slate-500">Última compra: {detalle.cliente?.ultima_compra?.slice(0, 10)?.split('-').reverse().join('/') ?? '-'}</p>
               </div>
               <div className="flex gap-6 text-center">
                 <div>

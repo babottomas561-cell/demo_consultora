@@ -3,7 +3,7 @@ import { ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
 import { useProveedoresData } from '../ProveedoresDataContext';
 import { formatCurrency, formatNumber } from '../../analyticsUtils';
 
-const fmtDate = (value) => value?.slice(0, 10) ?? '-';
+const fmtDate = (value) => { const d = value?.slice(0, 10); return d ? d.split('-').reverse().join('/') : '-'; };
 const docLabel = (doc) => [doc.tipo, doc.punto_de_venta, doc.numero].filter(Boolean).join(' ') || doc.comprobante_id;
 
 export default function ComprobantesProveedorWidget() {

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import { Loader2 } from 'lucide-react';
+import { ChartSkeleton } from '../../../../components/ui/WidgetSkeleton';
 import ChartTooltip from '../../../../components/analytics/ChartTooltip';
 import { useVentasData } from '../VentasDataContext';
 import { formatCurrencyShort } from '../../analyticsUtils';
@@ -19,7 +19,7 @@ export default function FacturacionRubroWidget() {
   const [showTable, setShowTable] = useState(false);
 
   if (loadingProductos) {
-    return <div className="flex h-full items-center justify-center"><Loader2 className="animate-spin text-indigo-400" size={24} /></div>;
+    return <ChartSkeleton />;
   }
 
   const rubros = productos?.por_rubro ?? [];

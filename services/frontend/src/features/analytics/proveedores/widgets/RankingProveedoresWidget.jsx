@@ -70,7 +70,7 @@ export default function RankingProveedoresWidget() {
                 <td className="px-3 py-2 tabular-nums text-right text-slate-700 font-medium">{formatCurrency(p.total_comprado)}</td>
                 <td className="px-3 py-2 tabular-nums text-right text-slate-600">{formatNumber(p.ordenes)}</td>
                 <td className="px-3 py-2 tabular-nums text-right text-slate-600">{formatCurrency(p.ticket_promedio)}</td>
-                <td className="px-3 py-2 text-slate-500">{p.ultima_compra?.slice(0, 10) ?? '-'}</td>
+                <td className="px-3 py-2 text-slate-500">{p.ultima_compra?.slice(0, 10)?.split('-').reverse().join('/') ?? '-'}</td>
                 <td className="px-3 py-2 tabular-nums text-right">
                   <span className={p.saldo_cta_cte > 0 ? 'font-semibold text-amber-600' : 'text-slate-500'}>
                     {formatCurrency(p.saldo_cta_cte)}
