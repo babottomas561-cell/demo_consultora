@@ -672,12 +672,11 @@ def refresh_all_demo_infomanager_tables(self):
         errors = []
         for tenant_schema in schemas:
             try:
-                session.execute(text(f'SET search_path TO "{tenant_schema}"'))
+                # SET LOCAL is transaction-scoped — auto-resets on rollback
+                session.execute(text(f'SET LOCAL search_path TO "{tenant_schema}"'))
                 # Tables without unique constraints must be cleared before re-insert
                 session.execute(text("DELETE FROM saldos_clientes"))
                 session.execute(text("DELETE FROM comprobantes_pendientes_clientes"))
-                session.commit()
-
                 _seed_infomanager_tables(session, tenant_schema)
                 session.commit()
                 refreshed.append(tenant_schema)

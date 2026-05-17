@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { BREAKPOINT_KEYS, MOBILE_BREAKPOINTS } from '../constants/breakpoints';
 
 const PANEL_DEFAULTS = {};
 
@@ -90,14 +91,11 @@ const usePanelLayoutStore = create(
         set((s) => {
           const panel = s.panels[panelId] || PANEL_DEFAULTS[panelId] || { widgets: [], layouts: {} };
           const existing = panel.layouts || {};
-          // Ensure new widget appears in all breakpoints, including xs/xxs added for mobile
-          const ALL_BPS = ['lg', 'md', 'sm', 'xs', 'xxs'];
-          const bps = ALL_BPS.filter((bp) => bp in existing).length > 0
-            ? ALL_BPS
-            : Object.keys(existing);
+          // Populate all known breakpoints; fall back to lg-only for brand-new panels
+          const bps = Object.keys(existing).length > 0 ? BREAKPOINT_KEYS : ['lg'];
           const updatedLayouts = {};
           for (const bp of bps) {
-            const item = bp === 'xs' || bp === 'xxs' ? mobileItem : layoutItem;
+            const item = MOBILE_BREAKPOINTS.has(bp) ? mobileItem : layoutItem;
             updatedLayouts[bp] = [...(existing[bp] || []), { ...item }];
           }
           return {

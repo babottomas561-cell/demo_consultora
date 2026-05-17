@@ -7,8 +7,11 @@ import usePanelLayoutStore from '../../store/panelLayoutStore';
 import FilterBar from '../../components/FilterBar';
 import EditablePanel from '../../components/EditablePanel';
 import AddPanelWidgetModal from '../../components/AddPanelWidgetModal';
+import PeriodComparator from '../../components/analytics/PeriodComparator';
 import SavedViews from '../../components/analytics/SavedViews';
 import ExportButton from '../../components/analytics/ExportButton';
+import CrossFilterProvider from '../../components/analytics/CrossFilterProvider';
+import DrillThroughBreadcrumbs from '../../components/analytics/DrillThroughBreadcrumbs';
 
 import ComprasDataProvider, { useComprasData } from './compras/ComprasDataContext';
 import COMPRAS_WIDGET_CATALOG, {
@@ -83,34 +86,39 @@ const ComprasPanelInner = () => {
                 Transacciones: transacciones?.data,
               })}
               filename="compras"
+              panelRef={panelRef}
             />
           </div>
         </div>
+
+        <PeriodComparator />
+        <DrillThroughBreadcrumbs />
 
         <EditablePanel
           panelId={PANEL_ID}
           catalog={COMPRAS_WIDGET_CATALOG}
           getWidgetDef={getComprasWidgetDef}
-          onAddWidget={() => setShowAddModal(true)}
-          title="Panel Compras"
+          onAddClick={() => setShowAddModal(true)}
         />
-      </div>
 
-      {showAddModal && (
-        <AddPanelWidgetModal
-          catalog={COMPRAS_WIDGET_CATALOG}
-          panelId={PANEL_ID}
-          onClose={() => setShowAddModal(false)}
-        />
-      )}
+        {showAddModal && (
+          <AddPanelWidgetModal
+            panelId={PANEL_ID}
+            catalog={COMPRAS_WIDGET_CATALOG}
+            onClose={() => setShowAddModal(false)}
+          />
+        )}
+      </div>
     </div>
   );
 };
 
 const ComprasAnalyticsView = () => (
-  <ComprasDataProvider>
-    <ComprasPanelInner />
-  </ComprasDataProvider>
+  <CrossFilterProvider>
+    <ComprasDataProvider>
+      <ComprasPanelInner />
+    </ComprasDataProvider>
+  </CrossFilterProvider>
 );
 
 export default ComprasAnalyticsView;

@@ -2,6 +2,7 @@ import { useCallback, useEffect } from 'react';
 import { Responsive, WidthProvider } from 'react-grid-layout/legacy';
 import { Plus, Pencil, RotateCcw, Lock, X } from 'lucide-react';
 import usePanelLayoutStore from '../store/panelLayoutStore';
+import { BREAKPOINTS, BREAKPOINT_COLS } from '../constants/breakpoints';
 import 'react-grid-layout/css/styles.css';
 
 const ResponsiveGridLayout = WidthProvider(Responsive);
@@ -133,8 +134,8 @@ export default function EditablePanel({
       <ResponsiveGridLayout
         className="layout"
         layouts={panel.layouts}
-        breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }}
-        cols={{ lg: 12, md: 12, sm: 6, xs: 2, xxs: 2 }}
+        breakpoints={BREAKPOINTS}
+        cols={BREAKPOINT_COLS}
         rowHeight={80}
         onLayoutChange={handleLayoutChange}
         isDraggable={editing}

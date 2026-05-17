@@ -105,6 +105,15 @@ def _sync_loop() -> None:
             tenants = _get_active_infomanager_tenants()
             logger.info(f"[SyncLoop] {len(tenants)} tenants activos")
 
+            # Purge stale entries for tenants no longer active
+            active_schemas = {t["tenant_schema"] for t in tenants}
+            for stale in list(_last_full_sync.keys()):
+                if stale not in active_schemas:
+                    del _last_full_sync[stale]
+            for stale in list(_last_incremental_sync.keys()):
+                if stale not in active_schemas:
+                    del _last_incremental_sync[stale]
+
             for tenant in tenants:
                 schema = tenant["tenant_schema"]
                 erp_config = tenant["erp_config"]

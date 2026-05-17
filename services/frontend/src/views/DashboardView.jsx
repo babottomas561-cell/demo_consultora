@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { Responsive, WidthProvider } from 'react-grid-layout/legacy';
+import { BREAKPOINTS, BREAKPOINT_COLS } from '../constants/breakpoints';
 import { Activity, Plus, Pencil, RotateCcw, ShoppingCart, RefreshCcw, X, Lock } from 'lucide-react';
 import useAuthStore from '../store/authStore';
 import useDashboardStore from '../store/dashboardStore';
@@ -139,8 +140,8 @@ const DashboardView = () => {
       <ResponsiveGridLayout
         className="layout"
         layouts={layouts}
-        breakpoints={{ lg: 1200, md: 996, sm: 768 }}
-        cols={{ lg: 12, md: 12, sm: 6 }}
+        breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }}
+        cols={{ lg: 12, md: 12, sm: 6, xs: 2, xxs: 2 }}
         rowHeight={80}
         onLayoutChange={handleLayoutChange}
         isDraggable={editing}

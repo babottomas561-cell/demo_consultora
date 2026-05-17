@@ -101,7 +101,6 @@ const FilterBar = () => {
   return (
     <div className="sticky top-0 z-10 -mx-4 -mt-4 mb-4 border-b border-slate-200 bg-white shadow-sm sm:-mx-6 sm:-mt-6 sm:mb-6 lg:-mx-8 lg:-mt-8">
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-3 py-2.5 sm:px-6 sm:py-3 lg:px-6">
-        {/* Period buttons */}
         <div className="flex flex-wrap items-center gap-1">
           {PERIODOS.map(({ key, label }) => (
             <button
@@ -118,7 +117,6 @@ const FilterBar = () => {
           ))}
         </div>
 
-        {/* Filters + date */}
         <div className="flex flex-wrap items-center gap-1.5">
           {empresas.length > 1 && (
             <InlineSelect
