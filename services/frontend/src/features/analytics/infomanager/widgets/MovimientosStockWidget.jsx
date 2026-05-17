@@ -1,9 +1,11 @@
 import { Loader2, RefreshCw, Search } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import ExportButton from '../../../../components/analytics/ExportButton/ExportButton';
 import { formatCurrency, formatNumber } from '../../analyticsUtils';
 import { useInfomanagerFetch } from '../useInfomanagerFetch';
 
 export default function MovimientosStockWidget() {
+  const panelRef = useRef(null);
   const [articuloBusqueda, setArticuloBusqueda] = useState('');
   const [codArticuloFiltro, setCodArticuloFiltro] = useState(undefined);
 
@@ -25,7 +27,7 @@ export default function MovimientosStockWidget() {
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <div ref={panelRef} className="flex h-full flex-col">
       <div className="flex shrink-0 flex-col gap-1 border-b border-slate-100 px-3 py-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -33,14 +35,17 @@ export default function MovimientosStockWidget() {
             {entradas > 0 && <span className="text-xs text-green-700">Entradas: {formatCurrency(entradas)}</span>}
             {salidas > 0 && <span className="text-xs text-red-600">Salidas: {formatCurrency(salidas)}</span>}
           </div>
-          <button
-            onClick={refetch}
-            disabled={loading}
-            className="inline-flex items-center gap-1 rounded border border-slate-200 px-2 py-1 text-xs text-slate-500 hover:bg-slate-50 disabled:opacity-50"
-          >
-            <RefreshCw size={11} className={loading ? 'animate-spin' : ''} />
-            Actualizar
-          </button>
+          <div className="flex items-center gap-1">
+            <ExportButton data={movimientos} filename="movimientos-stock" panelRef={panelRef} size="icon" />
+            <button
+              onClick={refetch}
+              disabled={loading}
+              className="inline-flex items-center gap-1 rounded border border-slate-200 px-2 py-1 text-xs text-slate-500 hover:bg-slate-50 disabled:opacity-50"
+            >
+              <RefreshCw size={11} className={loading ? 'animate-spin' : ''} />
+              Actualizar
+            </button>
+          </div>
         </div>
         <div className="flex items-center gap-1">
           <input

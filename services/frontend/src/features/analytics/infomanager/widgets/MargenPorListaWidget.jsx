@@ -1,8 +1,11 @@
 import { Loader2, RefreshCw } from 'lucide-react';
+import { useRef } from 'react';
+import ExportButton from '../../../../components/analytics/ExportButton/ExportButton';
 import { formatCurrency } from '../../analyticsUtils';
 import { useInfomanagerFetch } from '../useInfomanagerFetch';
 
 export default function MargenPorListaWidget() {
+  const panelRef = useRef(null);
   const { data, loading, error, refetch } = useInfomanagerFetch('resultado/listas-precios', (f) => ({
     cod_lista_precios: f.cod_lista_precios?.[0] ?? undefined,
     cod_empresa: f.cod_empresa?.[0] ?? undefined,
@@ -29,17 +32,20 @@ export default function MargenPorListaWidget() {
   }));
 
   return (
-    <div className="flex h-full flex-col">
+    <div ref={panelRef} className="flex h-full flex-col">
       <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-4 py-2">
         <span className="text-xs text-slate-500">{data?.total ?? 0} artículos · {listas.length} listas</span>
-        <button
-          onClick={refetch}
-          disabled={loading}
-          className="inline-flex items-center gap-1 rounded border border-slate-200 px-2 py-1 text-xs text-slate-500 hover:bg-slate-50 disabled:opacity-50"
-        >
-          <RefreshCw size={11} className={loading ? 'animate-spin' : ''} />
-          Actualizar
-        </button>
+        <div className="flex items-center gap-1">
+          <ExportButton data={items} filename="margen-por-lista" panelRef={panelRef} size="icon" />
+          <button
+            onClick={refetch}
+            disabled={loading}
+            className="inline-flex items-center gap-1 rounded border border-slate-200 px-2 py-1 text-xs text-slate-500 hover:bg-slate-50 disabled:opacity-50"
+          >
+            <RefreshCw size={11} className={loading ? 'animate-spin' : ''} />
+            Actualizar
+          </button>
+        </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto">

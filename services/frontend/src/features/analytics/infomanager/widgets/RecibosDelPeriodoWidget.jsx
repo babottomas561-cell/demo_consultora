@@ -1,4 +1,6 @@
 import { Loader2, RefreshCw } from 'lucide-react';
+import { useRef } from 'react';
+import ExportButton from '../../../../components/analytics/ExportButton/ExportButton';
 import { formatCurrency } from '../../analyticsUtils';
 import { useInfomanagerFetch } from '../useInfomanagerFetch';
 
@@ -17,6 +19,7 @@ function formaPago(r) {
 }
 
 export default function RecibosDelPeriodoWidget() {
+  const panelRef = useRef(null);
   const { data, loading, error, refetch } = useInfomanagerFetch('caja/recibos', (f) => ({
     desde: f.desde,
     hasta: f.hasta,
@@ -27,7 +30,7 @@ export default function RecibosDelPeriodoWidget() {
   const totalCobrado = recibos.reduce((s, r) => s + Number(r.imp_pag_moneda_local || 0), 0);
 
   return (
-    <div className="flex h-full flex-col">
+    <div ref={panelRef} className="flex h-full flex-col">
       <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-4 py-2">
         <div className="flex items-center gap-3">
           <span className="text-xs text-slate-500">{data?.total ?? 0} recibos</span>
@@ -37,14 +40,17 @@ export default function RecibosDelPeriodoWidget() {
             </span>
           )}
         </div>
-        <button
-          onClick={refetch}
-          disabled={loading}
-          className="inline-flex items-center gap-1 rounded border border-slate-200 px-2 py-1 text-xs text-slate-500 hover:bg-slate-50 disabled:opacity-50"
-        >
-          <RefreshCw size={11} className={loading ? 'animate-spin' : ''} />
-          Actualizar
-        </button>
+        <div className="flex items-center gap-1">
+          <ExportButton data={recibos} filename="recibos-periodo" panelRef={panelRef} size="icon" />
+          <button
+            onClick={refetch}
+            disabled={loading}
+            className="inline-flex items-center gap-1 rounded border border-slate-200 px-2 py-1 text-xs text-slate-500 hover:bg-slate-50 disabled:opacity-50"
+          >
+            <RefreshCw size={11} className={loading ? 'animate-spin' : ''} />
+            Actualizar
+          </button>
+        </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto">

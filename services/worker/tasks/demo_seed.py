@@ -426,6 +426,42 @@ def _seed_infomanager_tables(session, tenant_schema: str):
         ON CONFLICT ON CONSTRAINT idx_comprobante_proveedor_unico DO NOTHING
     """))
 
+    # 11. facturas_con_recibos — paid invoice+receipt pairs (used by RecibosDelPeriodo widget)
+    session.execute(text("""
+        INSERT INTO facturas_con_recibos
+            (fa_id, tipo_comp, fa_cod_empresa, fa_fecha, fa_cc, fa_pto_vta, fa_nro,
+             fa_moneda, cod_cliente, fa_total, fa_total_moneda_local,
+             rc_id, rc_fecha, rc_nro, imp_pag_moneda_local, cond_pago, importe,
+             primer_fec_vto, ult_fec_vto)
+        SELECT
+            ABS(('x' || MD5(inv.comprobante_id))::bit(63)::bigint) AS fa_id,
+            'FA' AS tipo_comp,
+            1 AS fa_cod_empresa,
+            inv.fecha::date AS fa_fecha,
+            inv.cliente_id AS fa_cc,
+            1 AS fa_pto_vta,
+            ROW_NUMBER() OVER (ORDER BY inv.fecha) AS fa_nro,
+            'ARS' AS fa_moneda,
+            CAST(REGEXP_REPLACE(inv.cliente_id, '[^0-9]', '', 'g') AS INTEGER) AS cod_cliente,
+            inv.importe AS fa_total,
+            inv.importe AS fa_total_moneda_local,
+            ABS(('x' || MD5(rec.comprobante_id))::bit(62)::bigint) AS rc_id,
+            rec.fecha::date AS rc_fecha,
+            ABS(('x' || MD5(rec.comprobante_id))::bit(62)::bigint) AS rc_nro,
+            ABS(rec.importe) AS imp_pag_moneda_local,
+            'TR' AS cond_pago,
+            ABS(rec.importe) AS importe,
+            (inv.fecha + INTERVAL '30 days')::date AS primer_fec_vto,
+            (inv.fecha + INTERVAL '30 days')::date AS ult_fec_vto
+        FROM cuentas_corrientes_clientes inv
+        JOIN cuentas_corrientes_clientes rec
+            ON rec.comprobante_id = 'REC-' || inv.comprobante_id
+            AND rec.tipo = 'recibo'
+            AND rec.importe < 0
+        WHERE inv.tipo = 'factura' AND inv.importe > 0 AND inv.comprobante_id IS NOT NULL
+        ON CONFLICT ON CONSTRAINT idx_factura_recibo_unico DO NOTHING
+    """))
+
 
 def _backfill_ventas_infomanager_fields(session, tenant_schema: str):
     session.execute(text(f'SET search_path TO "{tenant_schema}"'))

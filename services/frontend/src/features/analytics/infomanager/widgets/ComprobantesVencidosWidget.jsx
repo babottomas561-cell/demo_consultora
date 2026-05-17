@@ -1,5 +1,6 @@
 import { Loader2, RefreshCw } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import ExportButton from '../../../../components/analytics/ExportButton/ExportButton';
 import { formatCurrency } from '../../analyticsUtils';
 import { useInfomanagerFetch } from '../useInfomanagerFetch';
 
@@ -12,6 +13,7 @@ const AGING_TABS = [
 ];
 
 export default function ComprobantesVencidosWidget() {
+  const panelRef = useRef(null);
   const [aging, setAging] = useState('');
 
   const { data, loading, error, refetch } = useInfomanagerFetch('clientes/pendientes', (f) => ({
@@ -22,7 +24,7 @@ export default function ComprobantesVencidosWidget() {
   const comprobantes = data?.pendientes ?? [];
 
   return (
-    <div className="flex h-full flex-col">
+    <div ref={panelRef} className="flex h-full flex-col">
       <div className="shrink-0 border-b border-slate-100">
         <div className="flex items-center justify-between px-4 py-2">
           <div className="flex items-center gap-3">
@@ -33,13 +35,16 @@ export default function ComprobantesVencidosWidget() {
               </span>
             )}
           </div>
-          <button
-            onClick={refetch}
-            disabled={loading}
-            className="inline-flex items-center gap-1 rounded border border-slate-200 px-2 py-1 text-xs text-slate-500 hover:bg-slate-50 disabled:opacity-50"
-          >
-            <RefreshCw size={11} className={loading ? 'animate-spin' : ''} />
-          </button>
+          <div className="flex items-center gap-1">
+            <ExportButton data={comprobantes} filename="comprobantes-vencidos" panelRef={panelRef} size="icon" />
+            <button
+              onClick={refetch}
+              disabled={loading}
+              className="inline-flex items-center gap-1 rounded border border-slate-200 px-2 py-1 text-xs text-slate-500 hover:bg-slate-50 disabled:opacity-50"
+            >
+              <RefreshCw size={11} className={loading ? 'animate-spin' : ''} />
+            </button>
+          </div>
         </div>
         <div className="flex gap-0.5 overflow-x-auto px-3 pb-2">
           {AGING_TABS.map((t) => (

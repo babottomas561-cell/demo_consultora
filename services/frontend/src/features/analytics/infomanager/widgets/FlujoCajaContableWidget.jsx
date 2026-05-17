@@ -1,5 +1,6 @@
 import { Loader2, RefreshCw } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import ExportButton from '../../../../components/analytics/ExportButton/ExportButton';
 import { formatCurrency } from '../../analyticsUtils';
 import { useInfomanagerFetch } from '../useInfomanagerFetch';
 
@@ -12,6 +13,7 @@ const CUENTA_PREFIJOS = [
 ];
 
 export default function FlujoCajaContableWidget() {
+  const panelRef = useRef(null);
   const [prefijoCuenta, setPrefijoCuenta] = useState('');
 
   const { data, loading, error, refetch } = useInfomanagerFetch('caja/flujo-contable', (f) => ({
@@ -25,7 +27,7 @@ export default function FlujoCajaContableWidget() {
   const porDia = data?.por_dia ?? [];
 
   return (
-    <div className="flex h-full flex-col">
+    <div ref={panelRef} className="flex h-full flex-col">
       <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-4 py-2">
         <div className="flex items-center gap-3 flex-wrap">
           {data && (
@@ -55,6 +57,12 @@ export default function FlujoCajaContableWidget() {
               <option key={p.value} value={p.value}>{p.label}</option>
             ))}
           </select>
+          <ExportButton
+            data={{ 'Por Cuenta': cuentas, 'Por Día': porDia }}
+            filename="flujo-caja-contable"
+            panelRef={panelRef}
+            size="icon"
+          />
           <button
             onClick={refetch}
             disabled={loading}
