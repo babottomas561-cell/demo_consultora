@@ -776,7 +776,7 @@ def sync_company(self, company_id: int, connector_id: int):
             n_fcr = _upsert_facturas_con_recibos(cur, fcr)
             print(f"[sync_company] facturas_con_recibos={n_fcr}")
 
-            mc = im.obtener_movimientos_contables(desde_fa, hasta_fa, "", 0)
+            mc = im.obtener_movimientos_contables(desde_fa, hasta_fa, "0", 0)
             n_mc = _upsert_movimientos_contables(cur, mc)
             print(f"[sync_company] movimientos_contables={n_mc}")
         except Exception as fa_exc:
@@ -1118,26 +1118,30 @@ def _upsert_facturas_compra(cur, rows: list[dict]) -> int:
     from psycopg2.extras import execute_values
     values = []
     for r in rows:
+        # API /reportes/facturas_compras returns fa_id/fa_fecha/fa_total/nombre fields
+        fa_id = _as_int(r.get("fa_id") or r.get("id"))
+        if not fa_id:
+            continue
         values.append((
-            _as_int(r.get("id")),
-            r.get("fecha"),
-            r.get("fecha_comprobante"),
-            r.get("tipo_comprobante"),
-            r.get("tipo_factura"),
-            r.get("numero"),
-            _as_int(r.get("punto_de_venta")) or None,
+            fa_id,
+            r.get("fa_fecha") or r.get("fecha"),
+            None,                                         # fecha_comprobante not in response
+            r.get("fa_cc") or r.get("tipo_comprobante"),  # fa_cc = tipo (e.g. "S")
+            None,                                         # tipo_factura not in response
+            str(r.get("fa_nro") or r.get("numero") or ""),
+            _as_int(r.get("fa_pto_vta") or r.get("punto_de_venta")) or None,
             r.get("moneda"),
-            _as_float(r.get("cotizacion")),
-            _as_float(r.get("importe_total")),
-            _as_float(r.get("importe_iva")),
+            None,                                         # cotizacion not in response
+            _as_float(r.get("fa_total") or r.get("importe_total")),
+            None,                                         # importe_iva not in response
             _as_int(r.get("cod_proveedor")) or None,
-            r.get("proveedor"),
-            _as_int(r.get("cod_empresa")) or None,
-            r.get("tag"),
-            r.get("anulada", "N") == "S",
-            _as_int(r.get("cod_deposito")) or None,
-            str(r.get("nro_cai") or ""),
-            _as_int(r.get("id_orden_de_compra")) or None,
+            r.get("nombre") or r.get("proveedor"),
+            _as_int(r.get("fa_cod_empresa") or r.get("cod_empresa")) or None,
+            r.get("fa_cc") or r.get("tag"),
+            False,
+            None,
+            "",
+            _as_int(r.get("nro_ultima_OP") or r.get("id_orden_de_compra")) or None,
         ))
     if not values:
         return 0
@@ -1426,7 +1430,7 @@ def sync_completo(tenant_schema: str, erp_config: dict, connector_id: int = None
         fcr = im.obtener_facturas_con_recibos(desde, hasta)
         counts["facturas_con_recibos"] = _upsert_facturas_con_recibos(cur, fcr)
 
-        mc = im.obtener_movimientos_contables(desde, hasta, "", 0)
+        mc = im.obtener_movimientos_contables(desde, hasta, "0", 0)
         counts["movimientos_contables"] = _upsert_movimientos_contables(cur, mc)
 
         saldos = im.obtener_saldos_clientes()
