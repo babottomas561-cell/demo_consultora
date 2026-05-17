@@ -4222,6 +4222,15 @@ async def proveedores_ranking(
         GROUP BY proveedor_id ORDER BY total_comprado DESC
     """), params)).mappings().all()
 
+    # Fallback names from cuentas_corrientes_proveedores (may have better data from IM saldos sync)
+    cc_name_rows = (await db.execute(text("""
+        SELECT proveedor_id,
+               MAX(CASE WHEN proveedor_nombre NOT LIKE 'Proveedor %%' THEN proveedor_nombre END) AS nombre
+        FROM cuentas_corrientes_proveedores
+        GROUP BY proveedor_id
+    """))).mappings().all()
+    cc_name_map = {r["proveedor_id"]: r["nombre"] for r in cc_name_rows if r["nombre"]}
+
     # Saldo por proveedor
     saldos = (await db.execute(text("""
         SELECT proveedor_id, COALESCE(SUM(importe), 0) AS saldo
@@ -4240,9 +4249,12 @@ async def proveedores_ranking(
         cumsum += pct
         segmento = "A" if cumsum <= 80 else "B" if cumsum <= 95 else "C"
 
+        raw_nombre = r["nombre"]
+        if not raw_nombre or raw_nombre.startswith("Proveedor "):
+            raw_nombre = cc_name_map.get(r["proveedor_id"]) or raw_nombre or f"Proveedor {r['proveedor_id']}"
         resultado.append({
             "proveedor_id": r["proveedor_id"],
-            "nombre": r["nombre"],
+            "nombre": raw_nombre,
             "total_comprado": round(tc, 2),
             "ordenes": int(r["ordenes"] or 0),
             "ticket_promedio": round(float(r["ticket_promedio"] or 0), 2),

@@ -28,10 +28,10 @@ export default function RankingProveedoresWidget() {
   const proveedores = ranking?.proveedores ?? [];
   const top10 = proveedores.slice(0, 10);
 
-  const chartData = top10.map((p) => ({
-    name: (p.nombre ?? `P${p.proveedor_id}`).split(' ').slice(0, 2).join(' '),
-    total: p.total_comprado,
-  }));
+  const chartData = top10.map((p) => {
+    const full = p.nombre ?? `Prov ${p.proveedor_id}`;
+    return { name: full.length > 16 ? full.slice(0, 15) + '…' : full, total: p.total_comprado, full };
+  });
 
   return (
     <div className="h-full w-full flex flex-col overflow-hidden">
