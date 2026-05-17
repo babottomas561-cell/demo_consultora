@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate, Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, UploadCloud, Building2, LogOut, FileSpreadsheet, RefreshCw, TrendingUp, PackageSearch, Landmark, Users, Truck, Wallet, Package, UserCheck, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Building2, LogOut, FileSpreadsheet, RefreshCw, TrendingUp, PackageSearch, Landmark, Users, Truck, Wallet, Package, UserCheck, Menu, X } from 'lucide-react';
 import useAuthStore from '../store/authStore';
 
 const MainLayout = () => {
@@ -76,10 +76,6 @@ const MainLayout = () => {
           <span>Dashboard</span>
         </NavLink>
 
-        <NavLink to="/dashboard/sync" className={navLinkClass}>
-          <UploadCloud size={18} />
-          <span>Sincronizar Excel</span>
-        </NavLink>
 
         <div className="pt-5 pb-1.5">
           <p className="px-3 text-[11px] font-semibold uppercase tracking-[0.05em] text-slate-500">Analítica</p>

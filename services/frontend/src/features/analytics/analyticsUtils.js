@@ -73,6 +73,7 @@ export const buildQueryParams = (user, activeCompany, filtersOrDesde, hastaArg) 
   if (filters.desde) params.set('desde', filters.desde);
   if (filters.hasta) params.set('hasta', filters.hasta);
   if (filters.comparar_anterior) params.set('comparar_anterior', 'true');
+  if (filters.compare_mode && filters.compare_mode !== 'anterior') params.set('compare_mode', filters.compare_mode);
   if (filters.incluir_anuladas) params.set('incluir_anuladas', 'true');
 
   arrayFilterKeys.forEach((key) => appendArrayFilter(params, key, filters[key]));

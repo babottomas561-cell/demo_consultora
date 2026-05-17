@@ -105,6 +105,8 @@ const FilterBar = () => {
   const selectedRubro = cod_rubro?.[0] ?? '';
   const selectedCliente = cod_cliente?.[0] ?? '';
 
+  const activeFilterCount = [selectedEmpresa, selectedDeposito, selectedLista, selectedVendedor, selectedRubro, selectedCliente].filter(Boolean).length;
+
   return (
     <div className="sticky top-0 z-10 -mx-4 -mt-4 mb-4 border-b border-slate-200 bg-white px-4 shadow-sm sm:-mx-6 sm:-mt-6 sm:mb-6 sm:px-6 lg:-mx-8 lg:-mt-8 lg:px-6">
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 py-2.5">
@@ -181,6 +183,11 @@ const FilterBar = () => {
             <Calendar size={13} className="text-slate-400" />
             <span className="hidden sm:inline">{formatDateDisplay(desde)} — {formatDateDisplay(hasta)}</span>
             <span className="sm:hidden">{formatDateDisplay(desde).slice(0, 5)}</span>
+            {activeFilterCount > 0 && (
+              <span className="inline-flex items-center justify-center rounded-full bg-indigo-600 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
+                {activeFilterCount}
+              </span>
+            )}
           </div>
         </div>
       </div>

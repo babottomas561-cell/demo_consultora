@@ -1,6 +1,7 @@
 
 import { useCajaData } from '../CajaDataContext';
 import { formatCurrencyShort, formatNumberShort } from '../../analyticsUtils';
+import { useFilterStore } from '../../../../store/filterStore';
 
 const KPI_DEFS = {
   'caja-kpi-ingresos':      { label: 'Ingresos totales',   getValue: (k) => k?.ingresos,        format: 'currency', severity: 'success' },
@@ -30,6 +31,7 @@ function formatValue(raw, format) {
 
 function CajaKpiWidget({ type }) {
   const { kpis, loadingKpis } = useCajaData();
+  const compareMode = useFilterStore(s => s.compare_mode);
   const def = KPI_DEFS[type];
   if (!def) return null;
 
@@ -65,7 +67,7 @@ function CajaKpiWidget({ type }) {
       <p className={`text-2xl font-bold leading-tight ${cls.value}`}>{formatted}</p>
       {trend && (
         <p className={`mt-1 text-xs font-medium ${trend.positive ? 'text-emerald-600' : 'text-red-500'}`}>
-          {trend.positive ? '▲' : '▼'} {Math.abs(trend.delta).toFixed(1)}% vs período ant.
+          {trend.positive ? '▲' : '▼'} {Math.abs(trend.delta).toFixed(1)}% vs {compareMode === 'anio' ? 'año ant.' : 'período ant.'}
         </p>
       )}
     </div>

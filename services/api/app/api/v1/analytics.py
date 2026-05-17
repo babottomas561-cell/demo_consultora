@@ -150,7 +150,16 @@ INFOMANAGER_REPORT_CATALOG = [
 # Helpers
 # ──────────────────────────────────────────────
 
+def _year_ago(d: date) -> date:
+    try:
+        return d.replace(year=d.year - 1)
+    except ValueError:
+        return d.replace(year=d.year - 1, day=28)
+
+
 def _prev_period(filters: GlobalFilters):
+    if getattr(filters, "compare_mode", "anterior") == "anio":
+        return _year_ago(filters.desde), _year_ago(filters.hasta_exclusive)
     length = (filters.hasta - filters.desde).days
     prev_hasta = filters.desde - timedelta(days=1)
     prev_desde = prev_hasta - timedelta(days=length)
@@ -653,8 +662,12 @@ async def infomanager_reporte_detalle(
 
 def previous_period_params(filters: GlobalFilters) -> dict:
     current_days = (filters.hasta_exclusive - filters.desde).days
-    prev_hasta = filters.desde
-    prev_desde = prev_hasta - timedelta(days=current_days)
+    if getattr(filters, "compare_mode", "anterior") == "anio":
+        prev_desde = _year_ago(filters.desde)
+        prev_hasta = _year_ago(filters.hasta_exclusive)
+    else:
+        prev_hasta = filters.desde
+        prev_desde = prev_hasta - timedelta(days=current_days)
     return {"prev_desde": prev_desde, "prev_hasta": prev_hasta, "offset_days": current_days}
 
 

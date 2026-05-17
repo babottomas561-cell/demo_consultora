@@ -1,6 +1,7 @@
 
 import { useClientesData } from '../ClientesDataContext';
 import { formatCurrencyShort, formatNumberShort } from '../../analyticsUtils';
+import { useFilterStore } from '../../../../store/filterStore';
 
 const KPI_DEFS = {
   'c-kpi-activos': {
@@ -68,6 +69,7 @@ function formatValue(raw, format) {
 
 function ClientesKpiWidget({ type }) {
   const { kpis, loadingKpis } = useClientesData();
+  const compareMode = useFilterStore(s => s.compare_mode);
   const def = KPI_DEFS[type];
   if (!def) return null;
 
@@ -102,7 +104,7 @@ function ClientesKpiWidget({ type }) {
       <p className={`text-2xl font-bold leading-tight ${cls.value}`}>{formatted}</p>
       {trend && (
         <p className={`mt-1 text-xs font-medium ${trend.positive ? 'text-emerald-600' : 'text-red-500'}`}>
-          {trend.positive ? '▲' : '▼'} {Math.abs(trend.delta).toFixed(1)}% vs período ant.
+          {trend.positive ? '▲' : '▼'} {Math.abs(trend.delta).toFixed(1)}% vs {compareMode === 'anio' ? 'año ant.' : 'período ant.'}
         </p>
       )}
     </div>

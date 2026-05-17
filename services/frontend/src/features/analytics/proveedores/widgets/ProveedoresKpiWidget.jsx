@@ -1,6 +1,7 @@
 
 import { useProveedoresData } from '../ProveedoresDataContext';
 import { formatCurrencyShort, formatNumberShort } from '../../analyticsUtils';
+import { useFilterStore } from '../../../../store/filterStore';
 
 const KPI_DEFS = {
   'p-kpi-activos':      { label: 'Proveedores activos', getValue: (k) => k?.proveedores_activos, format: 'number' },
@@ -31,6 +32,7 @@ function formatValue(raw, format) {
 
 function ProveedoresKpiWidget({ type }) {
   const { kpis, loadingKpis } = useProveedoresData();
+  const compareMode = useFilterStore(s => s.compare_mode);
   const def = KPI_DEFS[type];
   if (!def) return null;
 
@@ -65,7 +67,7 @@ function ProveedoresKpiWidget({ type }) {
       <p className={`text-2xl font-bold leading-tight ${cls.value}`}>{formatted}</p>
       {trend && (
         <p className={`mt-1 text-xs font-medium ${trend.positive ? 'text-emerald-600' : 'text-red-500'}`}>
-          {trend.positive ? '▲' : '▼'} {Math.abs(trend.delta).toFixed(1)}% vs período ant.
+          {trend.positive ? '▲' : '▼'} {Math.abs(trend.delta).toFixed(1)}% vs {compareMode === 'anio' ? 'año ant.' : 'período ant.'}
         </p>
       )}
     </div>

@@ -43,6 +43,7 @@ const arrayFilters = [
 
 const emptyAdvancedFilters = {
   comparar_anterior: false,
+  compare_mode: 'anterior',
   cod_empresa: [],
   tag: [],
   punto_de_venta: [],
@@ -81,6 +82,7 @@ const pickFilterState = (state) => ({
   desde: state.desde,
   hasta: state.hasta,
   comparar_anterior: state.comparar_anterior,
+  compare_mode: state.compare_mode,
   cod_empresa: state.cod_empresa,
   tag: state.tag,
   punto_de_venta: state.punto_de_venta,

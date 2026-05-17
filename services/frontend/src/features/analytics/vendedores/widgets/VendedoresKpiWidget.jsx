@@ -1,6 +1,7 @@
 
 import { useVendedoresData } from '../VendedoresDataContext';
 import { formatCurrencyShort, formatNumberShort } from '../../analyticsUtils';
+import { useFilterStore } from '../../../../store/filterStore';
 
 const KPI_DEFS = {
   'v-kpi-total-vendedores': {
@@ -65,6 +66,7 @@ function formatValue(raw, format) {
 
 function VendedoresKpiWidget({ type }) {
   const { kpis, loadingKpis } = useVendedoresData();
+  const compareMode = useFilterStore(s => s.compare_mode);
   const def = KPI_DEFS[type];
 
   if (!def) return null;
@@ -100,7 +102,7 @@ function VendedoresKpiWidget({ type }) {
       <p className={`text-2xl font-bold leading-tight ${cls.value}`}>{formatted}</p>
       {trend && (
         <p className={`mt-1 text-xs font-medium ${trend.positive ? 'text-emerald-600' : 'text-red-500'}`}>
-          {trend.positive ? '▲' : '▼'} {Math.abs(trend.delta).toFixed(1)}% vs período ant.
+          {trend.positive ? '▲' : '▼'} {Math.abs(trend.delta).toFixed(1)}% vs {compareMode === 'anio' ? 'año ant.' : 'período ant.'}
         </p>
       )}
     </div>
