@@ -86,19 +86,26 @@ const usePanelLayoutStore = create(
           minW: defaultSize.minW ?? 2,
           minH: defaultSize.minH ?? 2,
         };
+        const mobileItem = { ...layoutItem, w: 2, minW: 1 };
         set((s) => {
           const panel = s.panels[panelId] || PANEL_DEFAULTS[panelId] || { widgets: [], layouts: {} };
+          const existing = panel.layouts || {};
+          // Ensure new widget appears in all breakpoints, including xs/xxs added for mobile
+          const ALL_BPS = ['lg', 'md', 'sm', 'xs', 'xxs'];
+          const bps = ALL_BPS.filter((bp) => bp in existing).length > 0
+            ? ALL_BPS
+            : Object.keys(existing);
+          const updatedLayouts = {};
+          for (const bp of bps) {
+            const item = bp === 'xs' || bp === 'xxs' ? mobileItem : layoutItem;
+            updatedLayouts[bp] = [...(existing[bp] || []), { ...item }];
+          }
           return {
             panels: {
               ...s.panels,
               [panelId]: {
                 widgets: [...panel.widgets, { id, type }],
-                layouts: Object.fromEntries(
-                  Object.entries(panel.layouts).map(([bp, items]) => [
-                    bp,
-                    [...items, { ...layoutItem }],
-                  ])
-                ),
+                layouts: updatedLayouts,
               },
             },
           };
