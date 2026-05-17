@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Loader2, RefreshCw, ChevronDown, ChevronRight } from 'lucide-react';
 import apiClient from '../../../../api/client';
 import useAuthStore from '../../../../store/authStore';
@@ -117,9 +117,8 @@ export default function VentasPorListaWidget() {
                 const vendedoresArr = vendedoresPorLista[l.cod_lista_precios] || [];
                 const expanded = expandedListas.has(l.cod_lista_precios);
                 return (
-                  <>
+                  <Fragment key={l.cod_lista_precios}>
                     <tr
-                      key={l.cod_lista_precios}
                       className="hover:bg-slate-50 cursor-pointer"
                       onClick={() => toggleLista(l.cod_lista_precios)}
                     >
@@ -152,7 +151,7 @@ export default function VentasPorListaWidget() {
                         <td colSpan={2}></td>
                       </tr>
                     ))}
-                  </>
+                  </Fragment>
                 );
               })}
             </tbody>
