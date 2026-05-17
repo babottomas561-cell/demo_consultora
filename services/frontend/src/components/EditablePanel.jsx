@@ -54,7 +54,7 @@ const WidgetWrapper = ({ widget, editing, onRemove, widgetDef, children }) => {
           </button>
         )}
       </div>
-      <div className="flex-1 min-h-0 overflow-hidden">{children}</div>
+      <div className="min-h-0 flex-1 overflow-auto">{children}</div>
     </div>
   );
 };
@@ -124,7 +124,7 @@ export default function EditablePanel({
       </div>
 
       {editing && (
-        <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2.5 text-sm text-indigo-700">
+        <div className="hidden rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2.5 text-sm text-indigo-700 sm:block">
           Modo edición: arrastrá y redimensioná los widgets. Hacé clic en{' '}
           <strong>Guardar</strong> cuando termines.
         </div>
@@ -133,14 +133,14 @@ export default function EditablePanel({
       <ResponsiveGridLayout
         className="layout"
         layouts={panel.layouts}
-        breakpoints={{ lg: 1200, md: 996, sm: 768 }}
-        cols={{ lg: 12, md: 12, sm: 6 }}
+        breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }}
+        cols={{ lg: 12, md: 12, sm: 6, xs: 2, xxs: 2 }}
         rowHeight={80}
         onLayoutChange={handleLayoutChange}
         isDraggable={editing}
         isResizable={editing}
         draggableHandle=".cursor-grab"
-        margin={[16, 16]}
+        margin={[12, 12]}
         containerPadding={[0, 0]}
       >
         {panel.widgets.map((widget) => {
