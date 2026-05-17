@@ -8,6 +8,8 @@ export default function StockDisponibleWidget() {
 
   const { data, loading, error, refetch } = useInfomanagerFetch('stock/disponible', (f) => ({
     cod_deposito: f.cod_deposito?.[0] ?? undefined,
+    cod_rubro: f.cod_rubro?.[0] ?? undefined,
+    cod_empresa: f.cod_empresa?.[0] ?? undefined,
     solo_alertas: soloAlertas || undefined,
   }));
 

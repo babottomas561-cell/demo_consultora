@@ -1905,7 +1905,9 @@ async def ventas_productos(
         SELECT
             cod_rubro,
             COALESCE(SUM({venta_importe_neto_expr()}), 0) AS facturado,
-            COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END)                        AS tickets
+            COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END) AS tickets,
+            COALESCE(SUM({venta_importe_neto_expr()} - {venta_costo_neto_expr()}), 0) AS margen_abs,
+            COALESCE(SUM(CASE WHEN precio_compra_actual IS NOT NULL THEN ABS(total) ELSE 0 END), 0) AS total_con_costo
         FROM ventas
         WHERE {where} AND cod_rubro IS NOT NULL
         GROUP BY cod_rubro
@@ -1923,6 +1925,9 @@ async def ventas_productos(
     for r in rubros_rows:
         d = dict(r)
         d["facturado"] = money(d["facturado"])
+        d["margen_abs"] = money(d["margen_abs"])
+        tc = money(d.pop("total_con_costo"))
+        d["margen_pct"] = round(d["margen_abs"] / tc * 100, 1) if tc else 0
         d["pct_total"] = round(d["facturado"] / total_fa * 100, 2)
         d["nombre"] = rubro_names.get(d["cod_rubro"], f"Rubro {d['cod_rubro']}")
         rubros.append(d)
@@ -4624,20 +4629,6 @@ async def get_depositos(
     return {"depositos": [dict(r) for r in rows]}
 
 
-@router.get("/listas-precios")
-async def get_listas_precios(
-    company_id: int = None,
-    current_user=Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    tenant_schema = await get_tenant_schema(current_user, db, company_id)
-    await set_tenant_search_path(db, tenant_schema)
-    rows = (await db.execute(text(
-        "SELECT cod_lista, descripcion FROM listas_precios ORDER BY cod_lista"
-    ))).mappings().all()
-    return {"listas": [dict(r) for r in rows]}
-
-
 @router.get("/rubros")
 async def get_rubros(
     company_id: int = None,
@@ -4647,8 +4638,12 @@ async def get_rubros(
     tenant_schema = await get_tenant_schema(current_user, db, company_id)
     await set_tenant_search_path(db, tenant_schema)
     rows = (await db.execute(text(
-        "SELECT DISTINCT cod_rubro, rubro AS nombre FROM stock WHERE cod_rubro IS NOT NULL ORDER BY cod_rubro"
+        "SELECT cod_rubro, nombre FROM rubros ORDER BY nombre"
     ))).mappings().all()
+    if not rows:
+        rows = (await db.execute(text(
+            "SELECT DISTINCT cod_rubro, rubro AS nombre FROM stock_disponible WHERE cod_rubro IS NOT NULL ORDER BY nombre"
+        ))).mappings().all()
     return {"rubros": [dict(r) for r in rows]}
 
 
@@ -5075,6 +5070,8 @@ async def reportes_empresas_resumen(
 async def get_stock_disponible(
     company_id: int = None,
     cod_deposito: Optional[int] = None,
+    cod_rubro: Optional[int] = None,
+    cod_empresa: Optional[int] = None,
     solo_alertas: bool = False,
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -5087,6 +5084,9 @@ async def get_stock_disponible(
     if cod_deposito is not None:
         conditions.append("cod_deposito = :cod_deposito")
         params["cod_deposito"] = cod_deposito
+    if cod_rubro is not None:
+        conditions.append("cod_rubro = :cod_rubro")
+        params["cod_rubro"] = cod_rubro
     if solo_alertas:
         conditions.append("existencia < pto_de_reposicion AND pto_de_reposicion > 0")
 
@@ -5402,6 +5402,96 @@ async def get_recibos_periodo(
                 "fa_total": round(float(r["fa_total"] or 0), 2),
             }
             for r in rows
+        ],
+    }
+
+
+@router.get("/caja/flujo-contable")
+async def get_flujo_caja_contable(
+    company_id: int = None,
+    cod_empresa: Optional[int] = None,
+    desde: Optional[str] = None,
+    hasta: Optional[str] = None,
+    prefijo_cuenta: Optional[str] = None,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+
+    conditions = ["1=1"]
+    params: dict = {}
+    if cod_empresa is not None:
+        conditions.append("cod_empresa = :cod_empresa")
+        params["cod_empresa"] = cod_empresa
+    if desde:
+        conditions.append("fecha::date >= :desde")
+        params["desde"] = date.fromisoformat(desde)
+    if hasta:
+        conditions.append("fecha::date <= :hasta")
+        params["hasta"] = date.fromisoformat(hasta)
+    if prefijo_cuenta:
+        conditions.append("cuenta::text LIKE :prefijo")
+        params["prefijo"] = f"{prefijo_cuenta}%"
+
+    where = " AND ".join(conditions)
+
+    daily_rows = (await db.execute(text(f"""
+        SELECT fecha::date AS fecha,
+               COALESCE(SUM(debe), 0) AS total_debe,
+               COALESCE(SUM(haber), 0) AS total_haber,
+               COUNT(*) AS movimientos
+        FROM movimientos_contables
+        WHERE {where}
+        GROUP BY fecha::date
+        ORDER BY fecha::date
+    """), params)).mappings().all()
+
+    acct_rows = (await db.execute(text(f"""
+        SELECT cuenta,
+               MAX(plan_descripcion) AS plan_descripcion,
+               COALESCE(SUM(debe), 0) AS total_debe,
+               COALESCE(SUM(haber), 0) AS total_haber,
+               COUNT(*) AS movimientos
+        FROM movimientos_contables
+        WHERE {where}
+        GROUP BY cuenta
+        ORDER BY cuenta
+    """), params)).mappings().all()
+
+    total_debe = sum(float(r["total_debe"] or 0) for r in daily_rows)
+    total_haber = sum(float(r["total_haber"] or 0) for r in daily_rows)
+
+    saldo_acum = 0.0
+    por_dia = []
+    for r in daily_rows:
+        neto = round(float(r["total_debe"] or 0) - float(r["total_haber"] or 0), 2)
+        saldo_acum += neto
+        por_dia.append({
+            "fecha": str(r["fecha"]),
+            "debe": round(float(r["total_debe"] or 0), 2),
+            "haber": round(float(r["total_haber"] or 0), 2),
+            "neto": neto,
+            "saldo_acum": round(saldo_acum, 2),
+            "movimientos": int(r["movimientos"]),
+        })
+
+    return {
+        "total_debe": round(total_debe, 2),
+        "total_haber": round(total_haber, 2),
+        "saldo_neto": round(total_debe - total_haber, 2),
+        "movimientos_count": sum(int(r["movimientos"]) for r in daily_rows),
+        "por_dia": por_dia,
+        "por_cuenta": [
+            {
+                "cuenta": int(r["cuenta"]) if r["cuenta"] else None,
+                "plan_descripcion": r["plan_descripcion"],
+                "debe": round(float(r["total_debe"] or 0), 2),
+                "haber": round(float(r["total_haber"] or 0), 2),
+                "saldo": round(float(r["total_debe"] or 0) - float(r["total_haber"] or 0), 2),
+                "movimientos": int(r["movimientos"]),
+            }
+            for r in acct_rows
         ],
     }
 

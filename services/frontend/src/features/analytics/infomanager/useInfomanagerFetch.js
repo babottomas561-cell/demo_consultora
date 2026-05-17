@@ -49,6 +49,7 @@ export function useInfomanagerFetch(endpoint, buildParams) {
     filterStore.cod_empresa?.join(','),
     filterStore.cod_deposito?.join(','),
     filterStore.cod_lista_precios?.join(','),
+    filterStore.cod_rubro?.join(','),
   ]);
 
   useEffect(() => { fetch(); }, [fetch]);
