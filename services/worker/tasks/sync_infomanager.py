@@ -17,6 +17,7 @@ from worker_app import celery_app
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgrespassword@localhost:5433/demo_consultora")
 COMMISSION_RATE = float(os.getenv("INFOMANAGER_COMMISSION_RATE", "0.03"))
 RAW_REPORT_MAX_PAGES = int(os.getenv("INFOMANAGER_RAW_REPORT_MAX_PAGES", "500"))
+HISTORICAL_START = date.fromisoformat(os.getenv("INFOMANAGER_HISTORICAL_START", "2010-01-01"))
 
 
 def _as_float(value: Any, default: float = 0.0) -> float:
@@ -395,7 +396,7 @@ def sync_company(self, company_id: int, connector_id: int):
                 stock,
             )
 
-        desde = date.today() - timedelta(days=365)
+        desde = HISTORICAL_START
         hasta = date.today()
 
         ventas = im.sync_ventas(desde, hasta)
@@ -771,7 +772,7 @@ def sync_company(self, company_id: int, connector_id: int):
 
         # --- Infomanager-specific tables (facturas, items de listas) ---
         try:
-            desde_fa = date.today() - timedelta(days=365)
+            desde_fa = HISTORICAL_START
             hasta_fa = date.today()
 
             listas = im.obtener_listas_precios()
@@ -1420,7 +1421,7 @@ def sync_incremental(tenant_schema: str, erp_config: dict, connector_id: int = N
 
 @celery_app.task(name="tasks.sync_infomanager.sync_completo")
 def sync_completo(tenant_schema: str, erp_config: dict, connector_id: int = None) -> dict:
-    """Full sync once a day: 90 days + price lists + accounting."""
+    """Full sync once a day: all history from HISTORICAL_START + price lists + accounting."""
     import time
     t0 = time.time()
     conn = psycopg2.connect(DATABASE_URL)
@@ -1435,7 +1436,7 @@ def sync_completo(tenant_schema: str, erp_config: dict, connector_id: int = None
 
         _set_tenant_search_path(cur, tenant_schema)
 
-        desde = date.today() - timedelta(days=365)
+        desde = HISTORICAL_START
         hasta = date.today()
 
         _upsert_empresas(cur, im.obtener_empresas())
