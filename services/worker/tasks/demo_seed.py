@@ -98,6 +98,335 @@ def _insert_ventas_chunk(session, tenant_schema: str, ventas):
     rows_inserted, failed = _insert_chunk(session, tenant_schema, "ventas", ventas_data, ['fecha', 'cliente_id', 'producto_id', 'tipo_comprobante'])
     return rows_inserted, failed
 
+def _seed_infomanager_tables(session, tenant_schema: str):
+    """Populate InfoManager-specific tables from already-seeded base data."""
+    session.execute(text(f'SET search_path TO "{tenant_schema}"'))
+
+    # Product ID → cod_articulo mapping (string key → integer)
+    PROD_MAP_SQL = """(VALUES
+        ('REM001',1001),('REM002',1002),('PAN001',2001),('PAN002',2002),
+        ('VES001',3001),('VES002',3002),('CAM001',4001),('CAM002',4002),
+        ('BUZ001',5001),('CAL001',6001),('CAL002',6002),('CAL003',6003),
+        ('ACC001',7001),('ACC002',7002)
+    ) AS pm(prod_id, cod_articulo)"""
+
+    # 1. empresas_infomanager
+    session.execute(text("""
+        INSERT INTO empresas_infomanager
+            (cod_empresa, nombre, nombre_1, cuit, categoria_iva, habilitada, cod_deposito_default)
+        VALUES
+            (1, 'Moda & Style SRL', 'Moda Style', '30-71234567-8', 'RI', true, 1),
+            (2, 'Indumentaria Sur SA', 'Indumentaria Sur', '30-68765432-1', 'RI', true, 2)
+        ON CONFLICT (cod_empresa) DO UPDATE
+            SET nombre = EXCLUDED.nombre, habilitada = EXCLUDED.habilitada
+    """))
+
+    # 2. listas_precios
+    session.execute(text("""
+        INSERT INTO listas_precios (cod_lista, descripcion, aplica_a, cod_empresa, habilitado)
+        VALUES
+            (1, 'Minorista', 'minoristas', 1, true),
+            (2, 'Mayorista', 'mayoristas', 1, true),
+            (3, 'Especial VIP', 'especial', 1, true)
+        ON CONFLICT (cod_lista) DO UPDATE SET descripcion = EXCLUDED.descripcion
+    """))
+
+    # 3. stock_disponible — from stock table joined with ventas/compras via product map
+    session.execute(text("DELETE FROM stock_disponible"))
+    session.execute(text(f"""
+        INSERT INTO stock_disponible
+            (cod_articulo, descripcion, cod_deposito,
+             stock_entradas, stock_salidas, compras, ventas,
+             existencia, existencia_anterior,
+             precio_compra, precio_venta,
+             pto_de_reposicion, cod_rubro, rubro, cod_subrubro, subrubro,
+             proveedor, habilitado)
+        SELECT
+            st.cod_articulo,
+            v_agg.producto_nombre AS descripcion,
+            st.cod_deposito,
+            COALESCE(c_agg.total_compras_qty, 0) AS stock_entradas,
+            COALESCE(v_agg.total_ventas_qty, 0) AS stock_salidas,
+            COALESCE(c_agg.total_compras_val, 0) AS compras,
+            COALESCE(v_agg.total_ventas_val, 0) AS ventas,
+            st.cantidad AS existencia,
+            ROUND(st.cantidad * 1.1) AS existencia_anterior,
+            st.precio_compra_actual AS precio_compra,
+            ROUND(st.precio_compra_actual / 0.55, 2) AS precio_venta,
+            st.stock_minimo AS pto_de_reposicion,
+            v_agg.cod_rubro,
+            r.nombre AS rubro,
+            v_agg.cod_subrubro,
+            sr.nombre AS subrubro,
+            NULL AS proveedor,
+            1 AS habilitado
+        FROM stock st
+        JOIN {PROD_MAP_SQL} ON pm.cod_articulo = st.cod_articulo
+        LEFT JOIN (
+            SELECT
+                pm2.cod_articulo,
+                MAX(v.producto_nombre) AS producto_nombre,
+                MAX(v.cod_rubro) AS cod_rubro,
+                MAX(v.cod_subrubro) AS cod_subrubro,
+                SUM(CASE WHEN v.cantidad > 0 THEN v.cantidad ELSE 0 END) AS total_ventas_qty,
+                SUM(CASE WHEN v.cantidad > 0 THEN v.total ELSE 0 END) AS total_ventas_val
+            FROM ventas v
+            JOIN {PROD_MAP_SQL.replace('pm', 'pm2')} ON pm2.prod_id = v.producto_id
+            GROUP BY pm2.cod_articulo
+        ) v_agg ON v_agg.cod_articulo = st.cod_articulo
+        LEFT JOIN (
+            SELECT
+                pm3.cod_articulo,
+                SUM(c.cantidad) AS total_compras_qty,
+                SUM(c.total) AS total_compras_val
+            FROM compras c
+            JOIN {PROD_MAP_SQL.replace('pm', 'pm3')} ON pm3.prod_id = c.producto_id
+            GROUP BY pm3.cod_articulo
+        ) c_agg ON c_agg.cod_articulo = st.cod_articulo
+        LEFT JOIN rubros r ON r.cod_rubro = v_agg.cod_rubro
+        LEFT JOIN subrubros sr ON sr.cod_subrubro = v_agg.cod_subrubro
+    """))
+
+    # 4. items_listas_precios — one row per product × list
+    session.execute(text(f"""
+        INSERT INTO items_listas_precios
+            (cod_lista, cod_articulo, art_descripcion, art_precio_compra,
+             art_precio_venta, lista_precio_venta, lista_descuento, fecha_actualizacion)
+        SELECT
+            lp.cod_lista,
+            sd.cod_articulo,
+            sd.descripcion AS art_descripcion,
+            sd.precio_compra AS art_precio_compra,
+            CASE lp.cod_lista
+                WHEN 1 THEN sd.precio_venta
+                WHEN 2 THEN sd.precio_venta * 0.75
+                WHEN 3 THEN sd.precio_venta * 0.90
+            END AS art_precio_venta,
+            CASE lp.cod_lista
+                WHEN 1 THEN sd.precio_venta
+                WHEN 2 THEN sd.precio_venta * 0.75
+                WHEN 3 THEN sd.precio_venta * 0.90
+            END AS lista_precio_venta,
+            CASE lp.cod_lista WHEN 1 THEN 0 WHEN 2 THEN 25 WHEN 3 THEN 10 END AS lista_descuento,
+            CURRENT_DATE AS fecha_actualizacion
+        FROM stock_disponible sd
+        CROSS JOIN listas_precios lp
+        WHERE sd.cod_deposito = 1
+        ON CONFLICT ON CONSTRAINT idx_items_lista_unico DO UPDATE
+            SET art_precio_venta = EXCLUDED.art_precio_venta,
+                lista_precio_venta = EXCLUDED.lista_precio_venta
+    """))
+
+    # 5. facturas_venta — one header per invoice entry in cta_cte_clientes
+    session.execute(text("""
+        INSERT INTO facturas_venta
+            (fa_id, tipo_comprobante, tipo_factura, fa_cod_empresa,
+             fa_fecha, fa_cc, fa_pto_vta, fa_nro, fa_moneda,
+             cod_cliente, cod_vendedor,
+             fa_total, fa_total_moneda_local,
+             primer_fec_vto, ult_fec_vto,
+             rc_imp_pagado, saldo_fa)
+        SELECT
+            ABS(('x' || MD5(ccc.comprobante_id))::bit(63)::bigint) AS fa_id,
+            'FA' AS tipo_comprobante,
+            CASE WHEN ccc.cliente_id LIKE 'MAY%' THEN 'A' ELSE 'B' END AS tipo_factura,
+            1 AS fa_cod_empresa,
+            ccc.fecha::date AS fa_fecha,
+            ccc.cliente_id AS fa_cc,
+            1 AS fa_pto_vta,
+            ROW_NUMBER() OVER (ORDER BY ccc.fecha) AS fa_nro,
+            'ARS' AS fa_moneda,
+            CAST(REGEXP_REPLACE(ccc.cliente_id, '[^0-9]', '', 'g') AS INTEGER) AS cod_cliente,
+            v_agg.cod_vendedor,
+            ccc.importe AS fa_total,
+            ccc.importe AS fa_total_moneda_local,
+            (ccc.fecha + INTERVAL '30 days')::date AS primer_fec_vto,
+            (ccc.fecha + INTERVAL '30 days')::date AS ult_fec_vto,
+            COALESCE(recibo.importe_cobrado, 0) AS rc_imp_pagado,
+            GREATEST(ccc.importe - COALESCE(recibo.importe_cobrado, 0), 0) AS saldo_fa
+        FROM cuentas_corrientes_clientes ccc
+        LEFT JOIN (
+            SELECT MAX(cod_vendedor) AS cod_vendedor, cliente_id
+            FROM ventas GROUP BY cliente_id
+        ) v_agg ON v_agg.cliente_id = ccc.cliente_id
+        LEFT JOIN (
+            SELECT REPLACE(comprobante_id, 'REC-', '') AS factura_ref, ABS(importe) AS importe_cobrado
+            FROM cuentas_corrientes_clientes WHERE tipo = 'recibo'
+        ) recibo ON recibo.factura_ref = ccc.comprobante_id
+        WHERE ccc.tipo = 'factura' AND ccc.importe > 0 AND ccc.comprobante_id IS NOT NULL
+        ON CONFLICT (fa_id) DO NOTHING
+    """))
+
+    # 6. saldos_clientes — one row per client, aggregated from cta_cte
+    session.execute(text("""
+        INSERT INTO saldos_clientes
+            (cod_cliente, nombre, fecha, dias_deuda, tot_entrada, tot_salida, tot_saldo, color, prevision)
+        SELECT
+            CAST(REGEXP_REPLACE(cliente_id, '[^0-9]', '', 'g') AS INTEGER) AS cod_cliente,
+            MAX(cliente_nombre) AS nombre,
+            MAX(fecha::date) AS fecha,
+            GREATEST(EXTRACT(DAY FROM NOW() - MIN(
+                CASE WHEN tipo = 'factura' AND importe > 0 AND saldo_acumulado > 0 THEN fecha END
+            ))::int, 0) AS dias_deuda,
+            SUM(CASE WHEN importe > 0 THEN importe ELSE 0 END) AS tot_entrada,
+            SUM(CASE WHEN importe < 0 THEN ABS(importe) ELSE 0 END) AS tot_salida,
+            SUM(importe) AS tot_saldo,
+            CASE
+                WHEN SUM(importe) <= 0 THEN 1
+                WHEN GREATEST(EXTRACT(DAY FROM NOW() - MIN(
+                    CASE WHEN tipo = 'factura' AND importe > 0 AND saldo_acumulado > 0 THEN fecha END
+                ))::int, 0) <= 30 THEN 2
+                WHEN GREATEST(EXTRACT(DAY FROM NOW() - MIN(
+                    CASE WHEN tipo = 'factura' AND importe > 0 AND saldo_acumulado > 0 THEN fecha END
+                ))::int, 0) <= 60 THEN 3
+                ELSE 4
+            END AS color,
+            GREATEST(SUM(importe), 0) * 0.05 AS prevision
+        FROM cuentas_corrientes_clientes
+        GROUP BY CAST(REGEXP_REPLACE(cliente_id, '[^0-9]', '', 'g') AS INTEGER)
+        HAVING SUM(importe) > 0 OR SUM(CASE WHEN importe > 0 THEN importe ELSE 0 END) > 0
+    """))
+
+    # 7. comprobantes_pendientes_clientes — unpaid invoices only
+    session.execute(text("""
+        INSERT INTO comprobantes_pendientes_clientes
+            (comprobante_id, tipo_comprobante, cod_cliente, nombre,
+             cod_empresa, cod_vendedor, punto_de_venta, numero,
+             importe_factura, importe_pagado, saldo,
+             fecha_factura, dias_deuda, color, moneda_fa)
+        SELECT
+            ABS(('x' || MD5(ccc.comprobante_id))::bit(63)::bigint) AS comprobante_id,
+            'FA' AS tipo_comprobante,
+            CAST(REGEXP_REPLACE(ccc.cliente_id, '[^0-9]', '', 'g') AS INTEGER) AS cod_cliente,
+            ccc.cliente_nombre AS nombre,
+            1 AS cod_empresa,
+            v_agg.cod_vendedor,
+            '1' AS punto_de_venta,
+            ccc.comprobante_id AS numero,
+            ccc.importe AS importe_factura,
+            COALESCE(pagado.importe_cobrado, 0) AS importe_pagado,
+            GREATEST(ccc.importe - COALESCE(pagado.importe_cobrado, 0), 0) AS saldo,
+            ccc.fecha::date AS fecha_factura,
+            GREATEST(EXTRACT(DAY FROM NOW() - ccc.fecha)::int, 0) AS dias_deuda,
+            CASE
+                WHEN GREATEST(EXTRACT(DAY FROM NOW() - ccc.fecha)::int, 0) <= 30 THEN 2
+                WHEN GREATEST(EXTRACT(DAY FROM NOW() - ccc.fecha)::int, 0) <= 60 THEN 3
+                ELSE 4
+            END AS color,
+            'ARS' AS moneda_fa
+        FROM cuentas_corrientes_clientes ccc
+        LEFT JOIN (
+            SELECT MAX(cod_vendedor) AS cod_vendedor, cliente_id FROM ventas GROUP BY cliente_id
+        ) v_agg ON v_agg.cliente_id = ccc.cliente_id
+        LEFT JOIN (
+            SELECT REPLACE(comprobante_id, 'REC-', '') AS factura_ref, ABS(importe) AS importe_cobrado
+            FROM cuentas_corrientes_clientes WHERE tipo = 'recibo'
+        ) pagado ON pagado.factura_ref = ccc.comprobante_id
+        WHERE ccc.tipo = 'factura' AND ccc.importe > 0 AND ccc.comprobante_id IS NOT NULL
+          AND GREATEST(ccc.importe - COALESCE(pagado.importe_cobrado, 0), 0) > 0.01
+    """))
+
+    # 8. movimientos_stock — salidas from ventas, entradas from compras
+    session.execute(text(f"""
+        INSERT INTO movimientos_stock
+            (id, cod_articulo, descripcion, fecha, tipo_movimiento, cantidad, precio, total, cod_deposito, cod_empresa)
+        SELECT
+            MD5('S-' || v.id::text) AS id,
+            pm.cod_articulo,
+            v.producto_nombre AS descripcion,
+            v.fecha::date,
+            'salida' AS tipo_movimiento,
+            -ABS(v.cantidad)::numeric AS cantidad,
+            v.precio_unitario AS precio,
+            -ABS(v.total) AS total,
+            COALESCE(v.cod_deposito, 1) AS cod_deposito,
+            COALESCE(v.cod_empresa, 1) AS cod_empresa
+        FROM ventas v
+        JOIN {PROD_MAP_SQL} ON pm.prod_id = v.producto_id
+        WHERE v.cantidad > 0
+        ON CONFLICT (id) DO NOTHING
+    """))
+    session.execute(text(f"""
+        INSERT INTO movimientos_stock
+            (id, cod_articulo, descripcion, fecha, tipo_movimiento, cantidad, precio, total, cod_deposito, cod_empresa)
+        SELECT
+            MD5('E-' || ROW_NUMBER() OVER (ORDER BY c.fecha)::text || '-' || pm.cod_articulo::text) AS id,
+            pm.cod_articulo,
+            c.producto_nombre AS descripcion,
+            c.fecha::date,
+            'entrada' AS tipo_movimiento,
+            c.cantidad::numeric AS cantidad,
+            c.precio_unitario AS precio,
+            c.total AS total,
+            1 AS cod_deposito,
+            1 AS cod_empresa
+        FROM compras c
+        JOIN {PROD_MAP_SQL} ON pm.prod_id = c.producto_id
+        ON CONFLICT (id) DO NOTHING
+    """))
+
+    # 9. movimientos_contables — debe+haber pairs for each sale, haber for purchases
+    session.execute(text("""
+        INSERT INTO movimientos_contables
+            (id, fecha, cuenta, plan_descripcion, debe, haber, tipo_comprobante, numero, descripcion, cod_empresa, tag)
+        SELECT
+            MD5('VD-' || v.id::text) AS id,
+            v.fecha::date, 111001, 'Caja y Bancos',
+            v.total, 0, 'FA', v.id::text, 'Cobro ' || v.cliente_nombre,
+            COALESCE(v.cod_empresa, 1), 'S'
+        FROM ventas v WHERE v.total > 0
+        ON CONFLICT (id) DO NOTHING
+    """))
+    session.execute(text("""
+        INSERT INTO movimientos_contables
+            (id, fecha, cuenta, plan_descripcion, debe, haber, tipo_comprobante, numero, descripcion, cod_empresa, tag)
+        SELECT
+            MD5('VH-' || v.id::text) AS id,
+            v.fecha::date, 411001, 'Ventas',
+            0, v.total, 'FA', v.id::text, 'Venta ' || v.cliente_nombre,
+            COALESCE(v.cod_empresa, 1), 'S'
+        FROM ventas v WHERE v.total > 0
+        ON CONFLICT (id) DO NOTHING
+    """))
+    session.execute(text("""
+        INSERT INTO movimientos_contables
+            (id, fecha, cuenta, plan_descripcion, debe, haber, tipo_comprobante, numero, descripcion, cod_empresa, tag)
+        SELECT
+            MD5('CH-' || ROW_NUMBER() OVER (ORDER BY c.fecha)::text) AS id,
+            c.fecha::date, 211001, 'Proveedores a Pagar',
+            0, c.total, 'FC', ROW_NUMBER() OVER (ORDER BY c.fecha)::text,
+            'Compra ' || c.producto_nombre, 1, 'C'
+        FROM compras c WHERE c.total > 0
+        ON CONFLICT (id) DO NOTHING
+    """))
+
+    # 10. comprobantes_proveedores — outstanding supplier invoices
+    session.execute(text("""
+        INSERT INTO comprobantes_proveedores
+            (comprobante_id, proveedor_id, proveedor_nombre, tipo, numero,
+             fecha, fecha_vencimiento, importe_total, importe_pagado, saldo)
+        SELECT
+            ccp.comprobante_id,
+            ccp.proveedor_id,
+            ccp.proveedor_nombre,
+            'FA' AS tipo,
+            ccp.comprobante_id AS numero,
+            ccp.fecha,
+            ccp.fecha_vencimiento,
+            ccp.importe AS importe_total,
+            COALESCE(pago.importe_pagado, 0) AS importe_pagado,
+            GREATEST(ccp.importe - COALESCE(pago.importe_pagado, 0), 0) AS saldo
+        FROM cuentas_corrientes_proveedores ccp
+        LEFT JOIN (
+            SELECT REPLACE(comprobante_id, 'PAG-', '') AS factura_ref, ABS(importe) AS importe_pagado
+            FROM cuentas_corrientes_proveedores WHERE tipo = 'pago'
+        ) pago ON pago.factura_ref = ccp.comprobante_id
+        WHERE ccp.tipo = 'factura' AND ccp.importe > 0 AND ccp.comprobante_id IS NOT NULL
+          AND GREATEST(ccp.importe - COALESCE(pago.importe_pagado, 0), 0) > 0.01
+        ON CONFLICT ON CONSTRAINT idx_comprobante_proveedor_unico DO NOTHING
+    """))
+
+
 def _backfill_ventas_infomanager_fields(session, tenant_schema: str):
     session.execute(text(f'SET search_path TO "{tenant_schema}"'))
     session.execute(text("""
@@ -250,6 +579,9 @@ def seed_tenant_demo(self, tenant_schema: str, meses: int = 12):
 
             _insert_chunk(session, tenant_schema, "stock", stock, ['cod_articulo', 'cod_deposito'])
 
+            session.commit()
+
+            _seed_infomanager_tables(session, tenant_schema)
             session.commit()
 
         logger.info(
