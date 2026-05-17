@@ -69,7 +69,7 @@ const VentasPanelInner = () => {
       <FilterBar />
 
       <div className="space-y-3 pt-2">
-        <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="text-xl font-bold tracking-tight text-slate-900">Panel Ventas</h1>
             <p className="text-sm text-slate-500">Ingresos, márgenes, clientes y vendedores.</p>

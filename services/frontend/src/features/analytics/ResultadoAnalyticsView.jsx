@@ -66,7 +66,7 @@ const ResultadoPanelInner = () => {
       <FilterBar />
 
       <div className="space-y-3 pt-2">
-        <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="text-xl font-bold tracking-tight text-slate-900">Panel Resultado</h1>
             <p className="text-sm text-slate-500">Márgenes, costos, descuentos y rentabilidad por período, producto, vendedor y cliente.</p>

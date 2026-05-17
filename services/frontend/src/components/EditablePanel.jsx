@@ -133,14 +133,14 @@ export default function EditablePanel({
       <ResponsiveGridLayout
         className="layout"
         layouts={panel.layouts}
-        breakpoints={{ lg: 1200, md: 996, sm: 768 }}
-        cols={{ lg: 12, md: 12, sm: 6 }}
+        breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }}
+        cols={{ lg: 12, md: 12, sm: 6, xs: 2, xxs: 2 }}
         rowHeight={80}
         onLayoutChange={handleLayoutChange}
         isDraggable={editing}
         isResizable={editing}
         draggableHandle=".cursor-grab"
-        margin={[16, 16]}
+        margin={[12, 12]}
         containerPadding={[0, 0]}
       >
         {panel.widgets.map((widget) => {

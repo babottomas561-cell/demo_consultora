@@ -139,8 +139,8 @@ const DashboardView = () => {
       <ResponsiveGridLayout
         className="layout"
         layouts={layouts}
-        breakpoints={{ lg: 1200, md: 996, sm: 768 }}
-        cols={{ lg: 12, md: 12, sm: 6 }}
+        breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }}
+        cols={{ lg: 12, md: 12, sm: 6, xs: 2, xxs: 2 }}
         rowHeight={80}
         onLayoutChange={handleLayoutChange}
         isDraggable={editing}

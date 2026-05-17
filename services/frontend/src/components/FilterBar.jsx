@@ -106,17 +106,18 @@ const FilterBar = () => {
   const selectedCliente = cod_cliente?.[0] ?? '';
 
   return (
-    <div className="sticky top-0 z-10 -mx-8 -mt-8 mb-6 border-b border-slate-200 bg-white px-6 shadow-sm">
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-3">
-        <div className="flex flex-wrap items-center gap-1.5">
+    <div className="sticky top-0 z-10 -mx-4 -mt-4 mb-4 border-b border-slate-200 bg-white px-4 shadow-sm sm:-mx-6 sm:-mt-6 sm:mb-6 sm:px-6 lg:-mx-8 lg:-mt-8 lg:px-6">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 py-2.5">
+        {/* Períodos */}
+        <div className="flex flex-wrap items-center gap-1">
           {PERIODOS.map(({ key, label }) => (
             <button
               key={key}
               onClick={() => handlePeriodoClick(key)}
-              className={`rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${
+              className={`rounded-md px-2.5 py-1.5 text-[12px] font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 sm:text-[13px] sm:px-3 ${
                 periodo === key
                   ? 'bg-indigo-600 text-white shadow-sm'
-                  : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 hover:border-slate-300'
+                  : 'border border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'
               }`}
             >
               {label}
@@ -124,10 +125,11 @@ const FilterBar = () => {
           ))}
         </div>
 
+        {/* Filtros y fecha */}
         <div className="flex flex-wrap items-center gap-2">
           {empresas.length > 1 && (
             <InlineSelect
-              label="Todas las empresas"
+              label="Empresa"
               value={selectedEmpresa}
               onChange={(v) => setFilter('cod_empresa', v ? [v] : [])}
               options={empresas}
@@ -157,7 +159,7 @@ const FilterBar = () => {
           )}
           {depositos.length > 0 && (
             <InlineSelect
-              label="Todos los depósitos"
+              label="Depósito"
               value={selectedDeposito}
               onChange={(v) => setFilter('cod_deposito', v ? [v] : [])}
               options={depositos}
@@ -167,7 +169,7 @@ const FilterBar = () => {
           )}
           {listas.length > 0 && (
             <InlineSelect
-              label="Todas las listas"
+              label="Lista"
               value={selectedLista}
               onChange={(v) => setFilter('cod_lista_precios', v ? [v] : [])}
               options={listas}
@@ -175,9 +177,10 @@ const FilterBar = () => {
               labelKey="descripcion"
             />
           )}
-          <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
-            <Calendar size={14} className="text-slate-400" />
-            <span>{formatDateDisplay(desde)} — {formatDateDisplay(hasta)}</span>
+          <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
+            <Calendar size={13} className="text-slate-400" />
+            <span className="hidden sm:inline">{formatDateDisplay(desde)} — {formatDateDisplay(hasta)}</span>
+            <span className="sm:hidden">{formatDateDisplay(desde).slice(0, 5)}</span>
           </div>
         </div>
       </div>
