@@ -14,6 +14,7 @@ export default function FacturasVentaWidget() {
     desde: f.desde,
     hasta: f.hasta,
     cod_empresa: f.cod_empresa?.[0] ?? undefined,
+    cod_vendedor: f.cod_vendedor?.[0] ?? undefined,
   }));
 
   const facturas = data?.facturas ?? [];

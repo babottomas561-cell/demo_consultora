@@ -8,7 +8,7 @@ const AGING_TABS = [
   { key: '0-30', label: '0-30 días' },
   { key: '31-60', label: '31-60 días' },
   { key: '61-90', label: '61-90 días' },
-  { key: '90+', label: '+90 días' },
+  { key: '+90', label: '+90 días' },
 ];
 
 export default function ComprobantesVencidosWidget() {
@@ -19,7 +19,7 @@ export default function ComprobantesVencidosWidget() {
     aging: aging || undefined,
   }));
 
-  const comprobantes = data?.comprobantes ?? [];
+  const comprobantes = data?.pendientes ?? [];
 
   return (
     <div className="flex h-full flex-col">

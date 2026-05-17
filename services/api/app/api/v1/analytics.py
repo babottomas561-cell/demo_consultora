@@ -5610,6 +5610,7 @@ async def get_facturas_venta(
     desde: Optional[str] = None,
     hasta: Optional[str] = None,
     cod_empresa: Optional[int] = None,
+    cod_vendedor: Optional[int] = None,
     page: int = 1,
     limit: int = 200,
     current_user=Depends(get_current_user),
@@ -5629,6 +5630,9 @@ async def get_facturas_venta(
     if cod_empresa is not None:
         conditions.append("fv.fa_cod_empresa = :cod_empresa")
         params["cod_empresa"] = cod_empresa
+    if cod_vendedor is not None:
+        conditions.append("fv.cod_vendedor = :cod_vendedor")
+        params["cod_vendedor"] = cod_vendedor
 
     where = " AND ".join(conditions)
     count_params = {k: v for k, v in params.items() if k not in ("offset", "limit")}
@@ -5674,13 +5678,15 @@ async def get_saldos_clientes(
     company_id: int = None,
     cod_empresa: Optional[int] = None,
     color: Optional[int] = None,
+    solo_con_saldo: Optional[bool] = True,
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     tenant_schema = await get_tenant_schema(current_user, db, company_id)
     await set_tenant_search_path(db, tenant_schema)
 
-    conditions = ["tot_saldo > 0 OR tot_entrada > 0"]
+    base_cond = "tot_saldo > 0" if solo_con_saldo else "(tot_saldo > 0 OR tot_entrada > 0)"
+    conditions = [base_cond]
     params: dict = {}
     if cod_empresa is not None:
         conditions.append("cod_empresa = :cod_empresa")

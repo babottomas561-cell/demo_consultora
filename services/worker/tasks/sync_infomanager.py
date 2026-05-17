@@ -636,6 +636,24 @@ def sync_company(self, company_id: int, connector_id: int):
                 """,
                 pago,
             )
+            pago_importe = _as_float(pago.get("importe"))
+            if pago_importe and pago_importe > 0:
+                prov_nombre = pago.get("proveedor_nombre") or f"Proveedor {pago.get('proveedor_id', '')}"
+                pago_forma = pago.get("forma_pago") or "efectivo"
+                cur.execute(
+                    """
+                    INSERT INTO movimientos_caja (fecha, tipo, descripcion, importe, saldo_acumulado)
+                    VALUES (%s, %s, %s, %s, %s)
+                    ON CONFLICT (fecha, tipo, descripcion, importe) DO NOTHING
+                    """,
+                    (
+                        pago.get("fecha"),
+                        "egreso",
+                        f"Pago {prov_nombre} ({pago_forma})",
+                        -abs(pago_importe),
+                        0,
+                    ),
+                )
 
         for comision in im.build_comisiones_vendedores(comprobantes_clientes, pagos_clientes, vendedor_lookup, COMMISSION_RATE):
             cur.execute(
@@ -700,6 +718,10 @@ def sync_company(self, company_id: int, connector_id: int):
             if nombre and not nombre.startswith("Proveedor "):
                 cur.execute(
                     "UPDATE cuentas_corrientes_proveedores SET proveedor_nombre = %s WHERE proveedor_id = %s AND (proveedor_nombre IS NULL OR proveedor_nombre = '' OR proveedor_nombre LIKE 'Proveedor %%')",
+                    (nombre, cod),
+                )
+                cur.execute(
+                    "UPDATE facturas_compra SET proveedor = %s WHERE cod_proveedor::text = %s AND (proveedor IS NULL OR proveedor = '' OR proveedor LIKE 'Proveedor %%')",
                     (nombre, cod),
                 )
 
