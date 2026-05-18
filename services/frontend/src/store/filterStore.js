@@ -43,6 +43,7 @@ const arrayFilters = [
 
 const emptyAdvancedFilters = {
   comparar_anterior: false,
+  compare_mode: 'none',
   cod_empresa: [],
   tag: [],
   punto_de_venta: [],
@@ -111,6 +112,10 @@ export const useFilterStore = create(
 
       setCustomRange: (desde, hasta) => {
         set({ periodo: 'custom', desde, hasta, activeViewId: null });
+      },
+
+      setCompareMode: (mode) => {
+        set({ compare_mode: mode, comparar_anterior: mode !== 'none', activeViewId: null });
       },
 
       setFilter: (name, value) => {
