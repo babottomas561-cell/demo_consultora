@@ -2,6 +2,7 @@ import { useCallback, useEffect } from 'react';
 import { Responsive, WidthProvider } from 'react-grid-layout/legacy';
 import { Plus, Pencil, RotateCcw, Lock, X } from 'lucide-react';
 import usePanelLayoutStore from '../store/panelLayoutStore';
+import { BREAKPOINTS, BREAKPOINT_COLS } from '../constants/breakpoints';
 import 'react-grid-layout/css/styles.css';
 
 const ResponsiveGridLayout = WidthProvider(Responsive);
@@ -54,7 +55,7 @@ const WidgetWrapper = ({ widget, editing, onRemove, widgetDef, children }) => {
           </button>
         )}
       </div>
-      <div className="flex-1 min-h-0 overflow-hidden">{children}</div>
+      <div className="min-h-0 flex-1 overflow-auto">{children}</div>
     </div>
   );
 };
@@ -124,7 +125,7 @@ export default function EditablePanel({
       </div>
 
       {editing && (
-        <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2.5 text-sm text-indigo-700">
+        <div className="hidden rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2.5 text-sm text-indigo-700 sm:block">
           Modo edición: arrastrá y redimensioná los widgets. Hacé clic en{' '}
           <strong>Guardar</strong> cuando termines.
         </div>

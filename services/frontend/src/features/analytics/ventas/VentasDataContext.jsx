@@ -49,6 +49,10 @@ export default function VentasDataProvider({ children }) {
   const [loadingClientes, setLoadingClientes] = useState(false);
   const [loadingComprobantes, setLoadingComprobantes] = useState(false);
   const [loadingTransacciones, setLoadingTransacciones] = useState(false);
+  const [heatmap, setHeatmap] = useState(null);
+  const [loadingHeatmap, setLoadingHeatmap] = useState(false);
+  const [yoy, setYoy] = useState(null);
+  const [loadingYoy, setLoadingYoy] = useState(false);
   const [txPage, setTxPage] = useState(1);
   const [error, setError] = useState(null);
 
@@ -125,24 +129,59 @@ export default function VentasDataProvider({ children }) {
     } catch (e) { console.error(e); } finally { setLoadingTransacciones(false); }
   }, [qs, canFetch]);
 
+  const fetchHeatmap = useCallback(async () => {
+    if (!canFetch || heatmap) return;
+    setLoadingHeatmap(true);
+    try {
+      const r = await apiClient.get(`/analytics/ventas/temporal${appendQueryParams(qs, { granularidad: 'dia' })}`);
+      setHeatmap(r.data);
+    } catch (e) { console.error(e); } finally { setLoadingHeatmap(false); }
+  }, [qs, canFetch, heatmap]);
+
+  const fetchYoy = useCallback(async () => {
+    if (!canFetch || yoy) return;
+    setLoadingYoy(true);
+    try {
+      const currentYear = new Date().getFullYear();
+      const results = await Promise.all(
+        [2, 1, 0].map(async (yearsBack) => {
+          const year = currentYear - yearsBack;
+          const yoyFilters = {
+            ...filters,
+            desde: `${year}-01-01`,
+            hasta: yearsBack === 0 ? new Date().toISOString().substring(0, 10) : `${year}-12-31`,
+            comparar_anterior: false,
+          };
+          const yoyQs = buildQueryParams(user, activeCompany, yoyFilters);
+          const r = await apiClient.get(`/analytics/ventas/temporal${appendQueryParams(yoyQs, { granularidad: 'mes' })}`);
+          return { year, series: r.data.series ?? [] };
+        })
+      );
+      setYoy(results);
+    } catch (e) { console.error(e); } finally { setLoadingYoy(false); }
+  }, [qs, canFetch, yoy, filters, user, activeCompany]);
+
   useEffect(() => { fetchPrimary(); }, [fetchPrimary]);
   useEffect(() => { if (temporal) fetchTemporal(); }, [granularidad]);
 
   const value = useMemo(() => ({
     kpis, temporal, productos, vendedores, clientes, comprobantes, transacciones,
+    heatmap, yoy,
     granularidad, setGranularidad, comparar,
     loadingKpis, loadingTemporal, loadingProductos, loadingVendedores,
-    loadingClientes, loadingComprobantes, loadingTransacciones,
+    loadingClientes, loadingComprobantes, loadingTransacciones, loadingHeatmap, loadingYoy,
     txPage, error,
-    fetchClientes, fetchComprobantes, fetchTransacciones,
+    fetchClientes, fetchComprobantes, fetchTransacciones, fetchHeatmap, fetchYoy,
     refetch: fetchPrimary,
     user, activeCompany,
   }), [
     kpis, temporal, productos, vendedores, clientes, comprobantes, transacciones,
+    heatmap, yoy,
     granularidad, comparar,
     loadingKpis, loadingTemporal, loadingProductos, loadingVendedores,
-    loadingClientes, loadingComprobantes, loadingTransacciones,
+    loadingClientes, loadingComprobantes, loadingTransacciones, loadingHeatmap, loadingYoy,
     txPage, error, fetchPrimary, fetchClientes, fetchComprobantes, fetchTransacciones,
+    fetchHeatmap, fetchYoy,
     user, activeCompany,
   ]);
 

@@ -43,7 +43,7 @@ const arrayFilters = [
 
 const emptyAdvancedFilters = {
   comparar_anterior: false,
-  compare_mode: 'anterior',
+  compare_mode: 'none',
   cod_empresa: [],
   tag: [],
   punto_de_venta: [],
@@ -113,6 +113,10 @@ export const useFilterStore = create(
 
       setCustomRange: (desde, hasta) => {
         set({ periodo: 'custom', desde, hasta, activeViewId: null });
+      },
+
+      setCompareMode: (mode) => {
+        set({ compare_mode: mode, comparar_anterior: mode !== 'none', activeViewId: null });
       },
 
       setFilter: (name, value) => {
@@ -186,6 +190,14 @@ export const useFilterStore = create(
     {
       name: 'bi-filters',
       version: 4,
+      // Refresh dates on load so preset periods (anio, mes, etc.) always reflect today
+      onRehydrateStorage: () => (state) => {
+        if (state && state.periodo && state.periodo !== 'custom') {
+          const fresh = getDefaultDates(state.periodo);
+          state.desde = fresh.desde;
+          state.hasta = fresh.hasta;
+        }
+      },
       partialize: (state) => ({
         ...pickFilterState(state),
         savedViews: state.savedViews,

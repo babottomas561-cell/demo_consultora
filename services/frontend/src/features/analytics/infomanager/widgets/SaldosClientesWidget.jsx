@@ -1,5 +1,6 @@
 import { Loader2, RefreshCw } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import ExportButton from '../../../../components/analytics/ExportButton/ExportButton';
 import { formatCurrency } from '../../analyticsUtils';
 import { useInfomanagerFetch } from '../useInfomanagerFetch';
 
@@ -18,18 +19,19 @@ const COLOR_BADGE = {
 const COLOR_LABEL = { 1: 'Al día', 2: 'Leve', 3: 'Moderada', 4: 'Crítica' };
 
 export default function SaldosClientesWidget() {
+  const panelRef = useRef(null);
   const [soloConSaldo, setSoloConSaldo] = useState(true);
 
   const { data, loading, error, refetch } = useInfomanagerFetch('clientes/saldos', (f) => ({
     cod_empresa: f.cod_empresa?.[0] ?? undefined,
     solo_con_saldo: soloConSaldo || undefined,
-  }));
+  }), [soloConSaldo]);
 
   const saldos = data?.saldos ?? [];
   const totalSaldo = saldos.reduce((s, r) => s + Number(r.tot_saldo || 0), 0);
 
   return (
-    <div className="flex h-full flex-col">
+    <div ref={panelRef} className="flex h-full flex-col">
       <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-4 py-2">
         <div className="flex items-center gap-3">
           <span className="text-xs text-slate-500">{data?.total ?? 0} clientes</span>
@@ -47,13 +49,16 @@ export default function SaldosClientesWidget() {
             />
             Solo con saldo
           </label>
-          <button
-            onClick={refetch}
-            disabled={loading}
-            className="inline-flex items-center gap-1 rounded border border-slate-200 px-2 py-1 text-xs text-slate-500 hover:bg-slate-50 disabled:opacity-50"
-          >
-            <RefreshCw size={11} className={loading ? 'animate-spin' : ''} />
-          </button>
+          <div className="flex items-center gap-1">
+            <ExportButton data={saldos} filename="saldos-clientes" panelRef={panelRef} size="icon" />
+            <button
+              onClick={refetch}
+              disabled={loading}
+              className="inline-flex items-center gap-1 rounded border border-slate-200 px-2 py-1 text-xs text-slate-500 hover:bg-slate-50 disabled:opacity-50"
+            >
+              <RefreshCw size={11} className={loading ? 'animate-spin' : ''} />
+            </button>
+          </div>
         </div>
       </div>
 

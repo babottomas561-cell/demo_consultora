@@ -29,6 +29,7 @@ class GlobalFilters(BaseModel):
     cod_cliente: list[int] | None = None
     cod_articulo: list[int] | None = None
     cod_deposito: list[int] | None = None
+    cod_lista_precios: list[int] | None = None
     incluir_anuladas: bool = False
 
     @field_validator(
@@ -43,6 +44,7 @@ class GlobalFilters(BaseModel):
         "cod_cliente",
         "cod_articulo",
         "cod_deposito",
+        "cod_lista_precios",
         mode="before",
     )
     @classmethod
@@ -101,6 +103,7 @@ def get_global_filters(
     cod_cliente: list[int] | None = Query(default=None),
     cod_articulo: list[int] | None = Query(default=None),
     cod_deposito: list[int] | None = Query(default=None),
+    cod_lista_precios: list[int] | None = Query(default=None),
     incluir_anuladas: bool = False,
 ) -> GlobalFilters:
     return GlobalFilters(
@@ -119,6 +122,7 @@ def get_global_filters(
         cod_cliente=cod_cliente,
         cod_articulo=cod_articulo,
         cod_deposito=cod_deposito,
+        cod_lista_precios=cod_lista_precios,
         incluir_anuladas=incluir_anuladas,
     )
 

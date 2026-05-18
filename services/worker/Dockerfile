@@ -19,5 +19,5 @@ COPY . .
 # Set python path
 ENV PYTHONPATH=/app
 
-# Start Celery worker
-CMD ["celery", "-A", "worker_app.celery_app", "worker", "--loglevel=info", "--concurrency=2"]
+# Start Celery worker with Beat scheduler
+CMD ["celery", "-A", "worker_app.celery_app", "worker", "--beat", "--loglevel=info", "--concurrency=2"]

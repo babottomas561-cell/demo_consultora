@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgrespassword@localhost:5433/demo_consultora")
-SYNC_INTERVAL_SECONDS = int(os.getenv("INFOMANAGER_SYNC_INTERVAL", "180"))  # 3 minutes
+SYNC_INTERVAL_SECONDS = int(os.getenv("INFOMANAGER_SYNC_INTERVAL", "30"))  # 30 seconds
 FULL_SYNC_INTERVAL_HOURS = int(os.getenv("INFOMANAGER_FULL_SYNC_HOURS", "24"))
 
 celery_app = Celery(
@@ -44,10 +44,15 @@ celery_app.conf.beat_schedule = {
         "task": "tasks.sync_infomanager.sync_all_companies",
         "schedule": crontab(minute=0, hour="*/6"),
     },
+    "refresh-demo-infomanager": {
+        "task": "tasks.demo_seed.refresh_all_demo_infomanager_tables",
+        "schedule": timedelta(hours=23),
+    },
 }
 
 
 _last_full_sync: dict[str, datetime] = {}
+_last_incremental_sync: dict[str, datetime] = {}
 
 
 def _get_active_infomanager_tenants() -> list[dict]:
@@ -100,6 +105,15 @@ def _sync_loop() -> None:
             tenants = _get_active_infomanager_tenants()
             logger.info(f"[SyncLoop] {len(tenants)} tenants activos")
 
+            # Purge stale entries for tenants no longer active
+            active_schemas = {t["tenant_schema"] for t in tenants}
+            for stale in list(_last_full_sync.keys()):
+                if stale not in active_schemas:
+                    del _last_full_sync[stale]
+            for stale in list(_last_incremental_sync.keys()):
+                if stale not in active_schemas:
+                    del _last_incremental_sync[stale]
+
             for tenant in tenants:
                 schema = tenant["tenant_schema"]
                 erp_config = tenant["erp_config"]
@@ -118,11 +132,21 @@ def _sync_loop() -> None:
                         _last_full_sync[schema] = datetime.now()
                         logger.info(f"[SyncLoop] FULL → {schema}")
                     else:
-                        celery_app.send_task(
-                            "tasks.sync_infomanager.sync_incremental",
-                            kwargs={"tenant_schema": schema, "erp_config": erp_config},
-                        )
-                        logger.info(f"[SyncLoop] INCR → {schema}")
+                        ultima_inc = _last_incremental_sync.get(schema)
+                        secs_since = (datetime.now() - ultima_inc).total_seconds() if ultima_inc else None
+                        if not ultima_inc or secs_since >= SYNC_INTERVAL_SECONDS - 5:
+                            celery_app.send_task(
+                                "tasks.sync_infomanager.sync_incremental",
+                                kwargs={
+                                    "tenant_schema": schema,
+                                    "erp_config": erp_config,
+                                    "connector_id": tenant["connector_id"],
+                                },
+                            )
+                            _last_incremental_sync[schema] = datetime.now()
+                            logger.info(f"[SyncLoop] INCR → {schema}")
+                        else:
+                            logger.debug(f"[SyncLoop] SKIP {schema} (last inc {secs_since:.0f}s ago)")
                 except Exception as exc:
                     logger.error(f"[SyncLoop] Error en {schema}: {exc}")
                     continue

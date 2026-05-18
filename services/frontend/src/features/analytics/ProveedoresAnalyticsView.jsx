@@ -7,8 +7,11 @@ import usePanelLayoutStore from '../../store/panelLayoutStore';
 import FilterBar from '../../components/FilterBar';
 import EditablePanel from '../../components/EditablePanel';
 import AddPanelWidgetModal from '../../components/AddPanelWidgetModal';
+import PeriodComparator from '../../components/analytics/PeriodComparator';
 import SavedViews from '../../components/analytics/SavedViews';
 import ExportButton from '../../components/analytics/ExportButton';
+import CrossFilterProvider from '../../components/analytics/CrossFilterProvider';
+import DrillThroughBreadcrumbs from '../../components/analytics/DrillThroughBreadcrumbs';
 
 import ProveedoresDataProvider, { useProveedoresData } from './proveedores/ProveedoresDataContext';
 import PROVEEDORES_WIDGET_CATALOG, {
@@ -91,34 +94,39 @@ const ProveedoresPanelInner = () => {
                 Comprobantes: comprobantes?.comprobantes,
               })}
               filename="proveedores_ranking"
+              panelRef={panelRef}
             />
           </div>
         </div>
+
+        <PeriodComparator />
+        <DrillThroughBreadcrumbs />
 
         <EditablePanel
           panelId={PANEL_ID}
           catalog={PROVEEDORES_WIDGET_CATALOG}
           getWidgetDef={getProveedoresWidgetDef}
-          onAddWidget={() => setShowAddModal(true)}
-          title="Panel Proveedores"
+          onAddClick={() => setShowAddModal(true)}
         />
-      </div>
 
-      {showAddModal && (
-        <AddPanelWidgetModal
-          catalog={PROVEEDORES_WIDGET_CATALOG}
-          panelId={PANEL_ID}
-          onClose={() => setShowAddModal(false)}
-        />
-      )}
+        {showAddModal && (
+          <AddPanelWidgetModal
+            catalog={PROVEEDORES_WIDGET_CATALOG}
+            panelId={PANEL_ID}
+            onClose={() => setShowAddModal(false)}
+          />
+        )}
+      </div>
     </div>
   );
 };
 
 const ProveedoresAnalyticsView = () => (
-  <ProveedoresDataProvider>
-    <ProveedoresPanelInner />
-  </ProveedoresDataProvider>
+  <CrossFilterProvider>
+    <ProveedoresDataProvider>
+      <ProveedoresPanelInner />
+    </ProveedoresDataProvider>
+  </CrossFilterProvider>
 );
 
 export default ProveedoresAnalyticsView;

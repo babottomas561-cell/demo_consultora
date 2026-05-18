@@ -32,6 +32,8 @@ const DataTable = ({
   className,
   initialPageSize = 10,
   footer,
+  onRowClick,
+  rowClassName,
 }) => {
   const [globalFilter, setGlobalFilter] = useState('');
   const [sorting, setSorting] = useState([]);
@@ -154,7 +156,11 @@ const DataTable = ({
             </thead>
             <tbody>
               {table.getRowModel().rows.map((row) => (
-                <tr key={row.id} className="border-b border-slate-50 hover:bg-slate-50/60 transition-colors">
+                <tr
+                  key={row.id}
+                  onClick={onRowClick ? () => onRowClick(row.original) : undefined}
+                  className={cn('border-b border-slate-50 hover:bg-slate-50/60 transition-colors', onRowClick && 'cursor-pointer', rowClassName)}
+                >
                   {row.getVisibleCells().map((cell) => (
                     <td
                       key={cell.id}

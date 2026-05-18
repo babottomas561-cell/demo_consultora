@@ -17,6 +17,7 @@ from worker_app import celery_app
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgrespassword@localhost:5433/demo_consultora")
 COMMISSION_RATE = float(os.getenv("INFOMANAGER_COMMISSION_RATE", "0.03"))
 RAW_REPORT_MAX_PAGES = int(os.getenv("INFOMANAGER_RAW_REPORT_MAX_PAGES", "500"))
+HISTORICAL_START = date.fromisoformat(os.getenv("INFOMANAGER_HISTORICAL_START", "2010-01-01"))
 
 
 def _as_float(value: Any, default: float = 0.0) -> float:
@@ -409,7 +410,7 @@ def sync_company(self, company_id: int, connector_id: int):
                 stock,
             )
 
-        desde = date.today() - timedelta(days=365)
+        desde = HISTORICAL_START
         hasta = date.today()
 
         ventas = im.sync_ventas(desde, hasta)
@@ -428,7 +429,7 @@ def sync_company(self, company_id: int, connector_id: int):
                   cantidad, precio_unitario, total, tipo_comprobante, tipo_factura,
                   punto_de_venta, cod_vendedor, cod_empresa, tag,
                   condicion_venta_tipo, neto, iva_importe, anulada,
-                  cod_deposito, cod_rubro, precio_compra_actual, descuento_porc
+                  cod_deposito, cod_rubro, cod_lista_precios, precio_compra_actual, descuento_porc
                 )
                 VALUES (
                   %(fecha)s, %(cliente_id)s, %(cliente_nombre)s, %(producto_id)s,
@@ -436,7 +437,7 @@ def sync_company(self, company_id: int, connector_id: int):
                   %(tipo_comprobante)s, %(tipo_factura)s, %(punto_de_venta)s,
                   %(cod_vendedor)s, %(cod_empresa)s, %(tag)s,
                   %(condicion_venta_tipo)s, %(neto)s, %(iva_importe)s,
-                  %(anulada)s, %(cod_deposito)s, %(cod_rubro)s,
+                  %(anulada)s, %(cod_deposito)s, %(cod_rubro)s, %(cod_lista_precios)s,
                   %(precio_compra_actual)s, %(descuento_porc)s
                 )
                 ON CONFLICT (fecha, cliente_id, producto_id, tipo_comprobante) DO UPDATE SET
@@ -447,6 +448,7 @@ def sync_company(self, company_id: int, connector_id: int):
                   precio_unitario=EXCLUDED.precio_unitario,
                   neto=EXCLUDED.neto,
                   iva_importe=EXCLUDED.iva_importe,
+                  cod_lista_precios=EXCLUDED.cod_lista_precios,
                   precio_compra_actual=EXCLUDED.precio_compra_actual,
                   descuento_porc=EXCLUDED.descuento_porc
                 """,
@@ -649,6 +651,24 @@ def sync_company(self, company_id: int, connector_id: int):
                 """,
                 pago,
             )
+            pago_importe = _as_float(pago.get("importe"))
+            if pago_importe and pago_importe > 0:
+                prov_nombre = pago.get("proveedor_nombre") or f"Proveedor {pago.get('proveedor_id', '')}"
+                pago_forma = pago.get("forma_pago") or "efectivo"
+                cur.execute(
+                    """
+                    INSERT INTO movimientos_caja (fecha, tipo, descripcion, importe, saldo_acumulado)
+                    VALUES (%s, %s, %s, %s, %s)
+                    ON CONFLICT (fecha, tipo, descripcion, importe) DO NOTHING
+                    """,
+                    (
+                        pago.get("fecha"),
+                        "egreso",
+                        f"Pago {prov_nombre} ({pago_forma})",
+                        -abs(pago_importe),
+                        0,
+                    ),
+                )
 
         for comision in im.build_comisiones_vendedores(comprobantes_clientes, pagos_clientes, vendedor_lookup, COMMISSION_RATE):
             cur.execute(
@@ -715,6 +735,10 @@ def sync_company(self, company_id: int, connector_id: int):
                     "UPDATE cuentas_corrientes_proveedores SET proveedor_nombre = %s WHERE proveedor_id = %s AND (proveedor_nombre IS NULL OR proveedor_nombre = '' OR proveedor_nombre LIKE 'Proveedor %%')",
                     (nombre, cod),
                 )
+                cur.execute(
+                    "UPDATE facturas_compra SET proveedor = %s WHERE cod_proveedor::text = %s AND (proveedor IS NULL OR proveedor = '' OR proveedor LIKE 'Proveedor %%')",
+                    (nombre, cod),
+                )
 
         recibos = im.sync_recibos(desde, hasta)
         saldo_acum = 0.0
@@ -762,7 +786,7 @@ def sync_company(self, company_id: int, connector_id: int):
 
         # --- Infomanager-specific tables (facturas, items de listas) ---
         try:
-            desde_fa = date.today() - timedelta(days=365)
+            desde_fa = HISTORICAL_START
             hasta_fa = date.today()
 
             listas = im.obtener_listas_precios()
@@ -1293,14 +1317,21 @@ def _upsert_movimientos_contables(cur, rows: list[dict]) -> int:
 
 
 @celery_app.task(name="tasks.sync_infomanager.sync_incremental")
-def sync_incremental(tenant_schema: str, erp_config: dict) -> dict:
-    """Fast sync every 3 min: last 2h of invoices + full snapshots."""
+def sync_incremental(tenant_schema: str, erp_config: dict, connector_id: int = None) -> dict:
+    """Fast incremental sync (~30 s): last 2 days of invoices + full snapshots."""
     import time
     t0 = time.time()
     conn = psycopg2.connect(DATABASE_URL)
     cur = conn.cursor()
     counts: dict[str, int] = {}
     try:
+        if connector_id:
+            cur.execute(
+                "UPDATE public.company_connectors SET sync_status='running' WHERE id = %s",
+                (connector_id,),
+            )
+            conn.commit()
+
         client_id = erp_config["client_id"]
         client_secret = erp_config["client_secret"]
         base_url = erp_config.get("base_url")
@@ -1368,15 +1399,34 @@ def sync_incremental(tenant_schema: str, erp_config: dict) -> dict:
         cur.execute("TRUNCATE TABLE stock_disponible")
         counts["stock_disponible"] = _insert_stock_disponible(cur, stock)
 
+        if connector_id:
+            cur.execute(
+                "UPDATE public.company_connectors"
+                " SET sync_status='ok', last_sync_at=NOW(), sync_error=NULL"
+                " WHERE id = %s",
+                (connector_id,),
+            )
+
         conn.commit()
+        duracion = round(time.time() - t0, 2)
         return {
             "tenant_schema": tenant_schema,
             "status": "ok",
             "tablas": counts,
-            "duracion_segundos": round(time.time() - t0, 2),
+            "duracion_segundos": duracion,
         }
     except Exception as exc:
         conn.rollback()
+        if connector_id:
+            try:
+                cur.execute(
+                    "UPDATE public.company_connectors"
+                    " SET sync_status='error', sync_error=%s WHERE id = %s",
+                    (str(exc)[:500], connector_id),
+                )
+                conn.commit()
+            except Exception:
+                pass
         raise
     finally:
         cur.close()
@@ -1385,7 +1435,7 @@ def sync_incremental(tenant_schema: str, erp_config: dict) -> dict:
 
 @celery_app.task(name="tasks.sync_infomanager.sync_completo")
 def sync_completo(tenant_schema: str, erp_config: dict, connector_id: int = None) -> dict:
-    """Full sync once a day: 90 days + price lists + accounting."""
+    """Full sync once a day: all history from HISTORICAL_START + price lists + accounting."""
     import time
     t0 = time.time()
     conn = psycopg2.connect(DATABASE_URL)
@@ -1400,7 +1450,7 @@ def sync_completo(tenant_schema: str, erp_config: dict, connector_id: int = None
 
         _set_tenant_search_path(cur, tenant_schema)
 
-        desde = date.today() - timedelta(days=365)
+        desde = HISTORICAL_START
         hasta = date.today()
 
         _upsert_empresas(cur, im.obtener_empresas())

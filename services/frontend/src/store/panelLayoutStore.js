@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { BREAKPOINT_KEYS, MOBILE_BREAKPOINTS } from '../constants/breakpoints';
 
 const PANEL_DEFAULTS = {};
 
@@ -86,19 +87,23 @@ const usePanelLayoutStore = create(
           minW: defaultSize.minW ?? 2,
           minH: defaultSize.minH ?? 2,
         };
+        const mobileItem = { ...layoutItem, w: 2, minW: 1 };
         set((s) => {
           const panel = s.panels[panelId] || PANEL_DEFAULTS[panelId] || { widgets: [], layouts: {} };
+          const existing = panel.layouts || {};
+          // Populate all known breakpoints; fall back to lg-only for brand-new panels
+          const bps = Object.keys(existing).length > 0 ? BREAKPOINT_KEYS : ['lg'];
+          const updatedLayouts = {};
+          for (const bp of bps) {
+            const item = MOBILE_BREAKPOINTS.has(bp) ? mobileItem : layoutItem;
+            updatedLayouts[bp] = [...(existing[bp] || []), { ...item }];
+          }
           return {
             panels: {
               ...s.panels,
               [panelId]: {
                 widgets: [...panel.widgets, { id, type }],
-                layouts: Object.fromEntries(
-                  Object.entries(panel.layouts).map(([bp, items]) => [
-                    bp,
-                    [...items, { ...layoutItem }],
-                  ])
-                ),
+                layouts: updatedLayouts,
               },
             },
           };

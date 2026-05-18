@@ -7,8 +7,11 @@ import usePanelLayoutStore from '../../store/panelLayoutStore';
 import FilterBar from '../../components/FilterBar';
 import EditablePanel from '../../components/EditablePanel';
 import AddPanelWidgetModal from '../../components/AddPanelWidgetModal';
+import PeriodComparator from '../../components/analytics/PeriodComparator';
 import SavedViews from '../../components/analytics/SavedViews';
 import ExportButton from '../../components/analytics/ExportButton';
+import CrossFilterProvider from '../../components/analytics/CrossFilterProvider';
+import DrillThroughBreadcrumbs from '../../components/analytics/DrillThroughBreadcrumbs';
 
 import ClientesDataProvider, { useClientesData } from './clientes/ClientesDataContext';
 import CLIENTES_WIDGET_CATALOG, {
@@ -91,34 +94,39 @@ const ClientesPanelInner = () => {
                 Comprobantes: comprobantes?.comprobantes,
               })}
               filename="clientes_ranking"
+              panelRef={panelRef}
             />
           </div>
         </div>
+
+        <PeriodComparator />
+        <DrillThroughBreadcrumbs />
 
         <EditablePanel
           panelId={PANEL_ID}
           catalog={CLIENTES_WIDGET_CATALOG}
           getWidgetDef={getClientesWidgetDef}
-          onAddWidget={() => setShowAddModal(true)}
-          title="Panel Clientes"
+          onAddClick={() => setShowAddModal(true)}
         />
-      </div>
 
-      {showAddModal && (
-        <AddPanelWidgetModal
-          catalog={CLIENTES_WIDGET_CATALOG}
-          panelId={PANEL_ID}
-          onClose={() => setShowAddModal(false)}
-        />
-      )}
+        {showAddModal && (
+          <AddPanelWidgetModal
+            catalog={CLIENTES_WIDGET_CATALOG}
+            panelId={PANEL_ID}
+            onClose={() => setShowAddModal(false)}
+          />
+        )}
+      </div>
     </div>
   );
 };
 
 const ClientesAnalyticsView = () => (
-  <ClientesDataProvider>
-    <ClientesPanelInner />
-  </ClientesDataProvider>
+  <CrossFilterProvider>
+    <ClientesDataProvider>
+      <ClientesPanelInner />
+    </ClientesDataProvider>
+  </CrossFilterProvider>
 );
 
 export default ClientesAnalyticsView;

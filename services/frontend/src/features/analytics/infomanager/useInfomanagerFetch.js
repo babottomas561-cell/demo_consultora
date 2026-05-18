@@ -3,7 +3,7 @@ import apiClient from '../../../api/client';
 import useAuthStore from '../../../store/authStore';
 import { useFilterStore } from '../../../store/filterStore';
 
-export function useInfomanagerFetch(endpoint, buildParams) {
+export function useInfomanagerFetch(endpoint, buildParams, extraDeps = []) {
   const user = useAuthStore((s) => s.user);
   const activeCompany = useAuthStore((s) => s.activeCompany);
   const filterStore = useFilterStore();
@@ -15,6 +15,11 @@ export function useInfomanagerFetch(endpoint, buildParams) {
 
   const controllerRef = useRef(null);
 
+  // Always reflect latest buildParams without causing stale closure issues
+  const buildParamsRef = useRef(buildParams);
+  buildParamsRef.current = buildParams;
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const fetch = useCallback(async () => {
     if (!canFetch) return;
     if (controllerRef.current) controllerRef.current.abort();
@@ -26,8 +31,8 @@ export function useInfomanagerFetch(endpoint, buildParams) {
     try {
       const params = new URLSearchParams();
       if (user?.is_admin && activeCompany) params.set('company_id', activeCompany.id);
-      if (buildParams) {
-        const extra = buildParams(filterStore);
+      if (buildParamsRef.current) {
+        const extra = buildParamsRef.current(filterStore);
         Object.entries(extra).forEach(([k, v]) => {
           if (v !== null && v !== undefined && v !== '') params.set(k, v);
         });
@@ -49,6 +54,10 @@ export function useInfomanagerFetch(endpoint, buildParams) {
     filterStore.cod_empresa?.join(','),
     filterStore.cod_deposito?.join(','),
     filterStore.cod_lista_precios?.join(','),
+    filterStore.cod_rubro?.join(','),
+    filterStore.cod_vendedor?.join(','),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    ...extraDeps,
   ]);
 
   useEffect(() => { fetch(); }, [fetch]);

@@ -1,4 +1,3 @@
-import io
 from datetime import date, timedelta
 from decimal import Decimal
 from io import BytesIO
@@ -1931,7 +1930,7 @@ async def ventas_productos(
             FROM stock_disponible
             WHERE rubro IS NOT NULL
             ORDER BY cod_articulo
-        ) s ON s.cod_articulo = v.producto_id
+        ) s ON s.cod_articulo::text = v.producto_id
         LEFT JOIN rubros r ON r.cod_rubro = v.cod_rubro
         WHERE {where} AND v.cod_rubro IS NOT NULL
         GROUP BY v.cod_rubro
@@ -1942,6 +1941,9 @@ async def ventas_productos(
     for r in rubros_rows:
         d = dict(r)
         d["facturado"] = money(d["facturado"])
+        d["margen_abs"] = money(d["margen_abs"])
+        tc = money(d.pop("total_con_costo"))
+        d["margen_pct"] = round(d["margen_abs"] / tc * 100, 1) if tc else 0
         d["pct_total"] = round(d["facturado"] / total_fa * 100, 2)
         rubros.append(d)
 
@@ -1959,7 +1961,7 @@ async def ventas_productos(
             FROM stock_disponible
             WHERE cod_subrubro IS NOT NULL
             ORDER BY cod_articulo
-        ) s ON s.cod_articulo = v.producto_id
+        ) s ON s.cod_articulo::text = v.producto_id
         WHERE {where}
         GROUP BY s.cod_subrubro
         ORDER BY facturado DESC
@@ -1978,6 +1980,89 @@ async def ventas_productos(
     ]
 
     return {"ranking": ranking, "por_rubro": rubros, "por_subrubro": subrubros, "pareto": pareto}
+
+
+@router.get("/ventas/por-lista")
+async def ventas_por_lista(
+    company_id: int = None,
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+
+    params = filters.sql_params()
+    where = _ventas_base_where(filters)
+
+    lista_names: dict = {}
+    try:
+        lp_rows = (await db.execute(text(
+            "SELECT cod_lista, descripcion FROM listas_precios"
+        ))).mappings().all()
+        lista_names = {r["cod_lista"]: r["descripcion"] for r in lp_rows}
+    except Exception:
+        pass
+
+    por_lista = (await db.execute(text(f"""
+        SELECT
+            cod_lista_precios,
+            COALESCE(SUM({venta_importe_neto_expr()}), 0) AS facturado,
+            COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END) AS tickets,
+            COUNT(DISTINCT cliente_id) AS clientes_unicos,
+            COUNT(DISTINCT cod_vendedor) AS vendedores_unicos,
+            COALESCE(SUM({venta_importe_neto_expr()} - {venta_costo_neto_expr()}), 0) AS margen_abs,
+            COALESCE(SUM(CASE WHEN precio_compra_actual IS NOT NULL THEN ABS(total) ELSE 0 END), 0) AS total_con_costo
+        FROM ventas
+        WHERE {where} AND cod_lista_precios IS NOT NULL
+        GROUP BY cod_lista_precios
+        ORDER BY facturado DESC
+    """), params)).mappings().all()
+
+    por_vendedor_lista = (await db.execute(text(f"""
+        SELECT
+            cod_vendedor, cod_lista_precios,
+            COALESCE(SUM({venta_importe_neto_expr()}), 0) AS facturado,
+            COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END) AS tickets
+        FROM ventas
+        WHERE {where} AND cod_lista_precios IS NOT NULL AND cod_vendedor IS NOT NULL
+        GROUP BY cod_vendedor, cod_lista_precios
+        ORDER BY cod_vendedor, facturado DESC
+    """), params)).mappings().all()
+
+    vendedor_names: dict = {}
+    try:
+        vd_rows = (await db.execute(text("SELECT cod_vendedor, nombre FROM vendedores"))).mappings().all()
+        vendedor_names = {r["cod_vendedor"]: r["nombre"] for r in vd_rows}
+    except Exception:
+        pass
+
+    total_fa = sum(float(r["facturado"] or 0) for r in por_lista) or 1
+    listas_out = []
+    for r in por_lista:
+        d = dict(r)
+        d["facturado"] = money(d["facturado"])
+        d["margen_abs"] = money(d["margen_abs"])
+        tc = money(d.pop("total_con_costo"))
+        d["margen_pct"] = round(d["margen_abs"] / tc * 100, 1) if tc else 0
+        d["pct_total"] = round(d["facturado"] / total_fa * 100, 2)
+        d["ticket_promedio"] = round(d["facturado"] / d["tickets"], 2) if d["tickets"] else 0
+        d["nombre"] = lista_names.get(d["cod_lista_precios"], f"Lista {d['cod_lista_precios']}")
+        listas_out.append(d)
+
+    vendedores_out = []
+    for r in por_vendedor_lista:
+        d = dict(r)
+        d["facturado"] = money(d["facturado"])
+        d["vendedor_nombre"] = vendedor_names.get(d["cod_vendedor"], f"Vendedor {d['cod_vendedor']}")
+        d["lista_nombre"] = lista_names.get(d["cod_lista_precios"], f"Lista {d['cod_lista_precios']}")
+        vendedores_out.append(d)
+
+    return {
+        "por_lista": listas_out,
+        "por_vendedor_lista": vendedores_out,
+        "total_facturado": round(total_fa, 2),
+    }
 
 
 @router.get("/ventas/por-vendedor")
@@ -4715,6 +4800,7 @@ async def get_depositos(
         return {"depositos": []}
 
 
+
 @router.get("/listas-precios")
 async def get_listas_precios(
     company_id: int = None,
@@ -4730,6 +4816,7 @@ async def get_listas_precios(
         return {"listas": [dict(r) for r in rows]}
     except Exception:
         return {"listas": []}
+
 
 
 @router.get("/rubros")
@@ -5181,6 +5268,8 @@ async def reportes_empresas_resumen(
 async def get_stock_disponible(
     company_id: int = None,
     cod_deposito: Optional[int] = None,
+    cod_rubro: Optional[int] = None,
+    cod_empresa: Optional[int] = None,
     solo_alertas: bool = False,
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -5193,6 +5282,9 @@ async def get_stock_disponible(
     if cod_deposito is not None:
         conditions.append("cod_deposito = :cod_deposito")
         params["cod_deposito"] = cod_deposito
+    if cod_rubro is not None:
+        conditions.append("cod_rubro = :cod_rubro")
+        params["cod_rubro"] = cod_rubro
     if solo_alertas:
         conditions.append("existencia < pto_de_reposicion AND pto_de_reposicion > 0")
 
@@ -5233,6 +5325,7 @@ async def get_movimientos_stock(
     cod_articulo: Optional[int] = None,
     q: Optional[str] = None,
     cod_deposito: Optional[int] = None,
+    cod_empresa: Optional[int] = None,
     desde: Optional[str] = None,
     hasta: Optional[str] = None,
     current_user=Depends(get_current_user),
@@ -5246,6 +5339,8 @@ async def get_movimientos_stock(
     art_cond_c = ""
     dep_cond_v = ""
     dep_cond_c = ""
+    emp_cond_v = ""
+    emp_cond_c = ""
     date_cond_v = "1=1"
     date_cond_c = "1=1"
 
@@ -5261,6 +5356,10 @@ async def get_movimientos_stock(
         dep_cond_v = "AND v.cod_deposito = :cod_deposito"
         dep_cond_c = "AND c.cod_deposito = :cod_deposito"
         params["cod_deposito"] = cod_deposito
+    if cod_empresa is not None:
+        emp_cond_v = "AND v.cod_empresa = :cod_empresa"
+        emp_cond_c = "AND c.cod_empresa = :cod_empresa"
+        params["cod_empresa"] = cod_empresa
     if desde:
         date_cond_v = "v.fecha::date >= :desde"
         date_cond_c = "c.fecha::date >= :desde"
@@ -5284,7 +5383,7 @@ async def get_movimientos_stock(
             cod_empresa
         FROM ventas v
         WHERE {date_cond_v} AND tipo_comprobante = 'FA' AND anulada != 'S'
-          {art_cond_v} {dep_cond_v}
+          {art_cond_v} {dep_cond_v} {emp_cond_v}
           AND producto_id IS NOT NULL AND producto_id ~ '^[0-9]+$'
         UNION ALL
         SELECT
@@ -5300,7 +5399,7 @@ async def get_movimientos_stock(
             cod_empresa
         FROM compras c
         WHERE {date_cond_c} AND tipo_comprobante IN ('FA', 'FC') AND anulada != 'S'
-          {art_cond_c} {dep_cond_c}
+          {art_cond_c} {dep_cond_c} {emp_cond_c}
           AND producto_id IS NOT NULL AND producto_id ~ '^[0-9]+$'
         ORDER BY fecha DESC
         LIMIT 500
@@ -5351,6 +5450,7 @@ async def get_interdepositos(
 async def get_resultado_listas_precios(
     company_id: int = None,
     cod_lista_precios: Optional[int] = None,
+    cod_empresa: Optional[int] = None,
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -5362,6 +5462,9 @@ async def get_resultado_listas_precios(
     if cod_lista_precios is not None:
         conditions.append("i.cod_lista = :cod_lista")
         params["cod_lista"] = cod_lista_precios
+    if cod_empresa is not None:
+        conditions.append("l.cod_empresa = :cod_empresa")
+        params["cod_empresa"] = cod_empresa
 
     where = " AND ".join(conditions)
     rows = (await db.execute(text(f"""
@@ -5512,6 +5615,96 @@ async def get_recibos_periodo(
     }
 
 
+@router.get("/caja/flujo-contable")
+async def get_flujo_caja_contable(
+    company_id: int = None,
+    cod_empresa: Optional[int] = None,
+    desde: Optional[str] = None,
+    hasta: Optional[str] = None,
+    prefijo_cuenta: Optional[str] = None,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+
+    conditions = ["1=1"]
+    params: dict = {}
+    if cod_empresa is not None:
+        conditions.append("cod_empresa = :cod_empresa")
+        params["cod_empresa"] = cod_empresa
+    if desde:
+        conditions.append("fecha::date >= :desde")
+        params["desde"] = date.fromisoformat(desde)
+    if hasta:
+        conditions.append("fecha::date <= :hasta")
+        params["hasta"] = date.fromisoformat(hasta)
+    if prefijo_cuenta:
+        conditions.append("cuenta::text LIKE :prefijo")
+        params["prefijo"] = f"{prefijo_cuenta}%"
+
+    where = " AND ".join(conditions)
+
+    daily_rows = (await db.execute(text(f"""
+        SELECT fecha::date AS fecha,
+               COALESCE(SUM(debe), 0) AS total_debe,
+               COALESCE(SUM(haber), 0) AS total_haber,
+               COUNT(*) AS movimientos
+        FROM movimientos_contables
+        WHERE {where}
+        GROUP BY fecha::date
+        ORDER BY fecha::date
+    """), params)).mappings().all()
+
+    acct_rows = (await db.execute(text(f"""
+        SELECT cuenta,
+               MAX(plan_descripcion) AS plan_descripcion,
+               COALESCE(SUM(debe), 0) AS total_debe,
+               COALESCE(SUM(haber), 0) AS total_haber,
+               COUNT(*) AS movimientos
+        FROM movimientos_contables
+        WHERE {where}
+        GROUP BY cuenta
+        ORDER BY cuenta
+    """), params)).mappings().all()
+
+    total_debe = sum(float(r["total_debe"] or 0) for r in daily_rows)
+    total_haber = sum(float(r["total_haber"] or 0) for r in daily_rows)
+
+    saldo_acum = 0.0
+    por_dia = []
+    for r in daily_rows:
+        neto = round(float(r["total_debe"] or 0) - float(r["total_haber"] or 0), 2)
+        saldo_acum += neto
+        por_dia.append({
+            "fecha": str(r["fecha"]),
+            "debe": round(float(r["total_debe"] or 0), 2),
+            "haber": round(float(r["total_haber"] or 0), 2),
+            "neto": neto,
+            "saldo_acum": round(saldo_acum, 2),
+            "movimientos": int(r["movimientos"]),
+        })
+
+    return {
+        "total_debe": round(total_debe, 2),
+        "total_haber": round(total_haber, 2),
+        "saldo_neto": round(total_debe - total_haber, 2),
+        "movimientos_count": sum(int(r["movimientos"]) for r in daily_rows),
+        "por_dia": por_dia,
+        "por_cuenta": [
+            {
+                "cuenta": int(r["cuenta"]) if r["cuenta"] else None,
+                "plan_descripcion": r["plan_descripcion"],
+                "debe": round(float(r["total_debe"] or 0), 2),
+                "haber": round(float(r["total_haber"] or 0), 2),
+                "saldo": round(float(r["total_debe"] or 0) - float(r["total_haber"] or 0), 2),
+                "movimientos": int(r["movimientos"]),
+            }
+            for r in acct_rows
+        ],
+    }
+
+
 @router.get("/listas-precios")
 async def get_listas_precios(
     company_id: int = None,
@@ -5532,6 +5725,7 @@ async def get_facturas_venta(
     desde: Optional[str] = None,
     hasta: Optional[str] = None,
     cod_empresa: Optional[int] = None,
+    cod_vendedor: Optional[int] = None,
     page: int = 1,
     limit: int = 200,
     current_user=Depends(get_current_user),
@@ -5551,6 +5745,9 @@ async def get_facturas_venta(
     if cod_empresa is not None:
         conditions.append("fv.fa_cod_empresa = :cod_empresa")
         params["cod_empresa"] = cod_empresa
+    if cod_vendedor is not None:
+        conditions.append("fv.cod_vendedor = :cod_vendedor")
+        params["cod_vendedor"] = cod_vendedor
 
     where = " AND ".join(conditions)
     count_params = {k: v for k, v in params.items() if k not in ("offset", "limit")}
@@ -5596,13 +5793,15 @@ async def get_saldos_clientes(
     company_id: int = None,
     cod_empresa: Optional[int] = None,
     color: Optional[int] = None,
+    solo_con_saldo: Optional[bool] = True,
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     tenant_schema = await get_tenant_schema(current_user, db, company_id)
     await set_tenant_search_path(db, tenant_schema)
 
-    conditions = ["tot_saldo > 0 OR tot_entrada > 0"]
+    base_cond = "tot_saldo > 0" if solo_con_saldo else "(tot_saldo > 0 OR tot_entrada > 0)"
+    conditions = [base_cond]
     params: dict = {}
     if cod_empresa is not None:
         conditions.append("cod_empresa = :cod_empresa")

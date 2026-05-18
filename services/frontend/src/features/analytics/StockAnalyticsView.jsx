@@ -7,8 +7,11 @@ import usePanelLayoutStore from '../../store/panelLayoutStore';
 import FilterBar from '../../components/FilterBar';
 import EditablePanel from '../../components/EditablePanel';
 import AddPanelWidgetModal from '../../components/AddPanelWidgetModal';
+import PeriodComparator from '../../components/analytics/PeriodComparator';
 import SavedViews from '../../components/analytics/SavedViews';
 import ExportButton from '../../components/analytics/ExportButton';
+import CrossFilterProvider from '../../components/analytics/CrossFilterProvider';
+import DrillThroughBreadcrumbs from '../../components/analytics/DrillThroughBreadcrumbs';
 
 import StockDataProvider, { useStockData } from './stock/StockDataContext';
 import STOCK_WIDGET_CATALOG, {
@@ -90,34 +93,39 @@ const StockPanelInner = () => {
                 Reposicion: reposicion?.sugerencias,
               })}
               filename="stock"
+              panelRef={panelRef}
             />
           </div>
         </div>
+
+        <PeriodComparator />
+        <DrillThroughBreadcrumbs />
 
         <EditablePanel
           panelId={PANEL_ID}
           catalog={STOCK_WIDGET_CATALOG}
           getWidgetDef={getStockWidgetDef}
-          onAddWidget={() => setShowAddModal(true)}
-          title="Panel Stock"
+          onAddClick={() => setShowAddModal(true)}
         />
-      </div>
 
-      {showAddModal && (
-        <AddPanelWidgetModal
-          catalog={STOCK_WIDGET_CATALOG}
-          panelId={PANEL_ID}
-          onClose={() => setShowAddModal(false)}
-        />
-      )}
+        {showAddModal && (
+          <AddPanelWidgetModal
+            catalog={STOCK_WIDGET_CATALOG}
+            panelId={PANEL_ID}
+            onClose={() => setShowAddModal(false)}
+          />
+        )}
+      </div>
     </div>
   );
 };
 
 const StockAnalyticsView = () => (
-  <StockDataProvider>
-    <StockPanelInner />
-  </StockDataProvider>
+  <CrossFilterProvider>
+    <StockDataProvider>
+      <StockPanelInner />
+    </StockDataProvider>
+  </CrossFilterProvider>
 );
 
 export default StockAnalyticsView;

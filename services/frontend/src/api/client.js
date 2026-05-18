@@ -4,8 +4,9 @@ import useAuthStore from '../store/authStore';
 const runtimeApiUrl = window.__API_URL__;
 const apiUrl = runtimeApiUrl && runtimeApiUrl !== '__PLACEHOLDER_API_URL__'
   ? runtimeApiUrl
-  : import.meta.env.VITE_API_URL || 'http://localhost:8000';
-const baseURL = `${apiUrl}/api/v1`;
+  : import.meta.env.VITE_API_URL || '';
+// Empty apiUrl = relative URL so the Vite dev proxy (or nginx) handles routing
+const baseURL = apiUrl ? `${apiUrl}/api/v1` : '/api/v1';
 
 const apiClient = axios.create({
   baseURL: baseURL,

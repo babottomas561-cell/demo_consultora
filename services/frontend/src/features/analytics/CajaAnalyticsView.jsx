@@ -7,8 +7,11 @@ import usePanelLayoutStore from '../../store/panelLayoutStore';
 import FilterBar from '../../components/FilterBar';
 import EditablePanel from '../../components/EditablePanel';
 import AddPanelWidgetModal from '../../components/AddPanelWidgetModal';
+import PeriodComparator from '../../components/analytics/PeriodComparator';
 import SavedViews from '../../components/analytics/SavedViews';
 import ExportButton from '../../components/analytics/ExportButton';
+import CrossFilterProvider from '../../components/analytics/CrossFilterProvider';
+import DrillThroughBreadcrumbs from '../../components/analytics/DrillThroughBreadcrumbs';
 
 import CajaDataProvider, { useCajaData } from './caja/CajaDataContext';
 import CAJA_WIDGET_CATALOG, {
@@ -89,34 +92,39 @@ const CajaPanelInner = () => {
                 Movimientos: movimientos?.movimientos,
               })}
               filename="caja_movimientos"
+              panelRef={panelRef}
             />
           </div>
         </div>
+
+        <PeriodComparator />
+        <DrillThroughBreadcrumbs />
 
         <EditablePanel
           panelId={PANEL_ID}
           catalog={CAJA_WIDGET_CATALOG}
           getWidgetDef={getCajaWidgetDef}
-          onAddWidget={() => setShowAddModal(true)}
-          title="Panel Caja"
+          onAddClick={() => setShowAddModal(true)}
         />
-      </div>
 
-      {showAddModal && (
-        <AddPanelWidgetModal
-          catalog={CAJA_WIDGET_CATALOG}
-          panelId={PANEL_ID}
-          onClose={() => setShowAddModal(false)}
-        />
-      )}
+        {showAddModal && (
+          <AddPanelWidgetModal
+            catalog={CAJA_WIDGET_CATALOG}
+            panelId={PANEL_ID}
+            onClose={() => setShowAddModal(false)}
+          />
+        )}
+      </div>
     </div>
   );
 };
 
 const CajaAnalyticsView = () => (
-  <CajaDataProvider>
-    <CajaPanelInner />
-  </CajaDataProvider>
+  <CrossFilterProvider>
+    <CajaDataProvider>
+      <CajaPanelInner />
+    </CajaDataProvider>
+  </CrossFilterProvider>
 );
 
 export default CajaAnalyticsView;

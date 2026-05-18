@@ -1,21 +1,25 @@
 import { AlertTriangle, Loader2, RefreshCw } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import ExportButton from '../../../../components/analytics/ExportButton/ExportButton';
 import { formatCurrency, formatNumber } from '../../analyticsUtils';
 import { useInfomanagerFetch } from '../useInfomanagerFetch';
 
 export default function StockDisponibleWidget() {
+  const panelRef = useRef(null);
   const [soloAlertas, setSoloAlertas] = useState(false);
 
   const { data, loading, error, refetch } = useInfomanagerFetch('stock/disponible', (f) => ({
     cod_deposito: f.cod_deposito?.[0] ?? undefined,
+    cod_rubro: f.cod_rubro?.[0] ?? undefined,
+    cod_empresa: f.cod_empresa?.[0] ?? undefined,
     solo_alertas: soloAlertas || undefined,
-  }));
+  }), [soloAlertas]);
 
   const articulos = data?.articulos ?? [];
   const alertas = articulos.filter((a) => a.alerta_reposicion).length;
 
   return (
-    <div className="flex h-full flex-col">
+    <div ref={panelRef} className="flex h-full flex-col">
       <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-4 py-2">
         <div className="flex items-center gap-3">
           <span className="text-xs text-slate-500">{data?.total ?? 0} artículos</span>
@@ -35,13 +39,16 @@ export default function StockDisponibleWidget() {
             />
             Solo alertas
           </label>
-          <button
-            onClick={refetch}
-            disabled={loading}
-            className="inline-flex items-center gap-1 rounded border border-slate-200 px-2 py-1 text-xs text-slate-500 hover:bg-slate-50 disabled:opacity-50"
-          >
-            <RefreshCw size={11} className={loading ? 'animate-spin' : ''} />
-          </button>
+          <div className="flex items-center gap-1">
+            <ExportButton data={articulos} filename="stock-disponible" panelRef={panelRef} size="icon" />
+            <button
+              onClick={refetch}
+              disabled={loading}
+              className="inline-flex items-center gap-1 rounded border border-slate-200 px-2 py-1 text-xs text-slate-500 hover:bg-slate-50 disabled:opacity-50"
+            >
+              <RefreshCw size={11} className={loading ? 'animate-spin' : ''} />
+            </button>
+          </div>
         </div>
       </div>
 
