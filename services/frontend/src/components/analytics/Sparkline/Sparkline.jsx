@@ -10,6 +10,7 @@ const Sparkline = ({
   showArea = false,
   showDots = false,
   showLastDot = true,
+  responsive = false,
   className,
 }) => {
   const { path, areaPath, lastPoint, minPoint, maxPoint } = useMemo(() => {
@@ -39,10 +40,17 @@ const Sparkline = ({
     };
   }, [data, width, height]);
 
-  if (!path) return <div style={{ width, height }} className={className} />;
+  if (!path) return <div style={responsive ? { height } : { width, height }} className={className} />;
 
   return (
-    <svg width={width} height={height} className={className} aria-hidden>
+    <svg
+      width={responsive ? '100%' : width}
+      height={height}
+      viewBox={responsive ? `0 0 ${width} ${height}` : undefined}
+      preserveAspectRatio={responsive ? 'none' : undefined}
+      className={className}
+      aria-hidden
+    >
       {showArea && (
         <path d={areaPath} fill={stroke} fillOpacity={0.1} stroke="none" />
       )}
