@@ -28,7 +28,6 @@ const fmtCurrency = (v) =>
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
-  // Filter out the internal nc_neg key — show as devoluciones with positive value
   const items = payload.map((p) => ({
     ...p,
     name: p.dataKey === 'nc_neg' ? 'NC / Devoluciones' : p.name,
@@ -56,9 +55,9 @@ const CustomTooltip = ({ active, payload, label }) => {
 
 const GRAN_OPTIONS = [
   { key: 'dia', label: 'Día' },
-  { key: 'semana', label: 'Semana' },
+  { key: 'semana', label: 'Sem.' },
   { key: 'mes', label: 'Mes' },
-  { key: 'trimestre', label: 'Trimestre' },
+  { key: 'trimestre', label: 'Trim.' },
 ];
 
 export default function EvolucionTemporalWidget() {
@@ -71,7 +70,6 @@ export default function EvolucionTemporalWidget() {
   const rawSeries = temporal?.series ?? [];
   if (!rawSeries.length) return <p className="p-4 text-sm text-slate-400">Sin datos de evolución temporal.</p>;
 
-  // Enrich data: add nc_neg (negative value for below-zero bar rendering)
   const hasFaBruto = rawSeries.some((r) => r.fa_bruto !== undefined);
   const series = hasFaBruto
     ? rawSeries.map((r) => ({ ...r, nc_neg: -(Number(r.devoluciones ?? 0)) }))
@@ -80,8 +78,9 @@ export default function EvolucionTemporalWidget() {
   const hasNegativeNet = series.some((r) => Number(r.facturado ?? 0) < 0);
 
   return (
-    <div className="h-full w-full p-4 pt-2 flex flex-col">
-      <div className="flex items-center justify-between mb-2 gap-2">
+    <div className="h-full w-full px-2 py-2 flex flex-col">
+      {/* Header row */}
+      <div className="flex items-center justify-between mb-2 gap-2 shrink-0">
         {hasNegativeNet ? (
           <span className="text-[11px] text-amber-700 font-medium bg-amber-50 border border-amber-200 rounded px-2 py-0.5 shrink-0">
             ⚠ NC &gt; FA en algunos períodos
@@ -92,10 +91,10 @@ export default function EvolucionTemporalWidget() {
             <button
               key={key}
               onClick={() => setGranularidad(key)}
-              className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${
+              className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors min-w-[36px] ${
                 granularidad === key
-                  ? 'bg-indigo-600 text-white'
-                  : 'border border-slate-200 text-slate-600 hover:bg-slate-50'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'border border-slate-200 text-slate-600 hover:bg-slate-50 active:bg-slate-100'
               }`}
             >
               {label}
@@ -106,31 +105,50 @@ export default function EvolucionTemporalWidget() {
 
       <div className="flex-1 min-h-0">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={series} margin={{ left: 4, right: 4 }}>
+          <ComposedChart data={series} margin={{ left: 0, right: 0, top: 2, bottom: 2 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-            <XAxis dataKey="periodo" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11 }} tickFormatter={fmtPeriod} />
-            <YAxis yAxisId="left" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11 }} tickFormatter={fmtM} />
-            <YAxis yAxisId="right" orientation="right" axisLine={false} tickLine={false} tick={{ fill: '#cbd5e1', fontSize: 11 }} />
+            <XAxis
+              dataKey="periodo"
+              axisLine={false}
+              tickLine={false}
+              tick={{ fill: '#64748b', fontSize: 10 }}
+              tickFormatter={fmtPeriod}
+              interval="preserveStartEnd"
+            />
+            <YAxis
+              yAxisId="left"
+              axisLine={false}
+              tickLine={false}
+              tick={{ fill: '#64748b', fontSize: 10 }}
+              tickFormatter={fmtM}
+              width={52}
+            />
+            <YAxis
+              yAxisId="right"
+              orientation="right"
+              axisLine={false}
+              tickLine={false}
+              tick={{ fill: '#cbd5e1', fontSize: 10 }}
+              width={30}
+              tickFormatter={(v) => v > 0 ? v.toLocaleString('es-AR') : ''}
+            />
             <ReferenceLine yAxisId="left" y={0} stroke="#94a3b8" strokeWidth={1} />
             <Tooltip content={<CustomTooltip />} />
-            <Legend verticalAlign="bottom" iconType="square" wrapperStyle={{ fontSize: 11, paddingTop: 10 }} />
+            <Legend
+              verticalAlign="bottom"
+              iconType="square"
+              wrapperStyle={{ fontSize: 10, paddingTop: 6 }}
+            />
 
-            {/* Período anterior */}
             {comparar && (
-              <Bar yAxisId="left" dataKey="facturado_anterior" name="Neto anterior" fill="#e2e8f0" radius={[3, 3, 0, 0]} />
+              <Bar yAxisId="left" dataKey="facturado_anterior" name="Neto ant." fill="#e2e8f0" radius={[2, 2, 0, 0]} />
             )}
-
-            {/* FA bruto — shown only when new API fields are available */}
             {hasFaBruto && (
-              <Bar yAxisId="left" dataKey="fa_bruto" name="FA bruto" fill="#818cf8" radius={[3, 3, 0, 0]} opacity={0.55} />
+              <Bar yAxisId="left" dataKey="fa_bruto" name="FA bruto" fill="#818cf8" radius={[2, 2, 0, 0]} opacity={0.55} />
             )}
-
-            {/* NC negativos — shown below zero so user sees what's eating margin */}
             {hasFaBruto && (
-              <Bar yAxisId="left" dataKey="nc_neg" name="NC / Devol." fill="#f87171" radius={[0, 0, 3, 3]} opacity={0.8} />
+              <Bar yAxisId="left" dataKey="nc_neg" name="NC / Devol." fill="#f87171" radius={[0, 0, 2, 2]} opacity={0.8} />
             )}
-
-            {/* Neto = FA − NC (line, can be negative) */}
             <Line
               yAxisId="left"
               type="monotone"
@@ -141,9 +159,16 @@ export default function EvolucionTemporalWidget() {
               dot={{ r: 3, fill: '#4f46e5', strokeWidth: 0 }}
               activeDot={{ r: 5 }}
             />
-
-            {/* Tickets on right axis */}
-            <Line yAxisId="right" type="monotone" dataKey="tickets" name="Tickets" stroke="#f97316" strokeWidth={1.5} strokeDasharray="4 2" dot={false} />
+            <Line
+              yAxisId="right"
+              type="monotone"
+              dataKey="tickets"
+              name="Tickets"
+              stroke="#f97316"
+              strokeWidth={1.5}
+              strokeDasharray="4 2"
+              dot={false}
+            />
           </ComposedChart>
         </ResponsiveContainer>
       </div>

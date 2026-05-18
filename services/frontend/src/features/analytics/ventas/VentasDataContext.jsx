@@ -58,6 +58,12 @@ export default function VentasDataProvider({ children }) {
       setLoadingProductos(false); setLoadingVendedores(false);
       return;
     }
+    // Reset secondary/lazy data so widgets re-fetch with the new filters
+    setClientes(null);
+    setComprobantes(null);
+    setTransacciones(null);
+    setTxPage(1);
+
     setLoadingKpis(true); setLoadingTemporal(true);
     setLoadingProductos(true); setLoadingVendedores(true);
     setError(null);
@@ -90,23 +96,24 @@ export default function VentasDataProvider({ children }) {
     } catch (e) { console.error(e); } finally { setLoadingTemporal(false); }
   }, [qs, granularidad, canFetch]);
 
+  // Lazy fetches — no guard on existing data (reset happens in fetchPrimary)
   const fetchClientes = useCallback(async () => {
-    if (!canFetch || clientes) return;
+    if (!canFetch) return;
     setLoadingClientes(true);
     try {
       const r = await apiClient.get(`/analytics/ventas/por-cliente${qs}`);
       setClientes(r.data);
     } catch (e) { console.error(e); } finally { setLoadingClientes(false); }
-  }, [qs, canFetch, clientes]);
+  }, [qs, canFetch]);
 
   const fetchComprobantes = useCallback(async () => {
-    if (!canFetch || comprobantes) return;
+    if (!canFetch) return;
     setLoadingComprobantes(true);
     try {
       const r = await apiClient.get(`/analytics/ventas/por-comprobante${qs}`);
       setComprobantes(r.data);
     } catch (e) { console.error(e); } finally { setLoadingComprobantes(false); }
-  }, [qs, canFetch, comprobantes]);
+  }, [qs, canFetch]);
 
   const fetchTransacciones = useCallback(async (page = 1) => {
     if (!canFetch) return;
