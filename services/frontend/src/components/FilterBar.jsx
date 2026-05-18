@@ -6,11 +6,11 @@ import { useFilterStore } from '../store/filterStore';
 
 const PERIODOS = [
   { key: 'hoy', label: 'Hoy' },
-  { key: 'semana', label: 'Sem.' },
+  { key: 'semana', label: 'Semana' },
   { key: 'mes', label: 'Mes' },
-  { key: 'trimestre', label: 'Trim.' },
+  { key: 'trimestre', label: 'Trimestre' },
   { key: 'anio', label: 'Año' },
-  { key: 'custom', label: 'Custom' },
+  { key: 'custom', label: 'Personalizado' },
 ];
 
 const formatDateDisplay = (dateStr) => {
@@ -25,7 +25,7 @@ function InlineSelect({ label, value, onChange, options, valueKey, labelKey }) {
       <select
         value={value}
         onChange={(e) => onChange(e.target.value === '' ? null : e.target.value)}
-        className="appearance-none rounded-md border border-slate-200 bg-white py-1.5 pl-2 pr-6 text-[12px] font-medium text-slate-600 shadow-sm transition-colors hover:border-slate-300 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500 sm:pl-2.5 sm:pr-7 sm:text-[13px]"
+        className="appearance-none rounded-md border border-slate-200 bg-white py-1.5 pl-2.5 pr-7 text-[13px] font-medium text-slate-600 shadow-sm transition-colors hover:border-slate-300 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500"
       >
         <option value="">{label}</option>
         {options.map((opt) => (
@@ -34,7 +34,7 @@ function InlineSelect({ label, value, onChange, options, valueKey, labelKey }) {
           </option>
         ))}
       </select>
-      <ChevronDown size={11} className="pointer-events-none absolute right-1.5 text-slate-400 sm:right-2" />
+      <ChevronDown size={12} className="pointer-events-none absolute right-2 text-slate-400" />
     </div>
   );
 }
@@ -42,7 +42,7 @@ function InlineSelect({ label, value, onChange, options, valueKey, labelKey }) {
 const FilterBar = () => {
   const {
     periodo, desde, hasta, setPeriodo, setCustomRange, setFilter,
-    cod_empresa, cod_deposito, cod_lista_precios, cod_vendedor, cod_rubro,
+    cod_empresa, cod_deposito, cod_lista_precios, cod_vendedor, cod_rubro, cod_cliente,
   } = useFilterStore();
   const user = useAuthStore((s) => s.user);
   const activeCompany = useAuthStore((s) => s.activeCompany);
@@ -55,6 +55,8 @@ const FilterBar = () => {
   const [listas, setListas] = useState([]);
   const [rubros, setRubros] = useState([]);
   const [vendedores, setVendedores] = useState([]);
+  const [clientes, setClientes] = useState([]);
+  const [proveedores, setProveedores] = useState([]);
 
   const canFetch = Boolean(user?.company_id || (user?.is_admin && activeCompany));
 
@@ -67,12 +69,16 @@ const FilterBar = () => {
       apiClient.get(`/analytics/listas-precios${companyParam}`),
       apiClient.get(`/analytics/rubros${companyParam}`),
       apiClient.get(`/analytics/vendedores-lookup${companyParam}`),
-    ]).then(([eRes, dRes, lRes, rRes, vRes]) => {
+      apiClient.get(`/analytics/clientes-lookup${companyParam}`),
+      apiClient.get(`/analytics/proveedores-lookup${companyParam}`),
+    ]).then(([eRes, dRes, lRes, rRes, vRes, cRes, pRes]) => {
       setEmpresas(eRes.data?.empresas ?? []);
       setDepositos(dRes.data?.depositos ?? []);
       setListas(lRes.data?.listas ?? []);
       setRubros(rRes.data?.rubros ?? []);
       setVendedores(vRes.data?.vendedores ?? []);
+      setClientes(cRes.data?.clientes ?? []);
+      setProveedores(pRes.data?.proveedores ?? []);
     }).catch(() => {});
   }, [canFetch, user?.is_admin, activeCompany?.id]);
 
@@ -97,19 +103,23 @@ const FilterBar = () => {
   const selectedLista = cod_lista_precios?.[0] ?? '';
   const selectedVendedor = cod_vendedor?.[0] ?? '';
   const selectedRubro = cod_rubro?.[0] ?? '';
+  const selectedCliente = cod_cliente?.[0] ?? '';
+
+  const activeFilterCount = [selectedEmpresa, selectedDeposito, selectedLista, selectedVendedor, selectedRubro, selectedCliente].filter(Boolean).length;
 
   return (
-    <div className="sticky top-0 z-10 -mx-4 -mt-4 mb-4 border-b border-slate-200 bg-white shadow-sm sm:-mx-6 sm:-mt-6 sm:mb-6 lg:-mx-8 lg:-mt-8">
-      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-3 py-2.5 sm:px-6 sm:py-3 lg:px-6">
+    <div className="sticky top-0 z-10 -mx-4 -mt-4 mb-4 border-b border-slate-200 bg-white px-4 shadow-sm sm:-mx-6 sm:-mt-6 sm:mb-6 sm:px-6 lg:-mx-8 lg:-mt-8 lg:px-6">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 py-2.5">
+        {/* Períodos */}
         <div className="flex flex-wrap items-center gap-1">
           {PERIODOS.map(({ key, label }) => (
             <button
               key={key}
               onClick={() => handlePeriodoClick(key)}
-              className={`rounded-md px-2 py-1 text-[12px] font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1 sm:px-3 sm:py-1.5 sm:text-[13px] ${
+              className={`rounded-md px-2.5 py-1.5 text-[12px] font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 sm:text-[13px] sm:px-3 ${
                 periodo === key
                   ? 'bg-indigo-600 text-white shadow-sm'
-                  : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:border-slate-300'
+                  : 'border border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'
               }`}
             >
               {label}
@@ -117,10 +127,11 @@ const FilterBar = () => {
           ))}
         </div>
 
-        <div className="flex flex-wrap items-center gap-1.5">
+        {/* Filtros y fecha */}
+        <div className="flex flex-wrap items-center gap-2">
           {empresas.length > 1 && (
             <InlineSelect
-              label="Empresas"
+              label="Empresa"
               value={selectedEmpresa}
               onChange={(v) => setFilter('cod_empresa', v ? [v] : [])}
               options={empresas}
@@ -130,7 +141,7 @@ const FilterBar = () => {
           )}
           {vendedores.length > 0 && (
             <InlineSelect
-              label="Vendedor"
+              label="Todos los vendedores"
               value={selectedVendedor}
               onChange={(v) => setFilter('cod_vendedor', v ? [v] : [])}
               options={vendedores}
@@ -140,7 +151,7 @@ const FilterBar = () => {
           )}
           {rubros.length > 0 && (
             <InlineSelect
-              label="Rubro"
+              label="Todos los rubros"
               value={selectedRubro}
               onChange={(v) => setFilter('cod_rubro', v ? [v] : [])}
               options={rubros}
@@ -168,27 +179,33 @@ const FilterBar = () => {
               labelKey="descripcion"
             />
           )}
-          <div className="hidden items-center gap-1.5 text-xs font-medium text-slate-500 sm:flex">
+          <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
             <Calendar size={13} className="text-slate-400" />
-            <span>{formatDateDisplay(desde)} — {formatDateDisplay(hasta)}</span>
+            <span className="hidden sm:inline">{formatDateDisplay(desde)} — {formatDateDisplay(hasta)}</span>
+            <span className="sm:hidden">{formatDateDisplay(desde).slice(0, 5)}</span>
+            {activeFilterCount > 0 && (
+              <span className="inline-flex items-center justify-center rounded-full bg-indigo-600 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
+                {activeFilterCount}
+              </span>
+            )}
           </div>
         </div>
       </div>
 
       {periodo === 'custom' && (
-        <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 px-3 py-2 sm:px-6 sm:py-3">
+        <div className="flex items-center gap-3 pb-3">
           <input
             type="date"
             value={customDesde}
             onChange={(e) => setCustomDesde(e.target.value)}
-            className="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500 sm:flex-none"
+            className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
-          <span className="text-sm text-slate-400">—</span>
+          <span className="text-slate-400 text-sm">—</span>
           <input
             type="date"
             value={customHasta}
             onChange={(e) => setCustomHasta(e.target.value)}
-            className="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500 sm:flex-none"
+            className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
           <button
             onClick={handleApplyCustom}

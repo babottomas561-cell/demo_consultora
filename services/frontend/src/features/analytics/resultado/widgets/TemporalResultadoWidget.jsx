@@ -2,7 +2,7 @@ import {
   Area, AreaChart, Bar, CartesianGrid, ComposedChart, Legend, Line,
   ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
-import { Loader2 } from 'lucide-react';
+import { ChartSkeleton } from '../../../../components/ui/WidgetSkeleton';
 import { useResultadoData } from '../ResultadoDataContext';
 import { formatCurrency } from '../../analyticsUtils';
 
@@ -25,7 +25,7 @@ export default function TemporalResultadoWidget() {
   const { temporal, loadingTemporal, granularidad, setGranularidad } = useResultadoData();
 
   if (loadingTemporal) {
-    return <div className="flex h-full items-center justify-center"><Loader2 className="animate-spin text-slate-400" size={24} /></div>;
+    return <ChartSkeleton />;
   }
 
   const series = temporal?.series ?? [];

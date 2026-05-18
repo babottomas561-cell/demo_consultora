@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import { Loader2 } from 'lucide-react';
+import { ChartSkeleton } from '../../../../components/ui/WidgetSkeleton';
 import { formatCurrency } from '../../analyticsUtils';
 import { useVentasData } from '../VentasDataContext';
 
@@ -12,7 +12,7 @@ export default function AbcClientesWidget() {
   useEffect(() => { fetchClientes(); }, [fetchClientes]);
 
   if (loadingClientes) {
-    return <div className="flex h-full items-center justify-center"><Loader2 className="animate-spin text-indigo-400" size={24} /></div>;
+    return <ChartSkeleton />;
   }
 
   const abc = data?.abc_summary ?? {};

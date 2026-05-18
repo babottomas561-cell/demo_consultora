@@ -1,5 +1,5 @@
 import { BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { Loader2 } from 'lucide-react';
+import { TableSkeleton } from '../../../../components/ui/WidgetSkeleton';
 import { useComprasData } from '../ComprasDataContext';
 
 const fmtM = (v) => {
@@ -18,7 +18,7 @@ export default function ParetoComprasWidget() {
   const { productos, loadingProductos } = useComprasData();
 
   if (loadingProductos) {
-    return <div className="flex h-full items-center justify-center"><Loader2 className="animate-spin text-teal-400" size={24} /></div>;
+    return <TableSkeleton />;
   }
 
   const rows = Array.isArray(productos?.productos) ? productos.productos : (Array.isArray(productos) ? productos : []);

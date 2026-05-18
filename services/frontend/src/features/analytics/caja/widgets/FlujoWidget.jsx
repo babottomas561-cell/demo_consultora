@@ -2,7 +2,7 @@ import {
   Area, AreaChart, Bar, CartesianGrid, Cell, ComposedChart,
   Legend, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
-import { Loader2 } from 'lucide-react';
+import { ChartSkeleton } from '../../../../components/ui/WidgetSkeleton';
 import { useCajaData } from '../CajaDataContext';
 import { formatCurrency } from '../../analyticsUtils';
 
@@ -28,11 +28,7 @@ export default function FlujoWidget() {
   const { flujo, loadingFlujo } = useCajaData();
 
   if (loadingFlujo) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <Loader2 className="animate-spin text-slate-400" size={24} />
-      </div>
-    );
+    return <ChartSkeleton />;
   }
   if (!flujo) return <p className="p-4 text-sm text-slate-400">Sin datos de flujo.</p>;
 

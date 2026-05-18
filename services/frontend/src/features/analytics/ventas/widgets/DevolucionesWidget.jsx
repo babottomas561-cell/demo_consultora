@@ -1,5 +1,5 @@
 import { AreaChart, Area, CartesianGrid, XAxis, YAxis, Tooltip, ReferenceLine, ResponsiveContainer } from 'recharts';
-import { Loader2 } from 'lucide-react';
+import { ChartSkeleton } from '../../../../components/ui/WidgetSkeleton';
 import ChartTooltip from '../../../../components/analytics/ChartTooltip';
 import { useVentasData } from '../VentasDataContext';
 
@@ -22,7 +22,7 @@ export default function DevolucionesWidget() {
   const { temporal, loadingTemporal } = useVentasData();
 
   if (loadingTemporal) {
-    return <div className="flex h-full items-center justify-center"><Loader2 className="animate-spin text-indigo-400" size={24} /></div>;
+    return <ChartSkeleton />;
   }
 
   const series = temporal?.series ?? [];

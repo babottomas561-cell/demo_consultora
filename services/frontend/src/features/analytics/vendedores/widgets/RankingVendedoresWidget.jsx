@@ -1,7 +1,7 @@
 import {
   Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
-import { Loader2 } from 'lucide-react';
+import { TableSkeleton } from '../../../../components/ui/WidgetSkeleton';
 import { useVendedoresData } from '../VendedoresDataContext';
 import { formatCurrency, formatNumber } from '../../analyticsUtils';
 
@@ -20,7 +20,7 @@ export default function RankingVendedoresWidget() {
   const { ranking, loadingRanking } = useVendedoresData();
 
   if (loadingRanking) {
-    return <div className="flex h-full items-center justify-center"><Loader2 className="animate-spin text-slate-400" size={24} /></div>;
+    return <TableSkeleton />;
   }
 
   const vendedores = ranking?.vendedores ?? [];

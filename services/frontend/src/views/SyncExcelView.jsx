@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { UploadCloud, FileSpreadsheet, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
+import { UploadCloud, FileSpreadsheet, Loader2, CheckCircle2, AlertCircle, Download } from 'lucide-react';
 import apiClient from '../api/client';
 import useAuthStore from '../store/authStore';
 
@@ -11,7 +11,7 @@ const SyncExcelView = () => {
   const [error, setError] = useState(null);
   
   const fileInputRef = useRef(null);
-  const user = useAuthStore(state => state.user);
+  const { user, activeCompany } = useAuthStore();
 
   // If user is admin, they shouldn't sync excel without selecting a company, but for simplicity of this demo,
   // we will just show a warning if they are admin but no company_id is present, or assume they just test the UI.
@@ -71,10 +71,8 @@ const SyncExcelView = () => {
     const formData = new FormData();
     formData.append('file', file);
     
-    // If admin is testing, let's hardcode company_id = 1 for the demo, or ideally show a selector.
-    // For now, we just append it if admin to avoid 400 error in testing.
-    if (user?.is_admin) {
-      formData.append('company_id', 1);
+    if (user?.is_admin && activeCompany?.id) {
+      formData.append('company_id', activeCompany.id);
     }
 
     try {
@@ -198,15 +196,13 @@ const SyncExcelView = () => {
 
         {status === 'idle' && file && (
           <div className="mt-6 flex justify-between items-center">
-            <button
-              onClick={() => {
-                // In a real app, this would trigger a download of a static file
-                alert("Descargando template_demo_consultora.xlsx...");
-              }}
-              className="text-sm font-medium text-indigo-600 hover:text-indigo-800 transition-colors"
+            <a
+              href="/template_demo_consultora.xlsx"
+              download
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-indigo-600 hover:text-indigo-800 transition-colors"
             >
-              Descargar Template de Excel
-            </button>
+              <Download size={14} /> Descargar Template
+            </a>
             <button
               onClick={handleUpload}
               className="flex items-center justify-center px-6 py-2.5 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 shadow-sm transition-colors"

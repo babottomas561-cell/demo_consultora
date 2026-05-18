@@ -1,7 +1,7 @@
 import {
   Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
-import { Loader2 } from 'lucide-react';
+import { TableSkeleton } from '../../../../components/ui/WidgetSkeleton';
 import { useProveedoresData } from '../ProveedoresDataContext';
 import { formatCurrency, formatNumber } from '../../analyticsUtils';
 
@@ -22,16 +22,16 @@ export default function RankingProveedoresWidget() {
   const { ranking, loadingRanking } = useProveedoresData();
 
   if (loadingRanking) {
-    return <div className="flex h-full items-center justify-center"><Loader2 className="animate-spin text-slate-400" size={24} /></div>;
+    return <TableSkeleton />;
   }
 
   const proveedores = ranking?.proveedores ?? [];
   const top10 = proveedores.slice(0, 10);
 
-  const chartData = top10.map((p) => ({
-    name: (p.nombre ?? `P${p.proveedor_id}`).split(' ').slice(0, 2).join(' '),
-    total: p.total_comprado,
-  }));
+  const chartData = top10.map((p) => {
+    const full = p.nombre ?? `Prov ${p.proveedor_id}`;
+    return { name: full.length > 16 ? full.slice(0, 15) + '…' : full, total: p.total_comprado, full };
+  });
 
   return (
     <div className="h-full w-full flex flex-col overflow-hidden">
@@ -70,7 +70,7 @@ export default function RankingProveedoresWidget() {
                 <td className="px-3 py-2 tabular-nums text-right text-slate-700 font-medium">{formatCurrency(p.total_comprado)}</td>
                 <td className="px-3 py-2 tabular-nums text-right text-slate-600">{formatNumber(p.ordenes)}</td>
                 <td className="px-3 py-2 tabular-nums text-right text-slate-600">{formatCurrency(p.ticket_promedio)}</td>
-                <td className="px-3 py-2 text-slate-500">{p.ultima_compra?.slice(0, 10) ?? '-'}</td>
+                <td className="px-3 py-2 text-slate-500">{p.ultima_compra?.slice(0, 10)?.split('-').reverse().join('/') ?? '-'}</td>
                 <td className="px-3 py-2 tabular-nums text-right">
                   <span className={p.saldo_cta_cte > 0 ? 'font-semibold text-amber-600' : 'text-slate-500'}>
                     {formatCurrency(p.saldo_cta_cte)}

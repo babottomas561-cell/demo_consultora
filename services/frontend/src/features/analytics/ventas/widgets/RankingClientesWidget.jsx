@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Loader2 } from 'lucide-react';
+import { TableSkeleton } from '../../../../components/ui/WidgetSkeleton';
 import DataTable from '../../../../components/analytics/DataTable';
 import { formatCurrency, formatNumber } from '../../analyticsUtils';
 import { useVentasData } from '../VentasDataContext';
@@ -26,7 +26,7 @@ export default function RankingClientesWidget() {
   useEffect(() => { fetchClientes(); }, [fetchClientes]);
 
   if (loadingClientes) {
-    return <div className="flex h-full items-center justify-center"><Loader2 className="animate-spin text-indigo-400" size={24} /></div>;
+    return <TableSkeleton />;
   }
 
   const list = data?.clientes ?? [];

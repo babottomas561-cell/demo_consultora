@@ -12,6 +12,7 @@ import DevolucionesWidget from './DevolucionesWidget';
 import ParetoProductosWidget from './ParetoProductosWidget';
 import RankingProductosWidget from './RankingProductosWidget';
 import FacturacionRubroWidget from './FacturacionRubroWidget';
+import FacturacionSubrubroWidget from './FacturacionSubrubroWidget';
 import RankingVendedoresWidget from './RankingVendedoresWidget';
 import AbcClientesWidget from './AbcClientesWidget';
 import RankingClientesWidget from './RankingClientesWidget';
@@ -144,6 +145,15 @@ const VENTAS_WIDGET_CATALOG = [
     category: 'chart',
   },
   {
+    type: 'ventas-por-subrubro',
+    name: 'Facturación por Subrubro',
+    description: 'Desglose de ventas por subrubro de producto',
+    icon: Layers,
+    component: FacturacionSubrubroWidget,
+    defaultSize: { w: 4, h: 4 },
+    category: 'chart',
+  },
+  {
     type: 'ventas-vendedores',
     name: 'Ranking Vendedores',
     description: 'Gráfico y cards de vendedores',
@@ -263,13 +273,14 @@ export function getVentasWidgetDef(type) {
 
 // Default widgets and layouts for the ventas panel
 export const VENTAS_DEFAULT_WIDGETS = [
-  { id: 'v-0',  type: 'ventas-pulse-strip'     },  // Mega-KPI row with sparklines + narrative
+  { id: 'v-0',  type: 'ventas-pulse-strip'     },
   { id: 'v-9',  type: 'ventas-evolucion'        },
   { id: 'v-10', type: 'ventas-devoluciones'     },
   { id: 'v-23', type: 'ventas-heatmap'          },
   { id: 'v-24', type: 'ventas-yoy'              },
   { id: 'v-11', type: 'ventas-pareto'           },
   { id: 'v-12', type: 'ventas-por-rubro'        },
+  { id: 'v-25', type: 'ventas-por-subrubro'     },
   { id: 'v-13', type: 'ventas-vendedores'       },
   { id: 'v-14', type: 'ventas-abc-clientes'     },
   { id: 'v-15', type: 'ventas-comprobantes'     },
@@ -292,9 +303,10 @@ export const VENTAS_DEFAULT_LAYOUTS = {
     // Heatmap + YoY
     { i: 'v-23', x: 0,  y: 9,  w: 5,  h: 4,  minW: 4, minH: 3  },
     { i: 'v-24', x: 5,  y: 9,  w: 7,  h: 4,  minW: 4, minH: 3  },
-    // Pareto + Rubro
-    { i: 'v-11', x: 0,  y: 13, w: 7,  h: 4,  minW: 4, minH: 3  },
-    { i: 'v-12', x: 7,  y: 13, w: 5,  h: 4,  minW: 3, minH: 3  },
+    // Pareto + Rubro + Subrubro
+    { i: 'v-11', x: 0,  y: 13, w: 5,  h: 4,  minW: 4, minH: 3  },
+    { i: 'v-12', x: 5,  y: 13, w: 4,  h: 4,  minW: 3, minH: 3  },
+    { i: 'v-25', x: 9,  y: 13, w: 3,  h: 4,  minW: 3, minH: 3  },
     // Vendedores full width
     { i: 'v-13', x: 0,  y: 17, w: 12, h: 5,  minW: 6, minH: 4  },
     // ABC + Comprobantes
@@ -315,8 +327,9 @@ export const VENTAS_DEFAULT_LAYOUTS = {
     { i: 'v-10', x: 7,  y: 4,  w: 5,  h: 5,  minW: 3, minH: 3  },
     { i: 'v-23', x: 0,  y: 9,  w: 5,  h: 4,  minW: 4, minH: 3  },
     { i: 'v-24', x: 5,  y: 9,  w: 7,  h: 4,  minW: 4, minH: 3  },
-    { i: 'v-11', x: 0,  y: 13, w: 6,  h: 4,  minW: 4, minH: 3  },
-    { i: 'v-12', x: 6,  y: 13, w: 6,  h: 4,  minW: 3, minH: 3  },
+    { i: 'v-11', x: 0,  y: 13, w: 5,  h: 4,  minW: 4, minH: 3  },
+    { i: 'v-12', x: 5,  y: 13, w: 4,  h: 4,  minW: 3, minH: 3  },
+    { i: 'v-25', x: 9,  y: 13, w: 3,  h: 4,  minW: 3, minH: 3  },
     { i: 'v-13', x: 0,  y: 17, w: 12, h: 5,  minW: 6, minH: 4  },
     { i: 'v-14', x: 0,  y: 22, w: 5,  h: 4,  minW: 3, minH: 3  },
     { i: 'v-15', x: 5,  y: 22, w: 7,  h: 4,  minW: 4, minH: 3  },
@@ -336,15 +349,16 @@ export const VENTAS_DEFAULT_LAYOUTS = {
     { i: 'v-24', x: 0, y: 18, w: 6, h: 4,  minW: 3, minH: 3  },
     { i: 'v-11', x: 0, y: 22, w: 6, h: 4,  minW: 3, minH: 3  },
     { i: 'v-12', x: 0, y: 26, w: 6, h: 4,  minW: 3, minH: 3  },
-    { i: 'v-13', x: 0, y: 30, w: 6, h: 5,  minW: 3, minH: 4  },
-    { i: 'v-14', x: 0, y: 35, w: 6, h: 4,  minW: 3, minH: 3  },
-    { i: 'v-15', x: 0, y: 39, w: 6, h: 4,  minW: 3, minH: 3  },
-    { i: 'v-16', x: 0, y: 43, w: 6, h: 4,  minW: 3, minH: 3  },
-    { i: 'v-17', x: 0, y: 47, w: 6, h: 4,  minW: 3, minH: 3  },
-    { i: 'v-18', x: 0, y: 51, w: 6, h: 5,  minW: 3, minH: 3  },
-    { i: 'v-19', x: 0, y: 56, w: 6, h: 6,  minW: 3, minH: 4  },
-    { i: 'v-20', x: 0, y: 62, w: 6, h: 7,  minW: 3, minH: 4  },
-    { i: 'v-21', x: 0, y: 69, w: 6, h: 7,  minW: 3, minH: 4  },
-    { i: 'v-22', x: 0, y: 76, w: 6, h: 7,  minW: 3, minH: 4  },
+    { i: 'v-25', x: 0, y: 30, w: 6, h: 4,  minW: 3, minH: 3  },
+    { i: 'v-13', x: 0, y: 34, w: 6, h: 5,  minW: 3, minH: 4  },
+    { i: 'v-14', x: 0, y: 39, w: 6, h: 4,  minW: 3, minH: 3  },
+    { i: 'v-15', x: 0, y: 43, w: 6, h: 4,  minW: 3, minH: 3  },
+    { i: 'v-16', x: 0, y: 47, w: 6, h: 4,  minW: 3, minH: 3  },
+    { i: 'v-17', x: 0, y: 51, w: 6, h: 4,  minW: 3, minH: 3  },
+    { i: 'v-18', x: 0, y: 55, w: 6, h: 5,  minW: 3, minH: 3  },
+    { i: 'v-19', x: 0, y: 60, w: 6, h: 6,  minW: 3, minH: 4  },
+    { i: 'v-20', x: 0, y: 66, w: 6, h: 7,  minW: 3, minH: 4  },
+    { i: 'v-21', x: 0, y: 73, w: 6, h: 7,  minW: 3, minH: 4  },
+    { i: 'v-22', x: 0, y: 80, w: 6, h: 7,  minW: 3, minH: 4  },
   ],
 };

@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
-import { Loader2 } from 'lucide-react';
+import { ChartSkeleton } from '../../../../components/ui/WidgetSkeleton';
 import { useCajaData } from '../CajaDataContext';
 import { formatCurrency, formatNumber } from '../../analyticsUtils';
 
@@ -14,13 +14,7 @@ export default function PorTipoWidget() {
 
   useEffect(() => { fetchPorTipo(); }, [fetchPorTipo]);
 
-  if (loadingPorTipo) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <Loader2 className="animate-spin text-slate-400" size={24} />
-      </div>
-    );
-  }
+  if (loadingPorTipo) return <ChartSkeleton />;
   if (!porTipo) return <p className="p-4 text-sm text-slate-400">Sin datos por tipo.</p>;
 
   const tipos = porTipo.por_tipo ?? [];

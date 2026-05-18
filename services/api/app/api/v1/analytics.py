@@ -1,4 +1,3 @@
-import io
 from datetime import date, timedelta
 from decimal import Decimal
 from io import BytesIO
@@ -150,7 +149,16 @@ INFOMANAGER_REPORT_CATALOG = [
 # Helpers
 # ──────────────────────────────────────────────
 
+def _year_ago(d: date) -> date:
+    try:
+        return d.replace(year=d.year - 1)
+    except ValueError:
+        return d.replace(year=d.year - 1, day=28)
+
+
 def _prev_period(filters: GlobalFilters):
+    if getattr(filters, "compare_mode", "anterior") == "anio":
+        return _year_ago(filters.desde), _year_ago(filters.hasta_exclusive)
     length = (filters.hasta - filters.desde).days
     prev_hasta = filters.desde - timedelta(days=1)
     prev_desde = prev_hasta - timedelta(days=length)
@@ -653,8 +661,12 @@ async def infomanager_reporte_detalle(
 
 def previous_period_params(filters: GlobalFilters) -> dict:
     current_days = (filters.hasta_exclusive - filters.desde).days
-    prev_hasta = filters.desde
-    prev_desde = prev_hasta - timedelta(days=current_days)
+    if getattr(filters, "compare_mode", "anterior") == "anio":
+        prev_desde = _year_ago(filters.desde)
+        prev_hasta = _year_ago(filters.hasta_exclusive)
+    else:
+        prev_hasta = filters.desde
+        prev_desde = prev_hasta - timedelta(days=current_days)
     return {"prev_desde": prev_desde, "prev_hasta": prev_hasta, "offset_days": current_days}
 
 
@@ -1901,25 +1913,29 @@ async def ventas_productos(
         del d["total_con_costo"]
         ranking.append(d)
 
+    # por_rubro: join stock_disponible for names (more reliable than rubros catalog alone)
     rubros_rows = (await db.execute(text(f"""
         SELECT
-            cod_rubro,
-            COALESCE(SUM({venta_importe_neto_expr()}), 0) AS facturado,
-            COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END) AS tickets,
-            COALESCE(SUM({venta_importe_neto_expr()} - {venta_costo_neto_expr()}), 0) AS margen_abs,
-            COALESCE(SUM(CASE WHEN precio_compra_actual IS NOT NULL THEN ABS(total) ELSE 0 END), 0) AS total_con_costo
-        FROM ventas
-        WHERE {where} AND cod_rubro IS NOT NULL
-        GROUP BY cod_rubro
+            v.cod_rubro,
+            COALESCE(
+                MAX(s.rubro),
+                MAX(r.nombre),
+                CONCAT('Rubro ', v.cod_rubro)
+            )                                                                         AS nombre,
+            COALESCE(SUM({venta_importe_neto_expr('v')}), 0)                         AS facturado,
+            COUNT(CASE WHEN v.tipo_comprobante='FA' THEN 1 END)                      AS tickets
+        FROM ventas v
+        LEFT JOIN (
+            SELECT DISTINCT ON (cod_articulo) cod_articulo, rubro
+            FROM stock_disponible
+            WHERE rubro IS NOT NULL
+            ORDER BY cod_articulo
+        ) s ON s.cod_articulo::text = v.producto_id
+        LEFT JOIN rubros r ON r.cod_rubro = v.cod_rubro
+        WHERE {where} AND v.cod_rubro IS NOT NULL
+        GROUP BY v.cod_rubro
         ORDER BY facturado DESC
     """), params)).mappings().all()
-
-    rubro_names = {}
-    try:
-        rn_rows = (await db.execute(text("SELECT cod_rubro, nombre FROM rubros"))).mappings().all()
-        rubro_names = {r["cod_rubro"]: r["nombre"] for r in rn_rows}
-    except Exception:
-        pass
 
     rubros = []
     for r in rubros_rows:
@@ -1929,15 +1945,41 @@ async def ventas_productos(
         tc = money(d.pop("total_con_costo"))
         d["margen_pct"] = round(d["margen_abs"] / tc * 100, 1) if tc else 0
         d["pct_total"] = round(d["facturado"] / total_fa * 100, 2)
-        d["nombre"] = rubro_names.get(d["cod_rubro"], f"Rubro {d['cod_rubro']}")
         rubros.append(d)
+
+    # por_subrubro: join stock_disponible for subrubro dimension
+    subrubros_rows = (await db.execute(text(f"""
+        SELECT
+            s.cod_subrubro,
+            MAX(s.subrubro)                                                           AS nombre,
+            MAX(s.rubro)                                                              AS rubro_nombre,
+            COALESCE(SUM({venta_importe_neto_expr('v')}), 0)                         AS facturado,
+            COUNT(CASE WHEN v.tipo_comprobante='FA' THEN 1 END)                      AS tickets
+        FROM ventas v
+        JOIN (
+            SELECT DISTINCT ON (cod_articulo) cod_articulo, cod_subrubro, subrubro, rubro
+            FROM stock_disponible
+            WHERE cod_subrubro IS NOT NULL
+            ORDER BY cod_articulo
+        ) s ON s.cod_articulo::text = v.producto_id
+        WHERE {where}
+        GROUP BY s.cod_subrubro
+        ORDER BY facturado DESC
+    """), params)).mappings().all()
+
+    subrubros = []
+    for r in subrubros_rows:
+        d = dict(r)
+        d["facturado"] = money(d["facturado"])
+        d["pct_total"] = round(d["facturado"] / total_fa * 100, 2)
+        subrubros.append(d)
 
     pareto = [
         {"producto": r["nombre"], "facturado": r["facturado"], "acumulado_pct": r["acumulado_pct"]}
         for r in ranking[:20]
     ]
 
-    return {"ranking": ranking, "por_rubro": rubros, "pareto": pareto}
+    return {"ranking": ranking, "por_rubro": rubros, "por_subrubro": subrubros, "pareto": pareto}
 
 
 @router.get("/ventas/por-lista")
@@ -4206,10 +4248,27 @@ async def proveedores_kpis(
 
     # Best supplier by total
     best = (await db.execute(text(f"""
-        SELECT proveedor_id, proveedor_nombre, COALESCE(SUM({compra_importe_neto_expr()}), 0) AS total
+        SELECT proveedor_id, COALESCE(SUM({compra_importe_neto_expr()}), 0) AS total
         FROM compras WHERE {compras_where}
-        GROUP BY proveedor_id, proveedor_nombre ORDER BY total DESC LIMIT 1
+        GROUP BY proveedor_id ORDER BY total DESC LIMIT 1
     """), params)).mappings().one_or_none()
+
+    # Resolve best supplier name from master table
+    best_nombre = ""
+    if best:
+        best_prov_id = str(best["proveedor_id"])
+        try:
+            maestro_best = (await db.execute(text(
+                "SELECT nombre FROM proveedores WHERE cod_proveedor = :pid"
+            ), {"pid": best_prov_id})).scalar_one_or_none()
+        except Exception:
+            maestro_best = None
+        if not maestro_best:
+            cc_best = (await db.execute(text(
+                "SELECT MAX(proveedor_nombre) AS nombre FROM cuentas_corrientes_proveedores WHERE proveedor_id = :pid AND proveedor_nombre <> '' AND proveedor_nombre NOT LIKE 'Proveedor %'"
+            ), {"pid": best_prov_id})).scalar_one_or_none()
+            maestro_best = cc_best
+        best_nombre = maestro_best or f"Proveedor {best_prov_id}"
 
     # Cuenta corriente proveedores: saldo total y deuda vencida
     ccrow = (await db.execute(text("""
@@ -4233,7 +4292,7 @@ async def proveedores_kpis(
         "total_comprado":       {"actual": round(float(crow["total_comprado"] or 0), 2)},
         "ordenes":              {"actual": int(crow["ordenes"] or 0)},
         "ticket_promedio":      {"actual": round(float(crow["ticket_prom"] or 0), 2)},
-        "mejor_proveedor":      {"actual": best["proveedor_nombre"] if best else ""},
+        "mejor_proveedor":      {"actual": best_nombre},
         "saldo_cta_cte":        {"actual": round(float(ccrow["saldo_total"] or 0), 2)},
         "deuda_vencida":        {"actual": round(float(ccrow["deuda_vencida"] or 0), 2)},
         "proximos_30d":         {"actual": round(float(proximos["total"] or 0), 2)},
@@ -4265,6 +4324,22 @@ async def proveedores_ranking(
         GROUP BY proveedor_id ORDER BY total_comprado DESC
     """), params)).mappings().all()
 
+    # Primary name source: proveedores master table (populated on every sync)
+    try:
+        maestro_rows = (await db.execute(text("SELECT cod_proveedor, nombre FROM proveedores"))).mappings().all()
+        maestro_map = {r["cod_proveedor"]: r["nombre"] for r in maestro_rows if r["nombre"]}
+    except Exception:
+        maestro_map = {}
+
+    # Secondary fallback: cuentas_corrientes_proveedores
+    cc_name_rows = (await db.execute(text("""
+        SELECT proveedor_id,
+               MAX(CASE WHEN proveedor_nombre <> '' AND proveedor_nombre NOT LIKE 'Proveedor %%' THEN proveedor_nombre END) AS nombre
+        FROM cuentas_corrientes_proveedores
+        GROUP BY proveedor_id
+    """))).mappings().all()
+    cc_name_map = {r["proveedor_id"]: r["nombre"] for r in cc_name_rows if r["nombre"]}
+
     # Saldo por proveedor
     saldos = (await db.execute(text("""
         SELECT proveedor_id, COALESCE(SUM(importe), 0) AS saldo
@@ -4283,9 +4358,16 @@ async def proveedores_ranking(
         cumsum += pct
         segmento = "A" if cumsum <= 80 else "B" if cumsum <= 95 else "C"
 
+        prov_id = str(r["proveedor_id"])
+        raw_nombre = (
+            maestro_map.get(prov_id)
+            or cc_name_map.get(prov_id)
+            or r["nombre"]
+            or f"Proveedor {prov_id}"
+        )
         resultado.append({
             "proveedor_id": r["proveedor_id"],
-            "nombre": r["nombre"],
+            "nombre": raw_nombre,
             "total_comprado": round(tc, 2),
             "ordenes": int(r["ordenes"] or 0),
             "ticket_promedio": round(float(r["ticket_promedio"] or 0), 2),
@@ -4690,12 +4772,15 @@ async def get_empresas(
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    tenant_schema = await get_tenant_schema(current_user, db, company_id)
-    await set_tenant_search_path(db, tenant_schema)
-    rows = (await db.execute(text(
-        "SELECT cod_empresa, nombre, nombre_1, cuit, habilitada FROM empresas_infomanager ORDER BY cod_empresa"
-    ))).mappings().all()
-    return {"empresas": [dict(r) for r in rows]}
+    try:
+        tenant_schema = await get_tenant_schema(current_user, db, company_id)
+        await set_tenant_search_path(db, tenant_schema)
+        rows = (await db.execute(text(
+            "SELECT cod_empresa, nombre, nombre_1, cuit, habilitada FROM empresas_infomanager ORDER BY cod_empresa"
+        ))).mappings().all()
+        return {"empresas": [dict(r) for r in rows]}
+    except Exception:
+        return {"empresas": []}
 
 
 @router.get("/depositos")
@@ -4704,12 +4789,34 @@ async def get_depositos(
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    tenant_schema = await get_tenant_schema(current_user, db, company_id)
-    await set_tenant_search_path(db, tenant_schema)
-    rows = (await db.execute(text(
-        "SELECT cod_deposito, nombre, habilitado FROM depositos ORDER BY cod_deposito"
-    ))).mappings().all()
-    return {"depositos": [dict(r) for r in rows]}
+    try:
+        tenant_schema = await get_tenant_schema(current_user, db, company_id)
+        await set_tenant_search_path(db, tenant_schema)
+        rows = (await db.execute(text(
+            "SELECT cod_deposito, nombre, habilitado FROM depositos ORDER BY cod_deposito"
+        ))).mappings().all()
+        return {"depositos": [dict(r) for r in rows]}
+    except Exception:
+        return {"depositos": []}
+
+
+
+@router.get("/listas-precios")
+async def get_listas_precios(
+    company_id: int = None,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        tenant_schema = await get_tenant_schema(current_user, db, company_id)
+        await set_tenant_search_path(db, tenant_schema)
+        rows = (await db.execute(text(
+            "SELECT cod_lista, descripcion FROM listas_precios ORDER BY cod_lista"
+        ))).mappings().all()
+        return {"listas": [dict(r) for r in rows]}
+    except Exception:
+        return {"listas": []}
+
 
 
 @router.get("/rubros")
@@ -4718,16 +4825,15 @@ async def get_rubros(
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    tenant_schema = await get_tenant_schema(current_user, db, company_id)
-    await set_tenant_search_path(db, tenant_schema)
-    rows = (await db.execute(text(
-        "SELECT cod_rubro, nombre FROM rubros ORDER BY nombre"
-    ))).mappings().all()
-    if not rows:
+    try:
+        tenant_schema = await get_tenant_schema(current_user, db, company_id)
+        await set_tenant_search_path(db, tenant_schema)
         rows = (await db.execute(text(
-            "SELECT DISTINCT cod_rubro, rubro AS nombre FROM stock_disponible WHERE cod_rubro IS NOT NULL ORDER BY nombre"
+            "SELECT DISTINCT cod_rubro, rubro AS nombre FROM stock WHERE cod_rubro IS NOT NULL ORDER BY cod_rubro"
         ))).mappings().all()
-    return {"rubros": [dict(r) for r in rows]}
+        return {"rubros": [dict(r) for r in rows]}
+    except Exception:
+        return {"rubros": []}
 
 
 @router.get("/vendedores-lookup")
@@ -4736,12 +4842,15 @@ async def get_vendedores_lookup(
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    tenant_schema = await get_tenant_schema(current_user, db, company_id)
-    await set_tenant_search_path(db, tenant_schema)
-    rows = (await db.execute(text(
-        "SELECT cod_vendedor, nombre FROM vendedores ORDER BY nombre"
-    ))).mappings().all()
-    return {"vendedores": [dict(r) for r in rows]}
+    try:
+        tenant_schema = await get_tenant_schema(current_user, db, company_id)
+        await set_tenant_search_path(db, tenant_schema)
+        rows = (await db.execute(text(
+            "SELECT cod_vendedor, nombre FROM vendedores ORDER BY nombre"
+        ))).mappings().all()
+        return {"vendedores": [dict(r) for r in rows]}
+    except Exception:
+        return {"vendedores": []}
 
 
 @router.get("/clientes-lookup")
@@ -4751,17 +4860,20 @@ async def get_clientes_lookup(
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    tenant_schema = await get_tenant_schema(current_user, db, company_id)
-    await set_tenant_search_path(db, tenant_schema)
-    rows = (await db.execute(text("""
-        SELECT DISTINCT cliente_id AS cod_cliente, MAX(cliente_nombre) AS nombre
-        FROM ventas
-        WHERE cliente_id IS NOT NULL
-        GROUP BY cliente_id
-        ORDER BY nombre
-        LIMIT :limit
-    """), {"limit": limit})).mappings().all()
-    return {"clientes": [dict(r) for r in rows]}
+    try:
+        tenant_schema = await get_tenant_schema(current_user, db, company_id)
+        await set_tenant_search_path(db, tenant_schema)
+        rows = (await db.execute(text("""
+            SELECT DISTINCT cliente_id AS cod_cliente, MAX(cliente_nombre) AS nombre
+            FROM ventas
+            WHERE cliente_id IS NOT NULL
+            GROUP BY cliente_id
+            ORDER BY nombre
+            LIMIT :limit
+        """), {"limit": limit})).mappings().all()
+        return {"clientes": [dict(r) for r in rows]}
+    except Exception:
+        return {"clientes": []}
 
 
 @router.get("/proveedores-lookup")
@@ -4771,17 +4883,20 @@ async def get_proveedores_lookup(
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    tenant_schema = await get_tenant_schema(current_user, db, company_id)
-    await set_tenant_search_path(db, tenant_schema)
-    rows = (await db.execute(text("""
-        SELECT DISTINCT proveedor_id AS cod_proveedor, MAX(proveedor_nombre) AS nombre
-        FROM compras
-        WHERE proveedor_id IS NOT NULL
-        GROUP BY proveedor_id
-        ORDER BY nombre
-        LIMIT :limit
-    """), {"limit": limit})).mappings().all()
-    return {"proveedores": [dict(r) for r in rows]}
+    try:
+        tenant_schema = await get_tenant_schema(current_user, db, company_id)
+        await set_tenant_search_path(db, tenant_schema)
+        rows = (await db.execute(text("""
+            SELECT DISTINCT proveedor_id AS cod_proveedor, MAX(proveedor_nombre) AS nombre
+            FROM compras
+            WHERE proveedor_id IS NOT NULL
+            GROUP BY proveedor_id
+            ORDER BY nombre
+            LIMIT :limit
+        """), {"limit": limit})).mappings().all()
+        return {"proveedores": [dict(r) for r in rows]}
+    except Exception:
+        return {"proveedores": []}
 
 
 @router.get("/reportes/saldos-clientes")

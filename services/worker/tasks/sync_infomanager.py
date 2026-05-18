@@ -345,7 +345,21 @@ def sync_company(self, company_id: int, connector_id: int):
         proveedor_lookup: dict[str, str] = {}
         for p in proveedores_maestro:
             cod = str(p.get("cod_proveedor", "0"))
-            proveedor_lookup[cod] = p.get("nombre") or p.get("razon_social") or f"Proveedor {cod}"
+            nombre = p.get("nombre") or p.get("razon_social") or f"Proveedor {cod}"
+            proveedor_lookup[cod] = nombre
+            if cod and cod != "0":
+                cur.execute(
+                    """
+                    INSERT INTO proveedores (cod_proveedor, nombre, cuit, habilitado)
+                    VALUES (%s, %s, %s, %s)
+                    ON CONFLICT (cod_proveedor) DO UPDATE SET
+                      nombre = EXCLUDED.nombre,
+                      cuit = EXCLUDED.cuit,
+                      habilitado = EXCLUDED.habilitado,
+                      synced_at = NOW()
+                    """,
+                    (cod, nombre, p.get("cuit") or "", p.get("habilitado", True)),
+                )
 
         articulos, rubros, subrubros = im.sync_articulos()
         for cod_rubro, nombre in rubros.items():

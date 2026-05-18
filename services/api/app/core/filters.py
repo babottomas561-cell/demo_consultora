@@ -17,6 +17,7 @@ class GlobalFilters(BaseModel):
     desde: date = Field(default_factory=_default_desde)
     hasta: date = Field(default_factory=_default_hasta)
     comparar_anterior: bool = False
+    compare_mode: str = "anterior"  # "anterior" | "anio"
     cod_empresa: list[int] | None = None
     tag: list[str] | None = None
     punto_de_venta: list[int] | None = None
@@ -90,6 +91,7 @@ def get_global_filters(
     desde: date | None = None,
     hasta: date | None = None,
     comparar_anterior: bool = False,
+    compare_mode: str = "anterior",
     cod_empresa: list[int] | None = Query(default=None),
     tag: list[str] | None = Query(default=None),
     punto_de_venta: list[int] | None = Query(default=None),
@@ -108,6 +110,7 @@ def get_global_filters(
         desde=desde or _default_desde(),
         hasta=hasta or _default_hasta(),
         comparar_anterior=comparar_anterior,
+        compare_mode=compare_mode,
         cod_empresa=cod_empresa,
         tag=tag,
         punto_de_venta=punto_de_venta,

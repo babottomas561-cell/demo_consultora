@@ -18,6 +18,25 @@ export const formatNumber = (value) => (
   }).format(toFiniteNumber(value))
 );
 
+// Abbreviated formatters for KPI cards where space is limited
+export const formatCurrencyShort = (value) => {
+  const n = toFiniteNumber(value);
+  const abs = Math.abs(n);
+  const sign = n < 0 ? '-' : '';
+  if (abs >= 1_000_000_000) return `${sign}$${(abs / 1_000_000_000).toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}B`;
+  if (abs >= 1_000_000)     return `${sign}$${(abs / 1_000_000).toLocaleString('es-AR',     { minimumFractionDigits: 1, maximumFractionDigits: 1 })}M`;
+  return formatCurrency(n);
+};
+
+export const formatNumberShort = (value) => {
+  const n = toFiniteNumber(value);
+  const abs = Math.abs(n);
+  const sign = n < 0 ? '-' : '';
+  if (abs >= 1_000_000_000) return `${sign}${(abs / 1_000_000_000).toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}B`;
+  if (abs >= 1_000_000)     return `${sign}${(abs / 1_000_000).toLocaleString('es-AR',     { minimumFractionDigits: 1, maximumFractionDigits: 1 })}M`;
+  return formatNumber(n);
+};
+
 const arrayFilterKeys = [
   'cod_empresa',
   'tag',
@@ -54,6 +73,7 @@ export const buildQueryParams = (user, activeCompany, filtersOrDesde, hastaArg) 
   if (filters.desde) params.set('desde', filters.desde);
   if (filters.hasta) params.set('hasta', filters.hasta);
   if (filters.comparar_anterior) params.set('comparar_anterior', 'true');
+  if (filters.compare_mode && filters.compare_mode !== 'anterior') params.set('compare_mode', filters.compare_mode);
   if (filters.incluir_anuladas) params.set('incluir_anuladas', 'true');
 
   arrayFilterKeys.forEach((key) => appendArrayFilter(params, key, filters[key]));

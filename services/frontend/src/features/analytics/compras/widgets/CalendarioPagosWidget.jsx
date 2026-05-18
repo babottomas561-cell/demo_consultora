@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
-import { Loader2, AlertCircle } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 import { useComprasData } from '../ComprasDataContext';
+import { ChartSkeleton } from '../../../../components/ui/WidgetSkeleton';
 
 const fmtCurrency = (v) =>
   new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(Number(v ?? 0));
@@ -24,7 +25,7 @@ export default function CalendarioPagosWidget() {
   useEffect(() => { fetchVencimientos(); }, [fetchVencimientos]);
 
   if (loadingVencimientos) {
-    return <div className="flex h-full items-center justify-center"><Loader2 className="animate-spin text-teal-400" size={24} /></div>;
+    return <ChartSkeleton />;
   }
 
   const data = Array.isArray(vencimientos) ? vencimientos : [];

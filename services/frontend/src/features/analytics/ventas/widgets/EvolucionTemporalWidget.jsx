@@ -3,7 +3,6 @@ import {
   ComposedChart, Bar, Line, Area, AreaChart, BarChart, LineChart,
   CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
-import { TrendingUp } from 'lucide-react';
 import { useVentasData } from '../VentasDataContext';
 import SmartWidget from '../../../../components/analytics/SmartWidget/SmartWidget';
 import { useWidgetSetting } from '../../../../store/widgetSettingsStore';

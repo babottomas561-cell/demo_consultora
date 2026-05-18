@@ -1,7 +1,7 @@
 import {
   ComposedChart, Bar, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
-import { Loader2 } from 'lucide-react';
+import { ChartSkeleton } from '../../../../components/ui/WidgetSkeleton';
 import ChartTooltip from '../../../../components/analytics/ChartTooltip';
 import { useComprasData } from '../ComprasDataContext';
 
@@ -33,7 +33,7 @@ export default function EvolucionComprasWidget() {
   const { temporal, loadingTemporal, granularidad, setGranularidad, comparar } = useComprasData();
 
   if (loadingTemporal) {
-    return <div className="flex h-full items-center justify-center"><Loader2 className="animate-spin text-teal-400" size={24} /></div>;
+    return <ChartSkeleton />;
   }
 
   const series = temporal?.series ?? [];

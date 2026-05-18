@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { ChevronDown, Calendar } from 'lucide-react';
 import { cn } from '../../ui/utils';
 import { useFilterStore } from '../../../store/filterStore';
@@ -10,22 +10,34 @@ const fmt = (d) => {
 };
 
 const COMPARE_OPTIONS = [
-  { key: 'anterior', label: 'Período anterior (mismo largo)' },
-  { key: 'anio', label: 'Año anterior (mismo período)' },
-  { key: 'custom', label: 'Personalizado...' },
+  { key: 'anterior', label: 'Período anterior' },
+  { key: 'anio', label: 'Año anterior' },
 ];
 
 const PeriodComparator = ({ className }) => {
-  const { desde, hasta, comparar_anterior, setFilter } = useFilterStore();
-  const [compareMode, setCompareMode] = useState('anterior');
+  const { desde, hasta, comparar_anterior, compare_mode, setFilter } = useFilterStore();
   const [showDropdown, setShowDropdown] = useState(false);
+  const ref = useRef(null);
 
   const toggle = () => setFilter('comparar_anterior', !comparar_anterior);
 
-  const selectedLabel = COMPARE_OPTIONS.find((o) => o.key === compareMode)?.label;
+  const setMode = (key) => {
+    setFilter('compare_mode', key);
+    setShowDropdown(false);
+  };
+
+  useEffect(() => {
+    if (!showDropdown) return;
+    const handler = (e) => { if (!ref.current?.contains(e.target)) setShowDropdown(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showDropdown]);
+
+  const activeMode = compare_mode ?? 'anterior';
+  const selectedLabel = COMPARE_OPTIONS.find((o) => o.key === activeMode)?.label;
 
   return (
-    <div className={cn('flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-xs', className)}>
+    <div className={cn('flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-xs', className)} ref={ref}>
       <div className="flex items-center gap-1.5 text-slate-600">
         <Calendar size={13} className="text-slate-400" />
         <span className="font-medium">
@@ -38,7 +50,7 @@ const PeriodComparator = ({ className }) => {
           <span
             onClick={toggle}
             className={cn(
-              'relative inline-flex h-4 w-7 items-center rounded-full transition-colors',
+              'relative inline-flex h-4 w-7 items-center rounded-full transition-colors cursor-pointer',
               comparar_anterior ? 'bg-indigo-600' : 'bg-slate-200'
             )}
           >
@@ -50,7 +62,7 @@ const PeriodComparator = ({ className }) => {
             />
           </span>
           <span className={cn('font-medium', comparar_anterior ? 'text-indigo-600' : 'text-slate-400')}>
-            Comparar con: {comparar_anterior ? 'período anterior' : 'inactivo'}
+            Comparar
           </span>
         </label>
 
@@ -58,21 +70,21 @@ const PeriodComparator = ({ className }) => {
           <div className="relative">
             <button
               onClick={() => setShowDropdown((o) => !o)}
-              className="flex items-center gap-1.5 rounded border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+              className="flex items-center gap-1.5 rounded border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-100"
             >
               {selectedLabel}
               <ChevronDown size={11} />
             </button>
             {showDropdown && (
-              <div className="absolute top-full left-0 mt-1 z-50 w-64 rounded-lg border border-slate-200 bg-white shadow-lg py-1">
+              <div className="absolute top-full left-0 mt-1 z-50 w-48 rounded-lg border border-slate-200 bg-white shadow-lg py-1">
                 {COMPARE_OPTIONS.map(({ key, label }) => (
                   <button
                     key={key}
                     className={cn(
                       'flex w-full items-center px-3 py-2 text-xs hover:bg-slate-50',
-                      compareMode === key ? 'font-semibold text-indigo-600' : 'text-slate-700'
+                      activeMode === key ? 'font-semibold text-indigo-600' : 'text-slate-700'
                     )}
-                    onClick={() => { setCompareMode(key); setShowDropdown(false); }}
+                    onClick={() => setMode(key)}
                   >
                     {label}
                   </button>

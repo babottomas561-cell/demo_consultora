@@ -6,7 +6,6 @@ import DashboardView from './views/DashboardView';
 import CompanyListView from './views/CompanyListView';
 import CompanyCreateView from './views/CompanyCreateView';
 import CompanyUsersView from './views/CompanyUsersView';
-import SyncExcelView from './views/SyncExcelView';
 import VentasAnalyticsView from './features/analytics/VentasAnalyticsView';
 import ComprasAnalyticsView from './features/analytics/ComprasAnalyticsView';
 import ResultadoAnalyticsView from './features/analytics/ResultadoAnalyticsView';
@@ -27,7 +26,6 @@ function App() {
       <Route element={<ProtectedRoute />}>
         <Route element={<MainLayout />}>
           <Route path="/dashboard" element={<DashboardView />} />
-          <Route path="/dashboard/sync" element={<SyncExcelView />} />
           <Route path="/analytics/ventas" element={<VentasAnalyticsView />} />
           <Route path="/analytics/compras" element={<ComprasAnalyticsView />} />
           <Route path="/analytics/resultado" element={<ResultadoAnalyticsView />} />

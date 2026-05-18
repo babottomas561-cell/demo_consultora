@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Loader2 } from 'lucide-react';
+import { TableSkeleton } from '../../../../components/ui/WidgetSkeleton';
 import { useCajaData } from '../CajaDataContext';
 import { formatCurrency, formatNumber } from '../../analyticsUtils';
 
@@ -13,11 +13,7 @@ export default function MovimientosWidget() {
 
   return (
     <div className="h-full w-full flex flex-col overflow-hidden">
-      {loadingMovs && (
-        <div className="flex h-full items-center justify-center">
-          <Loader2 className="animate-spin text-slate-400" size={24} />
-        </div>
-      )}
+      {loadingMovs && <TableSkeleton />}
 
       {!loadingMovs && movimientos && (
         <>

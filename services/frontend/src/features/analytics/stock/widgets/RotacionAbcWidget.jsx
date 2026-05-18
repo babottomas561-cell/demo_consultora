@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { BarChart, Bar, Cell, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { Loader2 } from 'lucide-react';
+import { ChartSkeleton } from '../../../../components/ui/WidgetSkeleton';
 import { useStockData } from '../StockDataContext';
 import { formatCurrency, formatNumber } from '../../analyticsUtils';
 
@@ -18,7 +18,7 @@ export default function RotacionAbcWidget() {
   useEffect(() => { fetchRotacion(); }, [fetchRotacion]);
 
   if (loadingRotacion) {
-    return <div className="flex h-full items-center justify-center"><Loader2 className="animate-spin text-slate-400" size={24} /></div>;
+    return <ChartSkeleton />;
   }
 
   const ranking = rotacion?.ranking ?? [];

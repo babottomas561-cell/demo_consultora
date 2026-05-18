@@ -2,7 +2,7 @@ import {
   CartesianGrid, Cell, ReferenceLine, ResponsiveContainer,
   Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis,
 } from 'recharts';
-import { Loader2 } from 'lucide-react';
+import { ChartSkeleton } from '../../../../components/ui/WidgetSkeleton';
 import { useCrossFilter } from '../../../../hooks/useCrossFilter';
 import { useResultadoData } from '../ResultadoDataContext';
 import { formatCurrency } from '../../analyticsUtils';
@@ -37,7 +37,7 @@ export default function ProductosResultadoWidget() {
   const { applyFilter } = useCrossFilter();
 
   if (loadingProductos) {
-    return <div className="flex h-full items-center justify-center"><Loader2 className="animate-spin text-slate-400" size={24} /></div>;
+    return <ChartSkeleton />;
   }
 
   const ranking = productos?.ranking ?? [];
