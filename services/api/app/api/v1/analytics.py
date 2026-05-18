@@ -1923,6 +1923,8 @@ async def ventas_productos(
                 CONCAT('Rubro ', v.cod_rubro)
             )                                                                         AS nombre,
             COALESCE(SUM({venta_importe_neto_expr('v')}), 0)                         AS facturado,
+            COALESCE(SUM({venta_importe_neto_expr('v')} - {venta_costo_neto_expr('v')}), 0) AS margen_abs,
+            COALESCE(SUM(CASE WHEN v.precio_compra_actual IS NOT NULL THEN ABS(v.total) ELSE 0 END), 0) AS total_con_costo,
             COUNT(CASE WHEN v.tipo_comprobante='FA' THEN 1 END)                      AS tickets
         FROM ventas v
         LEFT JOIN (
@@ -1975,7 +1977,14 @@ async def ventas_productos(
         subrubros.append(d)
 
     pareto = [
-        {"producto": r["nombre"], "facturado": r["facturado"], "acumulado_pct": r["acumulado_pct"]}
+        {
+            "producto_id": r["producto_id"],
+            "producto": r["nombre"],
+            "facturado": r["facturado"],
+            "unidades": r["unidades"],
+            "acumulado_pct": r["acumulado_pct"],
+            "pct": r["pct_total"],
+        }
         for r in ranking[:20]
     ]
 
