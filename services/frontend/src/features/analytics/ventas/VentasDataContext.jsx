@@ -53,6 +53,14 @@ export default function VentasDataProvider({ children }) {
   const [loadingHeatmap, setLoadingHeatmap] = useState(false);
   const [yoy, setYoy] = useState(null);
   const [loadingYoy, setLoadingYoy] = useState(false);
+  const [descuentos, setDescuentos] = useState(null);
+  const [loadingDescuentos, setLoadingDescuentos] = useState(false);
+  const [aging, setAging] = useState(null);
+  const [loadingAging, setLoadingAging] = useState(false);
+  const [ticketDist, setTicketDist] = useState(null);
+  const [loadingTicketDist, setLoadingTicketDist] = useState(false);
+  const [cohort, setCohort] = useState(null);
+  const [loadingCohort, setLoadingCohort] = useState(false);
   const [txPage, setTxPage] = useState(1);
   const [error, setError] = useState(null);
 
@@ -66,6 +74,10 @@ export default function VentasDataProvider({ children }) {
     setClientes(null);
     setComprobantes(null);
     setTransacciones(null);
+    setDescuentos(null);
+    setAging(null);
+    setTicketDist(null);
+    setCohort(null);
     setTxPage(1);
 
     setLoadingKpis(true); setLoadingTemporal(true);
@@ -138,6 +150,42 @@ export default function VentasDataProvider({ children }) {
     } catch (e) { console.error(e); } finally { setLoadingHeatmap(false); }
   }, [qs, canFetch, heatmap]);
 
+  const fetchDescuentos = useCallback(async () => {
+    if (!canFetch) return;
+    setLoadingDescuentos(true);
+    try {
+      const r = await apiClient.get(`/analytics/resultado/descuentos${qs}`);
+      setDescuentos(r.data);
+    } catch (e) { console.error(e); } finally { setLoadingDescuentos(false); }
+  }, [qs, canFetch]);
+
+  const fetchAging = useCallback(async () => {
+    if (!canFetch) return;
+    setLoadingAging(true);
+    try {
+      const r = await apiClient.get(`/analytics/ventas/aging${qs}`);
+      setAging(r.data);
+    } catch (e) { console.error(e); } finally { setLoadingAging(false); }
+  }, [qs, canFetch]);
+
+  const fetchTicketDist = useCallback(async () => {
+    if (!canFetch) return;
+    setLoadingTicketDist(true);
+    try {
+      const r = await apiClient.get(`/analytics/ventas/ticket-dist${qs}`);
+      setTicketDist(r.data);
+    } catch (e) { console.error(e); } finally { setLoadingTicketDist(false); }
+  }, [qs, canFetch]);
+
+  const fetchCohort = useCallback(async () => {
+    if (!canFetch) return;
+    setLoadingCohort(true);
+    try {
+      const r = await apiClient.get(`/analytics/ventas/cohort${qs}`);
+      setCohort(r.data);
+    } catch (e) { console.error(e); } finally { setLoadingCohort(false); }
+  }, [qs, canFetch]);
+
   const fetchYoy = useCallback(async () => {
     if (!canFetch || yoy) return;
     setLoadingYoy(true);
@@ -166,22 +214,25 @@ export default function VentasDataProvider({ children }) {
 
   const value = useMemo(() => ({
     kpis, temporal, productos, vendedores, clientes, comprobantes, transacciones,
-    heatmap, yoy,
+    heatmap, yoy, descuentos, aging, ticketDist, cohort,
     granularidad, setGranularidad, comparar,
     loadingKpis, loadingTemporal, loadingProductos, loadingVendedores,
     loadingClientes, loadingComprobantes, loadingTransacciones, loadingHeatmap, loadingYoy,
+    loadingDescuentos, loadingAging, loadingTicketDist, loadingCohort,
     txPage, error,
     fetchClientes, fetchComprobantes, fetchTransacciones, fetchHeatmap, fetchYoy,
+    fetchDescuentos, fetchAging, fetchTicketDist, fetchCohort,
     refetch: fetchPrimary,
     user, activeCompany,
   }), [
     kpis, temporal, productos, vendedores, clientes, comprobantes, transacciones,
-    heatmap, yoy,
+    heatmap, yoy, descuentos, aging, ticketDist, cohort,
     granularidad, comparar,
     loadingKpis, loadingTemporal, loadingProductos, loadingVendedores,
     loadingClientes, loadingComprobantes, loadingTransacciones, loadingHeatmap, loadingYoy,
+    loadingDescuentos, loadingAging, loadingTicketDist, loadingCohort,
     txPage, error, fetchPrimary, fetchClientes, fetchComprobantes, fetchTransacciones,
-    fetchHeatmap, fetchYoy,
+    fetchHeatmap, fetchYoy, fetchDescuentos, fetchAging, fetchTicketDist, fetchCohort,
     user, activeCompany,
   ]);
 

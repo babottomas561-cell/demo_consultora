@@ -2360,6 +2360,197 @@ async def ventas_transacciones(
     }
 
 
+@router.get("/ventas/aging")
+async def ventas_aging(
+    company_id: int = None,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+
+    buckets_raw = (await db.execute(text("""
+        SELECT
+            CASE
+                WHEN fecha_venc > CURRENT_DATE THEN 'vigente'
+                WHEN dias_vencido <= 30  THEN '0_30'
+                WHEN dias_vencido <= 60  THEN '31_60'
+                WHEN dias_vencido <= 90  THEN '61_90'
+                ELSE '90_mas'
+            END AS bucket,
+            COUNT(*)       AS cantidad,
+            SUM(importe)   AS total
+        FROM (
+            SELECT
+                importe,
+                COALESCE(fecha_vencimiento, fecha + INTERVAL '30 days') AS fecha_venc,
+                GREATEST(0, CURRENT_DATE - COALESCE(fecha_vencimiento, fecha + INTERVAL '30 days')::date) AS dias_vencido
+            FROM cuentas_corrientes_clientes
+            WHERE tipo IN ('FA','ND','saldo') AND importe > 0
+        ) sub
+        GROUP BY 1
+    """))).mappings().all()
+
+    bucket_order = ['vigente', '0_30', '31_60', '61_90', '90_mas']
+    bucket_labels = {
+        'vigente': 'Vigente', '0_30': '0-30 días',
+        '31_60': '31-60 días', '61_90': '61-90 días', '90_mas': '+90 días',
+    }
+    buckets_map = {r['bucket']: dict(r) for r in buckets_raw}
+    buckets = [
+        {
+            'bucket': k,
+            'label': bucket_labels[k],
+            'cantidad': int(buckets_map[k]['cantidad']) if k in buckets_map else 0,
+            'total': round(money(buckets_map[k]['total']), 2) if k in buckets_map else 0,
+        }
+        for k in bucket_order
+    ]
+
+    total_pendiente = sum(b['total'] for b in buckets if b['bucket'] != 'vigente')
+    total_vigente = next((b['total'] for b in buckets if b['bucket'] == 'vigente'), 0)
+
+    top_deudores = (await db.execute(text("""
+        SELECT cliente_id, MAX(cliente_nombre) AS nombre, saldo_acumulado
+        FROM (
+            SELECT cliente_id, cliente_nombre, saldo_acumulado,
+                   ROW_NUMBER() OVER (PARTITION BY cliente_id ORDER BY id DESC) AS rn
+            FROM cuentas_corrientes_clientes
+        ) t
+        WHERE rn = 1 AND saldo_acumulado > 0
+        ORDER BY saldo_acumulado DESC
+        LIMIT 10
+    """))).mappings().all()
+
+    return {
+        'buckets': buckets,
+        'total_pendiente': round(total_pendiente, 2),
+        'total_vigente': round(total_vigente, 2),
+        'top_deudores': [
+            {'cliente_id': r['cliente_id'], 'nombre': r['nombre'], 'saldo': round(money(r['saldo_acumulado']), 2)}
+            for r in top_deudores
+        ],
+    }
+
+
+@router.get("/ventas/ticket-dist")
+async def ventas_ticket_dist(
+    company_id: int = None,
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+    params = filters.sql_params()
+    where = _ventas_base_where(filters)
+
+    rows = (await db.execute(text(f"""
+        SELECT
+            CASE
+                WHEN ABS(total) < 10000       THEN 1
+                WHEN ABS(total) < 50000       THEN 2
+                WHEN ABS(total) < 100000      THEN 3
+                WHEN ABS(total) < 500000      THEN 4
+                WHEN ABS(total) < 1000000     THEN 5
+                ELSE 6
+            END AS bucket_ord,
+            CASE
+                WHEN ABS(total) < 10000       THEN '<$10K'
+                WHEN ABS(total) < 50000       THEN '$10K-$50K'
+                WHEN ABS(total) < 100000      THEN '$50K-$100K'
+                WHEN ABS(total) < 500000      THEN '$100K-$500K'
+                WHEN ABS(total) < 1000000     THEN '$500K-$1M'
+                ELSE '>$1M'
+            END AS bucket,
+            COUNT(*)          AS cantidad,
+            SUM(ABS(total))   AS facturado,
+            AVG(ABS(total))   AS ticket_promedio
+        FROM ventas
+        WHERE tipo_comprobante = 'FA' AND {where}
+        GROUP BY 1, 2
+        ORDER BY 1
+    """), params)).mappings().all()
+
+    data = [
+        {
+            'bucket': r['bucket'],
+            'cantidad': int(r['cantidad']),
+            'facturado': round(money(r['facturado']), 2),
+            'ticket_promedio': round(money(r['ticket_promedio']), 2),
+        }
+        for r in rows
+    ]
+
+    total_tickets = sum(d['cantidad'] for d in data)
+    p50_idx = 0
+    acum = 0
+    for i, d in enumerate(data):
+        acum += d['cantidad']
+        if acum >= total_tickets * 0.5:
+            p50_idx = i
+            break
+
+    return {'distribucion': data, 'total_tickets': total_tickets, 'p50_bucket': data[p50_idx]['bucket'] if data else None}
+
+
+@router.get("/ventas/cohort")
+async def ventas_cohort(
+    company_id: int = None,
+    meses: int = 12,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+
+    rows = (await db.execute(text(f"""
+        WITH first_purchase AS (
+            SELECT cliente_id,
+                   DATE_TRUNC('month', MIN(fecha)) AS cohort_month
+            FROM ventas
+            WHERE tipo_comprobante = 'FA'
+            GROUP BY cliente_id
+        ),
+        cohort_sizes AS (
+            SELECT cohort_month, COUNT(*) AS cohort_size
+            FROM first_purchase
+            WHERE cohort_month >= DATE_TRUNC('month', NOW()) - INTERVAL '{meses - 1} months'
+            GROUP BY cohort_month
+        ),
+        retention AS (
+            SELECT
+                fp.cohort_month,
+                DATE_TRUNC('month', v.fecha) AS activity_month,
+                COUNT(DISTINCT fp.cliente_id) AS retained_count
+            FROM first_purchase fp
+            JOIN ventas v ON v.cliente_id = fp.cliente_id AND v.tipo_comprobante = 'FA'
+            WHERE fp.cohort_month >= DATE_TRUNC('month', NOW()) - INTERVAL '{meses - 1} months'
+              AND DATE_TRUNC('month', v.fecha) >= fp.cohort_month
+            GROUP BY fp.cohort_month, DATE_TRUNC('month', v.fecha)
+        )
+        SELECT
+            TO_CHAR(r.cohort_month, 'YYYY-MM') AS cohort_month,
+            cs.cohort_size,
+            TO_CHAR(r.activity_month, 'YYYY-MM') AS activity_month,
+            r.retained_count,
+            ROUND(r.retained_count::float / cs.cohort_size * 100)::int AS retention_pct,
+            ROUND(EXTRACT(EPOCH FROM (r.activity_month - r.cohort_month)) / (30.44 * 24 * 3600))::int AS month_offset
+        FROM retention r
+        JOIN cohort_sizes cs ON r.cohort_month = cs.cohort_month
+        ORDER BY r.cohort_month, month_offset
+    """))).mappings().all()
+
+    cohorts: dict = {}
+    for r in rows:
+        cm = r['cohort_month']
+        if cm not in cohorts:
+            cohorts[cm] = {'cohort_month': cm, 'cohort_size': int(r['cohort_size']), 'retention': {}}
+        cohorts[cm]['retention'][int(r['month_offset'])] = int(r['retention_pct'])
+
+    return {'cohorts': list(cohorts.values()), 'max_offset': meses - 1}
+
+
 @router.get("/ventas/exportar")
 async def ventas_exportar(
     company_id: int = None,

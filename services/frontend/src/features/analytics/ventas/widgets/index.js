@@ -1,7 +1,7 @@
 import {
   DollarSign, ShoppingCart, Package, Users, TrendingDown,
   Activity, BarChart3, PieChart, Trophy, FileText, List, Layers, Receipt, Tag,
-  Zap, CalendarDays, TrendingUp, Crosshair,
+  Zap, CalendarDays, TrendingUp, Crosshair, Scissors, GitFork, Clock, Target,
 } from 'lucide-react';
 import { createKpiWidget } from './VentasKpiWidget';
 import EvolucionTemporalWidget from './EvolucionTemporalWidget';
@@ -23,6 +23,12 @@ import FacturasVentaWidget from '../../infomanager/widgets/FacturasVentaWidget';
 import MargenPorListaWidget from '../../infomanager/widgets/MargenPorListaWidget';
 import VentasPorListaWidget from './VentasPorListaWidget';
 import EficienciaCobranzaWidget from '../../reportes/widgets/EficienciaCobranzaWidget';
+import DescuentosWidget from './DescuentosWidget';
+import ScatterPortafolioWidget from './ScatterPortafolioWidget';
+import AgingCobranzaWidget from './AgingCobranzaWidget';
+import TicketDistribucionWidget from './TicketDistribucionWidget';
+import CohortRetencionWidget from './CohortRetencionWidget';
+import GoalTrackerWidget from './GoalTrackerWidget';
 
 const VENTAS_WIDGET_CATALOG = [
   // ── Pulse Strip (mega-KPI row) ──
@@ -274,6 +280,61 @@ const VENTAS_WIDGET_CATALOG = [
     defaultSize: { w: 12, h: 7 },
     category: 'table',
   },
+  // ── Nuevos widgets ──
+  {
+    type: 'ventas-descuentos',
+    name: 'Motor de Descuentos',
+    description: 'Cuánto se descuenta, quién descuenta más y en qué productos',
+    icon: Scissors,
+    component: DescuentosWidget,
+    defaultSize: { w: 6, h: 5 },
+    category: 'chart',
+  },
+  {
+    type: 'ventas-scatter',
+    name: 'Portafolio Productos',
+    description: 'Scatter: unidades vs. margen%, tamaño = revenue. Clic para detalle.',
+    icon: Crosshair,
+    component: ScatterPortafolioWidget,
+    defaultSize: { w: 6, h: 5 },
+    category: 'chart',
+  },
+  {
+    type: 'ventas-aging',
+    name: 'Aging Cobranza',
+    description: 'Antigüedad de saldos pendientes por cobrar',
+    icon: Clock,
+    component: AgingCobranzaWidget,
+    defaultSize: { w: 4, h: 5 },
+    category: 'chart',
+  },
+  {
+    type: 'ventas-ticket-dist',
+    name: 'Distribución de Tickets',
+    description: 'Histograma de tickets FA por rango de importe',
+    icon: BarChart3,
+    component: TicketDistribucionWidget,
+    defaultSize: { w: 5, h: 5 },
+    category: 'chart',
+  },
+  {
+    type: 'ventas-cohort',
+    name: 'Cohort de Retención',
+    description: '% clientes que volvieron a comprar mes a mes por cohorte',
+    icon: Users,
+    component: CohortRetencionWidget,
+    defaultSize: { w: 7, h: 5 },
+    category: 'chart',
+  },
+  {
+    type: 'ventas-goal',
+    name: 'Goal Tracker',
+    description: 'Gauge de progreso vs. meta configurable con proyección',
+    icon: Target,
+    component: GoalTrackerWidget,
+    defaultSize: { w: 3, h: 5 },
+    category: 'kpi',
+  },
 ];
 
 export default VENTAS_WIDGET_CATALOG;
@@ -285,17 +346,23 @@ export function getVentasWidgetDef(type) {
 // Default widgets and layouts for the ventas panel
 export const VENTAS_DEFAULT_WIDGETS = [
   { id: 'v-0',  type: 'ventas-pulse-strip'     },
+  { id: 'v-30', type: 'ventas-goal'            },
   { id: 'v-9',  type: 'ventas-evolucion'        },
   { id: 'v-10', type: 'ventas-devoluciones'     },
   { id: 'v-23', type: 'ventas-heatmap'          },
   { id: 'v-24', type: 'ventas-yoy'              },
   { id: 'v-11', type: 'ventas-pareto'           },
+  { id: 'v-27', type: 'ventas-scatter'          },
   { id: 'v-12', type: 'ventas-por-rubro'        },
   { id: 'v-25', type: 'ventas-por-subrubro'     },
+  { id: 'v-28', type: 'ventas-descuentos'       },
   { id: 'v-13', type: 'ventas-vendedores'       },
   { id: 'v-14', type: 'ventas-abc-clientes'     },
   { id: 'v-26', type: 'ventas-rfm'              },
   { id: 'v-15', type: 'ventas-comprobantes'     },
+  { id: 'v-29', type: 'ventas-aging'            },
+  { id: 'v-31', type: 'ventas-ticket-dist'      },
+  { id: 'v-32', type: 'ventas-cohort'           },
   { id: 'v-16', type: 'ventas-ranking-productos'},
   { id: 'v-17', type: 'ventas-ranking-clientes' },
   { id: 'v-18', type: 'ventas-transacciones'    },
@@ -307,73 +374,93 @@ export const VENTAS_DEFAULT_WIDGETS = [
 
 export const VENTAS_DEFAULT_LAYOUTS = {
   lg: [
-    // Pulse strip full width
-    { i: 'v-0',  x: 0,  y: 0,  w: 12, h: 4,  minW: 8, minH: 3  },
-    // Evolución + Devoluciones
+    // Row 0: Pulse strip + Goal Tracker
+    { i: 'v-0',  x: 0,  y: 0,  w: 9,  h: 4,  minW: 6, minH: 3  },
+    { i: 'v-30', x: 9,  y: 0,  w: 3,  h: 4,  minW: 2, minH: 3  },
+    // Row 1: Evolución + Devoluciones
     { i: 'v-9',  x: 0,  y: 4,  w: 8,  h: 5,  minW: 4, minH: 3  },
     { i: 'v-10', x: 8,  y: 4,  w: 4,  h: 5,  minW: 3, minH: 3  },
-    // Heatmap + YoY
+    // Row 2: Heatmap + YoY
     { i: 'v-23', x: 0,  y: 9,  w: 5,  h: 4,  minW: 4, minH: 3  },
     { i: 'v-24', x: 5,  y: 9,  w: 7,  h: 4,  minW: 4, minH: 3  },
-    // Pareto + Rubro + Subrubro
-    { i: 'v-11', x: 0,  y: 13, w: 5,  h: 4,  minW: 4, minH: 3  },
-    { i: 'v-12', x: 5,  y: 13, w: 4,  h: 4,  minW: 3, minH: 3  },
-    { i: 'v-25', x: 9,  y: 13, w: 3,  h: 4,  minW: 3, minH: 3  },
-    // Vendedores full width
-    { i: 'v-13', x: 0,  y: 17, w: 12, h: 5,  minW: 6, minH: 4  },
-    // ABC + RFM + Comprobantes
-    { i: 'v-14', x: 0,  y: 22, w: 4,  h: 5,  minW: 3, minH: 3  },
-    { i: 'v-26', x: 4,  y: 22, w: 4,  h: 5,  minW: 3, minH: 3  },
-    { i: 'v-15', x: 8,  y: 22, w: 4,  h: 5,  minW: 3, minH: 3  },
+    // Row 3: Pareto + Scatter Portafolio
+    { i: 'v-11', x: 0,  y: 13, w: 6,  h: 5,  minW: 4, minH: 3  },
+    { i: 'v-27', x: 6,  y: 13, w: 6,  h: 5,  minW: 4, minH: 3  },
+    // Row 4: Rubro + Subrubro + Descuentos
+    { i: 'v-12', x: 0,  y: 18, w: 4,  h: 5,  minW: 3, minH: 3  },
+    { i: 'v-25', x: 4,  y: 18, w: 4,  h: 5,  minW: 3, minH: 3  },
+    { i: 'v-28', x: 8,  y: 18, w: 4,  h: 5,  minW: 3, minH: 3  },
+    // Row 5: Vendedores full width
+    { i: 'v-13', x: 0,  y: 23, w: 12, h: 5,  minW: 6, minH: 4  },
+    // Row 6: ABC + RFM + Comprobantes
+    { i: 'v-14', x: 0,  y: 28, w: 4,  h: 5,  minW: 3, minH: 3  },
+    { i: 'v-26', x: 4,  y: 28, w: 4,  h: 5,  minW: 3, minH: 3  },
+    { i: 'v-15', x: 8,  y: 28, w: 4,  h: 5,  minW: 3, minH: 3  },
+    // Row 7: Aging + Ticket Dist + Cohort
+    { i: 'v-29', x: 0,  y: 33, w: 4,  h: 5,  minW: 3, minH: 4  },
+    { i: 'v-31', x: 4,  y: 33, w: 4,  h: 5,  minW: 3, minH: 4  },
+    { i: 'v-32', x: 8,  y: 33, w: 4,  h: 5,  minW: 3, minH: 4  },
     // Tables
-    { i: 'v-16', x: 0,  y: 27, w: 6,  h: 4,  minW: 4, minH: 3  },
-    { i: 'v-17', x: 6,  y: 27, w: 6,  h: 4,  minW: 4, minH: 3  },
-    { i: 'v-18', x: 0,  y: 31, w: 12, h: 5,  minW: 6, minH: 3  },
-    { i: 'v-19', x: 0,  y: 36, w: 12, h: 6,  minW: 6, minH: 4  },
-    { i: 'v-20', x: 0,  y: 42, w: 12, h: 7,  minW: 6, minH: 4  },
-    { i: 'v-21', x: 0,  y: 49, w: 12, h: 7,  minW: 6, minH: 4  },
-    { i: 'v-22', x: 0,  y: 56, w: 12, h: 7,  minW: 6, minH: 4  },
+    { i: 'v-16', x: 0,  y: 38, w: 6,  h: 4,  minW: 4, minH: 3  },
+    { i: 'v-17', x: 6,  y: 38, w: 6,  h: 4,  minW: 4, minH: 3  },
+    { i: 'v-18', x: 0,  y: 42, w: 12, h: 5,  minW: 6, minH: 3  },
+    { i: 'v-19', x: 0,  y: 47, w: 12, h: 6,  minW: 6, minH: 4  },
+    { i: 'v-20', x: 0,  y: 53, w: 12, h: 7,  minW: 6, minH: 4  },
+    { i: 'v-21', x: 0,  y: 60, w: 12, h: 7,  minW: 6, minH: 4  },
+    { i: 'v-22', x: 0,  y: 67, w: 12, h: 7,  minW: 6, minH: 4  },
   ],
   md: [
-    { i: 'v-0',  x: 0,  y: 0,  w: 12, h: 4,  minW: 8, minH: 3  },
+    { i: 'v-0',  x: 0,  y: 0,  w: 9,  h: 4,  minW: 6, minH: 3  },
+    { i: 'v-30', x: 9,  y: 0,  w: 3,  h: 4,  minW: 2, minH: 3  },
     { i: 'v-9',  x: 0,  y: 4,  w: 7,  h: 5,  minW: 4, minH: 3  },
     { i: 'v-10', x: 7,  y: 4,  w: 5,  h: 5,  minW: 3, minH: 3  },
     { i: 'v-23', x: 0,  y: 9,  w: 5,  h: 4,  minW: 4, minH: 3  },
     { i: 'v-24', x: 5,  y: 9,  w: 7,  h: 4,  minW: 4, minH: 3  },
-    { i: 'v-11', x: 0,  y: 13, w: 5,  h: 4,  minW: 4, minH: 3  },
-    { i: 'v-12', x: 5,  y: 13, w: 4,  h: 4,  minW: 3, minH: 3  },
-    { i: 'v-25', x: 9,  y: 13, w: 3,  h: 4,  minW: 3, minH: 3  },
-    { i: 'v-13', x: 0,  y: 17, w: 12, h: 5,  minW: 6, minH: 4  },
-    { i: 'v-14', x: 0,  y: 22, w: 4,  h: 5,  minW: 3, minH: 3  },
-    { i: 'v-26', x: 4,  y: 22, w: 4,  h: 5,  minW: 3, minH: 3  },
-    { i: 'v-15', x: 8,  y: 22, w: 4,  h: 5,  minW: 3, minH: 3  },
-    { i: 'v-16', x: 0,  y: 27, w: 6,  h: 4,  minW: 4, minH: 3  },
-    { i: 'v-17', x: 6,  y: 27, w: 6,  h: 4,  minW: 4, minH: 3  },
-    { i: 'v-18', x: 0,  y: 31, w: 12, h: 5,  minW: 6, minH: 3  },
-    { i: 'v-19', x: 0,  y: 36, w: 12, h: 6,  minW: 6, minH: 4  },
-    { i: 'v-20', x: 0,  y: 42, w: 12, h: 7,  minW: 6, minH: 4  },
-    { i: 'v-21', x: 0,  y: 49, w: 12, h: 7,  minW: 6, minH: 4  },
-    { i: 'v-22', x: 0,  y: 56, w: 12, h: 7,  minW: 6, minH: 4  },
+    { i: 'v-11', x: 0,  y: 13, w: 6,  h: 5,  minW: 4, minH: 3  },
+    { i: 'v-27', x: 6,  y: 13, w: 6,  h: 5,  minW: 4, minH: 3  },
+    { i: 'v-12', x: 0,  y: 18, w: 4,  h: 5,  minW: 3, minH: 3  },
+    { i: 'v-25', x: 4,  y: 18, w: 4,  h: 5,  minW: 3, minH: 3  },
+    { i: 'v-28', x: 8,  y: 18, w: 4,  h: 5,  minW: 3, minH: 3  },
+    { i: 'v-13', x: 0,  y: 23, w: 12, h: 5,  minW: 6, minH: 4  },
+    { i: 'v-14', x: 0,  y: 28, w: 4,  h: 5,  minW: 3, minH: 3  },
+    { i: 'v-26', x: 4,  y: 28, w: 4,  h: 5,  minW: 3, minH: 3  },
+    { i: 'v-15', x: 8,  y: 28, w: 4,  h: 5,  minW: 3, minH: 3  },
+    { i: 'v-29', x: 0,  y: 33, w: 4,  h: 5,  minW: 3, minH: 4  },
+    { i: 'v-31', x: 4,  y: 33, w: 4,  h: 5,  minW: 3, minH: 4  },
+    { i: 'v-32', x: 8,  y: 33, w: 4,  h: 5,  minW: 3, minH: 4  },
+    { i: 'v-16', x: 0,  y: 38, w: 6,  h: 4,  minW: 4, minH: 3  },
+    { i: 'v-17', x: 6,  y: 38, w: 6,  h: 4,  minW: 4, minH: 3  },
+    { i: 'v-18', x: 0,  y: 42, w: 12, h: 5,  minW: 6, minH: 3  },
+    { i: 'v-19', x: 0,  y: 47, w: 12, h: 6,  minW: 6, minH: 4  },
+    { i: 'v-20', x: 0,  y: 53, w: 12, h: 7,  minW: 6, minH: 4  },
+    { i: 'v-21', x: 0,  y: 60, w: 12, h: 7,  minW: 6, minH: 4  },
+    { i: 'v-22', x: 0,  y: 67, w: 12, h: 7,  minW: 6, minH: 4  },
   ],
   sm: [
-    { i: 'v-0',  x: 0, y: 0,  w: 6, h: 5,  minW: 4, minH: 3  },
+    { i: 'v-0',  x: 0, y: 0,  w: 4, h: 5,  minW: 3, minH: 3  },
+    { i: 'v-30', x: 4, y: 0,  w: 2, h: 5,  minW: 2, minH: 3  },
     { i: 'v-9',  x: 0, y: 5,  w: 6, h: 5,  minW: 3, minH: 3  },
     { i: 'v-10', x: 0, y: 10, w: 6, h: 4,  minW: 3, minH: 3  },
     { i: 'v-23', x: 0, y: 14, w: 6, h: 4,  minW: 3, minH: 3  },
     { i: 'v-24', x: 0, y: 18, w: 6, h: 4,  minW: 3, minH: 3  },
-    { i: 'v-11', x: 0, y: 22, w: 6, h: 4,  minW: 3, minH: 3  },
-    { i: 'v-12', x: 0, y: 26, w: 6, h: 4,  minW: 3, minH: 3  },
-    { i: 'v-25', x: 0, y: 30, w: 6, h: 4,  minW: 3, minH: 3  },
-    { i: 'v-13', x: 0, y: 34, w: 6, h: 5,  minW: 3, minH: 4  },
-    { i: 'v-14', x: 0, y: 39, w: 6, h: 4,  minW: 3, minH: 3  },
-    { i: 'v-26', x: 0, y: 43, w: 6, h: 5,  minW: 3, minH: 3  },
-    { i: 'v-15', x: 0, y: 48, w: 6, h: 4,  minW: 3, minH: 3  },
-    { i: 'v-16', x: 0, y: 52, w: 6, h: 4,  minW: 3, minH: 3  },
-    { i: 'v-17', x: 0, y: 56, w: 6, h: 4,  minW: 3, minH: 3  },
-    { i: 'v-18', x: 0, y: 60, w: 6, h: 5,  minW: 3, minH: 3  },
-    { i: 'v-19', x: 0, y: 65, w: 6, h: 6,  minW: 3, minH: 4  },
-    { i: 'v-20', x: 0, y: 71, w: 6, h: 7,  minW: 3, minH: 4  },
-    { i: 'v-21', x: 0, y: 78, w: 6, h: 7,  minW: 3, minH: 4  },
-    { i: 'v-22', x: 0, y: 85, w: 6, h: 7,  minW: 3, minH: 4  },
+    { i: 'v-11', x: 0, y: 22, w: 6, h: 5,  minW: 3, minH: 3  },
+    { i: 'v-27', x: 0, y: 27, w: 6, h: 5,  minW: 3, minH: 3  },
+    { i: 'v-12', x: 0, y: 32, w: 3, h: 4,  minW: 3, minH: 3  },
+    { i: 'v-25', x: 3, y: 32, w: 3, h: 4,  minW: 3, minH: 3  },
+    { i: 'v-28', x: 0, y: 36, w: 6, h: 5,  minW: 3, minH: 3  },
+    { i: 'v-13', x: 0, y: 41, w: 6, h: 5,  minW: 3, minH: 4  },
+    { i: 'v-14', x: 0, y: 46, w: 3, h: 4,  minW: 3, minH: 3  },
+    { i: 'v-26', x: 3, y: 46, w: 3, h: 5,  minW: 3, minH: 3  },
+    { i: 'v-15', x: 0, y: 51, w: 6, h: 4,  minW: 3, minH: 3  },
+    { i: 'v-29', x: 0, y: 55, w: 6, h: 5,  minW: 3, minH: 4  },
+    { i: 'v-31', x: 0, y: 60, w: 6, h: 5,  minW: 3, minH: 4  },
+    { i: 'v-32', x: 0, y: 65, w: 6, h: 5,  minW: 3, minH: 4  },
+    { i: 'v-16', x: 0, y: 70, w: 6, h: 4,  minW: 3, minH: 3  },
+    { i: 'v-17', x: 0, y: 74, w: 6, h: 4,  minW: 3, minH: 3  },
+    { i: 'v-18', x: 0, y: 78, w: 6, h: 5,  minW: 3, minH: 3  },
+    { i: 'v-19', x: 0, y: 83, w: 6, h: 6,  minW: 3, minH: 4  },
+    { i: 'v-20', x: 0, y: 89, w: 6, h: 7,  minW: 3, minH: 4  },
+    { i: 'v-21', x: 0, y: 96, w: 6, h: 7,  minW: 3, minH: 4  },
+    { i: 'v-22', x: 0, y: 103,w: 6, h: 7,  minW: 3, minH: 4  },
   ],
 };
