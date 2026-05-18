@@ -1,13 +1,14 @@
 import {
   DollarSign, ShoppingCart, Package, Users, TrendingDown,
   Activity, BarChart3, PieChart, Trophy, FileText, List, Layers, Receipt, Tag,
-  Zap, CalendarDays, TrendingUp,
+  Zap, CalendarDays, TrendingUp, Crosshair,
 } from 'lucide-react';
 import { createKpiWidget } from './VentasKpiWidget';
 import EvolucionTemporalWidget from './EvolucionTemporalWidget';
 import PulseStripWidget from './PulseStripWidget';
 import SeasonalityHeatmap from './SeasonalityHeatmap';
 import YearOverYearWidget from './YearOverYearWidget';
+import RFMMatrixWidget from './RFMMatrixWidget';
 import DevolucionesWidget from './DevolucionesWidget';
 import ParetoProductosWidget from './ParetoProductosWidget';
 import RankingProductosWidget from './RankingProductosWidget';
@@ -180,6 +181,16 @@ const VENTAS_WIDGET_CATALOG = [
     defaultSize: { w: 7, h: 4 },
     category: 'chart',
   },
+  // ── RFM ──
+  {
+    type: 'ventas-rfm',
+    name: 'Matriz RFM',
+    description: 'Segmentación Recencia-Frecuencia-Monetario como scatter plot',
+    icon: Crosshair,
+    component: RFMMatrixWidget,
+    defaultSize: { w: 5, h: 5 },
+    category: 'chart',
+  },
   // ── New temporal analysis ──
   {
     type: 'ventas-heatmap',
@@ -283,6 +294,7 @@ export const VENTAS_DEFAULT_WIDGETS = [
   { id: 'v-25', type: 'ventas-por-subrubro'     },
   { id: 'v-13', type: 'ventas-vendedores'       },
   { id: 'v-14', type: 'ventas-abc-clientes'     },
+  { id: 'v-26', type: 'ventas-rfm'              },
   { id: 'v-15', type: 'ventas-comprobantes'     },
   { id: 'v-16', type: 'ventas-ranking-productos'},
   { id: 'v-17', type: 'ventas-ranking-clientes' },
@@ -309,17 +321,18 @@ export const VENTAS_DEFAULT_LAYOUTS = {
     { i: 'v-25', x: 9,  y: 13, w: 3,  h: 4,  minW: 3, minH: 3  },
     // Vendedores full width
     { i: 'v-13', x: 0,  y: 17, w: 12, h: 5,  minW: 6, minH: 4  },
-    // ABC + Comprobantes
-    { i: 'v-14', x: 0,  y: 22, w: 5,  h: 4,  minW: 3, minH: 3  },
-    { i: 'v-15', x: 5,  y: 22, w: 7,  h: 4,  minW: 4, minH: 3  },
+    // ABC + RFM + Comprobantes
+    { i: 'v-14', x: 0,  y: 22, w: 4,  h: 5,  minW: 3, minH: 3  },
+    { i: 'v-26', x: 4,  y: 22, w: 4,  h: 5,  minW: 3, minH: 3  },
+    { i: 'v-15', x: 8,  y: 22, w: 4,  h: 5,  minW: 3, minH: 3  },
     // Tables
-    { i: 'v-16', x: 0,  y: 26, w: 6,  h: 4,  minW: 4, minH: 3  },
-    { i: 'v-17', x: 6,  y: 26, w: 6,  h: 4,  minW: 4, minH: 3  },
-    { i: 'v-18', x: 0,  y: 30, w: 12, h: 5,  minW: 6, minH: 3  },
-    { i: 'v-19', x: 0,  y: 35, w: 12, h: 6,  minW: 6, minH: 4  },
-    { i: 'v-20', x: 0,  y: 41, w: 12, h: 7,  minW: 6, minH: 4  },
-    { i: 'v-21', x: 0,  y: 48, w: 12, h: 7,  minW: 6, minH: 4  },
-    { i: 'v-22', x: 0,  y: 55, w: 12, h: 7,  minW: 6, minH: 4  },
+    { i: 'v-16', x: 0,  y: 27, w: 6,  h: 4,  minW: 4, minH: 3  },
+    { i: 'v-17', x: 6,  y: 27, w: 6,  h: 4,  minW: 4, minH: 3  },
+    { i: 'v-18', x: 0,  y: 31, w: 12, h: 5,  minW: 6, minH: 3  },
+    { i: 'v-19', x: 0,  y: 36, w: 12, h: 6,  minW: 6, minH: 4  },
+    { i: 'v-20', x: 0,  y: 42, w: 12, h: 7,  minW: 6, minH: 4  },
+    { i: 'v-21', x: 0,  y: 49, w: 12, h: 7,  minW: 6, minH: 4  },
+    { i: 'v-22', x: 0,  y: 56, w: 12, h: 7,  minW: 6, minH: 4  },
   ],
   md: [
     { i: 'v-0',  x: 0,  y: 0,  w: 12, h: 4,  minW: 8, minH: 3  },
@@ -331,15 +344,16 @@ export const VENTAS_DEFAULT_LAYOUTS = {
     { i: 'v-12', x: 5,  y: 13, w: 4,  h: 4,  minW: 3, minH: 3  },
     { i: 'v-25', x: 9,  y: 13, w: 3,  h: 4,  minW: 3, minH: 3  },
     { i: 'v-13', x: 0,  y: 17, w: 12, h: 5,  minW: 6, minH: 4  },
-    { i: 'v-14', x: 0,  y: 22, w: 5,  h: 4,  minW: 3, minH: 3  },
-    { i: 'v-15', x: 5,  y: 22, w: 7,  h: 4,  minW: 4, minH: 3  },
-    { i: 'v-16', x: 0,  y: 26, w: 6,  h: 4,  minW: 4, minH: 3  },
-    { i: 'v-17', x: 6,  y: 26, w: 6,  h: 4,  minW: 4, minH: 3  },
-    { i: 'v-18', x: 0,  y: 30, w: 12, h: 5,  minW: 6, minH: 3  },
-    { i: 'v-19', x: 0,  y: 35, w: 12, h: 6,  minW: 6, minH: 4  },
-    { i: 'v-20', x: 0,  y: 41, w: 12, h: 7,  minW: 6, minH: 4  },
-    { i: 'v-21', x: 0,  y: 48, w: 12, h: 7,  minW: 6, minH: 4  },
-    { i: 'v-22', x: 0,  y: 55, w: 12, h: 7,  minW: 6, minH: 4  },
+    { i: 'v-14', x: 0,  y: 22, w: 4,  h: 5,  minW: 3, minH: 3  },
+    { i: 'v-26', x: 4,  y: 22, w: 4,  h: 5,  minW: 3, minH: 3  },
+    { i: 'v-15', x: 8,  y: 22, w: 4,  h: 5,  minW: 3, minH: 3  },
+    { i: 'v-16', x: 0,  y: 27, w: 6,  h: 4,  minW: 4, minH: 3  },
+    { i: 'v-17', x: 6,  y: 27, w: 6,  h: 4,  minW: 4, minH: 3  },
+    { i: 'v-18', x: 0,  y: 31, w: 12, h: 5,  minW: 6, minH: 3  },
+    { i: 'v-19', x: 0,  y: 36, w: 12, h: 6,  minW: 6, minH: 4  },
+    { i: 'v-20', x: 0,  y: 42, w: 12, h: 7,  minW: 6, minH: 4  },
+    { i: 'v-21', x: 0,  y: 49, w: 12, h: 7,  minW: 6, minH: 4  },
+    { i: 'v-22', x: 0,  y: 56, w: 12, h: 7,  minW: 6, minH: 4  },
   ],
   sm: [
     { i: 'v-0',  x: 0, y: 0,  w: 6, h: 5,  minW: 4, minH: 3  },
@@ -352,13 +366,14 @@ export const VENTAS_DEFAULT_LAYOUTS = {
     { i: 'v-25', x: 0, y: 30, w: 6, h: 4,  minW: 3, minH: 3  },
     { i: 'v-13', x: 0, y: 34, w: 6, h: 5,  minW: 3, minH: 4  },
     { i: 'v-14', x: 0, y: 39, w: 6, h: 4,  minW: 3, minH: 3  },
-    { i: 'v-15', x: 0, y: 43, w: 6, h: 4,  minW: 3, minH: 3  },
-    { i: 'v-16', x: 0, y: 47, w: 6, h: 4,  minW: 3, minH: 3  },
-    { i: 'v-17', x: 0, y: 51, w: 6, h: 4,  minW: 3, minH: 3  },
-    { i: 'v-18', x: 0, y: 55, w: 6, h: 5,  minW: 3, minH: 3  },
-    { i: 'v-19', x: 0, y: 60, w: 6, h: 6,  minW: 3, minH: 4  },
-    { i: 'v-20', x: 0, y: 66, w: 6, h: 7,  minW: 3, minH: 4  },
-    { i: 'v-21', x: 0, y: 73, w: 6, h: 7,  minW: 3, minH: 4  },
-    { i: 'v-22', x: 0, y: 80, w: 6, h: 7,  minW: 3, minH: 4  },
+    { i: 'v-26', x: 0, y: 43, w: 6, h: 5,  minW: 3, minH: 3  },
+    { i: 'v-15', x: 0, y: 48, w: 6, h: 4,  minW: 3, minH: 3  },
+    { i: 'v-16', x: 0, y: 52, w: 6, h: 4,  minW: 3, minH: 3  },
+    { i: 'v-17', x: 0, y: 56, w: 6, h: 4,  minW: 3, minH: 3  },
+    { i: 'v-18', x: 0, y: 60, w: 6, h: 5,  minW: 3, minH: 3  },
+    { i: 'v-19', x: 0, y: 65, w: 6, h: 6,  minW: 3, minH: 4  },
+    { i: 'v-20', x: 0, y: 71, w: 6, h: 7,  minW: 3, minH: 4  },
+    { i: 'v-21', x: 0, y: 78, w: 6, h: 7,  minW: 3, minH: 4  },
+    { i: 'v-22', x: 0, y: 85, w: 6, h: 7,  minW: 3, minH: 4  },
   ],
 };
