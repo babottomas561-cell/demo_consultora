@@ -1953,10 +1953,12 @@ async def ventas_productos(
     subrubros_rows = (await db.execute(text(f"""
         SELECT
             s.cod_subrubro,
-            MAX(s.subrubro)                                                           AS nombre,
-            MAX(s.rubro)                                                              AS rubro_nombre,
-            COALESCE(SUM({venta_importe_neto_expr('v')}), 0)                         AS facturado,
-            COUNT(CASE WHEN v.tipo_comprobante='FA' THEN 1 END)                      AS tickets
+            MAX(s.subrubro)                                                                AS nombre,
+            MAX(s.rubro)                                                                   AS rubro_nombre,
+            COALESCE(SUM({venta_importe_neto_expr('v')}), 0)                              AS facturado,
+            COALESCE(SUM({venta_importe_neto_expr('v')} - {venta_costo_neto_expr('v')}), 0) AS margen_abs,
+            COALESCE(SUM(CASE WHEN v.precio_compra_actual IS NOT NULL THEN ABS(v.total) ELSE 0 END), 0) AS total_con_costo,
+            COUNT(CASE WHEN v.tipo_comprobante='FA' THEN 1 END)                           AS tickets
         FROM ventas v
         JOIN (
             SELECT DISTINCT ON (cod_articulo) cod_articulo, cod_subrubro, subrubro, rubro
@@ -1973,6 +1975,9 @@ async def ventas_productos(
     for r in subrubros_rows:
         d = dict(r)
         d["facturado"] = money(d["facturado"])
+        d["margen_abs"] = money(d["margen_abs"])
+        tc = money(d.pop("total_con_costo"))
+        d["margen_pct"] = round(d["margen_abs"] / tc * 100, 1) if tc else 0
         d["pct_total"] = round(d["facturado"] / total_fa * 100, 2)
         subrubros.append(d)
 
