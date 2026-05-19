@@ -124,28 +124,24 @@ export default function ScatterPortafolioWidget() {
           <p className="text-[10px] text-slate-400 ml-auto">Clic en un punto para ver detalle</p>
         </div>
         <div className="flex-1 min-h-0 relative">
-          {/* Etiquetas de cuadrantes BCG */}
+          {/* Etiquetas de cuadrantes BCG — sutiles, en esquinas */}
           <div className="absolute inset-0 pointer-events-none z-10">
-            <div className="absolute top-3 right-3 text-right">
-              <p className="text-[10px] font-bold text-emerald-600">⭐ Estrellas</p>
-              <p className="text-[9px] text-slate-400">{quadrants.stars} prods. — alto vol. + alto margen</p>
-            </div>
-            <div className="absolute top-3 left-12 text-left">
-              <p className="text-[10px] font-bold text-violet-600">💎 Nicho</p>
-              <p className="text-[9px] text-slate-400">{quadrants.niche} prods. — bajo vol. + alto margen</p>
-            </div>
-            <div className="absolute bottom-12 right-3 text-right">
-              <p className="text-[10px] font-bold text-indigo-600">🐄 Vacas</p>
-              <p className="text-[9px] text-slate-400">{quadrants.cows} prods. — alto vol. + bajo margen</p>
-            </div>
-            <div className="absolute bottom-12 left-12 text-left">
-              <p className="text-[10px] font-bold text-slate-500">🐕 Perros</p>
-              <p className="text-[9px] text-slate-400">{quadrants.dogs} prods. — bajo vol. + bajo margen</p>
-            </div>
+            <span className="absolute top-1 right-3 text-[9px] font-semibold text-emerald-600/70" title="Alto volumen + alto margen">
+              ★ Estrellas <span className="text-slate-400 font-normal">({quadrants.stars})</span>
+            </span>
+            <span className="absolute top-1 left-12 text-[9px] font-semibold text-violet-600/70" title="Bajo volumen + alto margen">
+              ◆ Nicho <span className="text-slate-400 font-normal">({quadrants.niche})</span>
+            </span>
+            <span className="absolute bottom-7 right-3 text-[9px] font-semibold text-indigo-600/70" title="Alto volumen + bajo margen">
+              ● Vacas <span className="text-slate-400 font-normal">({quadrants.cows})</span>
+            </span>
+            <span className="absolute bottom-7 left-12 text-[9px] font-semibold text-slate-500/70" title="Bajo volumen + bajo margen">
+              ▾ Perros <span className="text-slate-400 font-normal">({quadrants.dogs})</span>
+            </span>
           </div>
 
           <ResponsiveContainer width="100%" height="100%">
-            <ScatterChart margin={{ left: 8, right: 8, top: 36, bottom: 4 }}>
+            <ScatterChart margin={{ left: 8, right: 8, top: 18, bottom: 4 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
               <XAxis type="number" dataKey="x" name="Unidades"
                 axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10 }}

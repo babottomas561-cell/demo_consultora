@@ -62,17 +62,23 @@ export default function DiaSemanaWidget() {
   if (!data.length) return <p className="p-4 text-sm text-slate-400">Sin datos por día de semana.</p>;
 
   const field = MODES.find(m => m.id === mode).field;
-  const maxVal = Math.max(...data.map(d => Number(d[field] ?? 0)));
-  const minVal = Math.min(...data.filter(d => Number(d[field] ?? 0) > 0).map(d => Number(d[field] ?? 0)));
+  const activos = data.filter(d => Number(d[field] ?? 0) > 0);
+  const maxVal = activos.length ? Math.max(...activos.map(d => Number(d[field]))) : 0;
+  const minVal = activos.length ? Math.min(...activos.map(d => Number(d[field]))) : 0;
 
   const colorFor = (v) => {
-    if (v === maxVal) return '#4f46e5'; // mejor día
-    if (v === minVal && v > 0) return '#fb923c'; // peor día
+    if (v <= 0) return '#e2e8f0';                    // sin actividad
+    if (v === maxVal) return '#4f46e5';              // mejor día
+    if (v === minVal && minVal !== maxVal) return '#fb923c'; // peor día
     return '#a5b4fc';
   };
 
-  const mejorDia = data.reduce((a, b) => (a[field] > b[field] ? a : b), data[0]);
-  const peorDia = data.filter(d => d[field] > 0).reduce((a, b) => (a[field] < b[field] ? a : b), data[0]);
+  const mejorDia = activos.length
+    ? activos.reduce((a, b) => (a[field] > b[field] ? a : b))
+    : data[0];
+  const peorDia = activos.length
+    ? activos.reduce((a, b) => (a[field] < b[field] ? a : b))
+    : data[0];
 
   return (
     <div className="h-full flex flex-col px-3 py-2 gap-2">

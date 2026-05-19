@@ -86,7 +86,9 @@ const KPIS = [
 ];
 
 const KpiCard = ({ kpi, raw, sparkData, comparar }) => {
-  const actual = Number(raw?.actual ?? raw ?? 0);
+  const rawActual = raw?.actual ?? raw;
+  const isNull = rawActual == null;
+  const actual = isNull ? null : Number(rawActual);
   const anterior = raw?.anterior != null ? Number(raw.anterior) : null;
 
   let delta = null;
@@ -112,7 +114,7 @@ const KpiCard = ({ kpi, raw, sparkData, comparar }) => {
         )}
       </div>
       <p className="text-[11px] font-medium text-slate-500 truncate leading-tight">{kpi.label}</p>
-      <p className="text-lg font-bold text-slate-900 tabular-nums leading-none truncate">{kpi.valueFmt(actual)}</p>
+      <p className="text-lg font-bold text-slate-900 tabular-nums leading-none truncate">{isNull ? '—' : kpi.valueFmt(actual)}</p>
       {sparkValues && sparkValues.length > 2 && (
         <div className="mt-0.5">
           <Sparkline
