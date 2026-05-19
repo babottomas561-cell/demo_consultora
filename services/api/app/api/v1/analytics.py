@@ -1772,35 +1772,37 @@ async def ventas_kpis(
     # Solo cuenta facturas con condición venta = cuenta corriente
     dso = None
     try:
-        dso_row = (await db.execute(text(f"""
-            SELECT
-                COALESCE(SUM({venta_importe_neto_expr()}) FILTER (
-                    WHERE condicion_venta_tipo IN ('cta_cte', 'cuenta_corriente', 'CC')
-                ), 0) AS ventas_credito,
-                COALESCE(SUM({venta_importe_neto_expr()}), 0) AS ventas_totales
-            FROM ventas WHERE {where}
-        """), params)).mappings().one()
-        ventas_credito = money(dso_row["ventas_credito"])
-        ventas_totales = money(dso_row["ventas_totales"])
+        # Use a savepoint so a DB error here doesn't abort the outer transaction
+        async with db.begin_nested():
+            dso_row = (await db.execute(text(f"""
+                SELECT
+                    COALESCE(SUM({venta_importe_neto_expr()}) FILTER (
+                        WHERE condicion_venta_tipo IN ('cta_cte', 'cuenta_corriente', 'CC')
+                    ), 0) AS ventas_credito,
+                    COALESCE(SUM({venta_importe_neto_expr()}), 0) AS ventas_totales
+                FROM ventas WHERE {where}
+            """), params)).mappings().one()
+            ventas_credito = money(dso_row["ventas_credito"])
+            ventas_totales = money(dso_row["ventas_totales"])
 
-        saldo_row = (await db.execute(text("""
-            SELECT COALESCE(SUM(saldo_acumulado), 0) AS saldo_total
-            FROM (
-                SELECT cliente_id, saldo_acumulado,
-                       ROW_NUMBER() OVER (PARTITION BY cliente_id ORDER BY id DESC) AS rn
-                FROM cuentas_corrientes_clientes
-            ) t
-            WHERE rn = 1 AND saldo_acumulado > 0
-        """))).mappings().one()
-        saldo_cc = money(saldo_row["saldo_total"])
+            saldo_row = (await db.execute(text("""
+                SELECT COALESCE(SUM(saldo_acumulado), 0) AS saldo_total
+                FROM (
+                    SELECT cliente_id, saldo_acumulado,
+                           ROW_NUMBER() OVER (PARTITION BY cliente_id ORDER BY id DESC) AS rn
+                    FROM cuentas_corrientes_clientes
+                ) t
+                WHERE rn = 1 AND saldo_acumulado > 0
+            """))).mappings().one()
+            saldo_cc = money(saldo_row["saldo_total"])
 
-        dias_periodo = max(1, (filters.hasta - filters.desde).days)
+            dias_periodo = max(1, (filters.hasta - filters.desde).days)
 
-        # Si hay ventas a crédito identificadas, usar ratio puro
-        # Si no (porque el dato condicion_venta_tipo viene vacío), usar fallback con ventas totales
-        denominador = ventas_credito if ventas_credito > 0 else ventas_totales
-        if denominador > 0 and saldo_cc > 0:
-            dso = round(saldo_cc / denominador * dias_periodo, 1)
+            # Si hay ventas a crédito identificadas, usar ratio puro
+            # Si no (porque el dato condicion_venta_tipo viene vacío), usar fallback con ventas totales
+            denominador = ventas_credito if ventas_credito > 0 else ventas_totales
+            if denominador > 0 and saldo_cc > 0:
+                dso = round(saldo_cc / denominador * dias_periodo, 1)
     except Exception:
         dso = None
 
@@ -2151,12 +2153,13 @@ async def ventas_por_vendedor(
     vendedor_names = {}
     cuotas = {}
     try:
-        vd_rows = (await db.execute(text(
-            "SELECT cod_vendedor, nombre, cuota_mensual FROM vendedores"
-        ))).mappings().all()
-        for r in vd_rows:
-            vendedor_names[r["cod_vendedor"]] = r["nombre"]
-            cuotas[r["cod_vendedor"]] = float(r["cuota_mensual"] or 0)
+        async with db.begin_nested():
+            vd_rows = (await db.execute(text(
+                "SELECT cod_vendedor, nombre, cuota_mensual FROM vendedores"
+            ))).mappings().all()
+            for r in vd_rows:
+                vendedor_names[r["cod_vendedor"]] = r["nombre"]
+                cuotas[r["cod_vendedor"]] = float(r["cuota_mensual"] or 0)
     except Exception:
         pass
 
@@ -2179,14 +2182,15 @@ async def ventas_por_vendedor(
         pres_where = "fecha >= :desde AND fecha < :hasta AND cod_vendedor IS NOT NULL"
         if not filters.incluir_anuladas:
             pres_where += " AND (anulada IS NULL OR anulada <> 'S')"
-        presupuestos_rows = (await db.execute(text(f"""
-            SELECT cod_vendedor,
-                   COUNT(*) AS emitidos,
-                   COUNT(CASE WHEN confirmado THEN 1 END) AS confirmados
-            FROM presupuestos
-            WHERE {pres_where}
-            GROUP BY cod_vendedor
-        """), {"desde": params["desde"], "hasta": params["hasta"]})).mappings().all()
+        async with db.begin_nested():
+            presupuestos_rows = (await db.execute(text(f"""
+                SELECT cod_vendedor,
+                       COUNT(*) AS emitidos,
+                       COUNT(CASE WHEN confirmado THEN 1 END) AS confirmados
+                FROM presupuestos
+                WHERE {pres_where}
+                GROUP BY cod_vendedor
+            """), {"desde": params["desde"], "hasta": params["hasta"]})).mappings().all()
     except Exception:
         pass
 
