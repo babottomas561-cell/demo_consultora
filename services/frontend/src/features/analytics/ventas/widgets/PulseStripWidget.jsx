@@ -22,8 +22,8 @@ const fmtShort = (v) => {
 
 const KPIS = [
   {
-    id: 'facturado_neto',
-    label: 'Facturado Neto',
+    id: 'facturado_total',
+    label: 'Facturado c/IVA',
     icon: DollarSign,
     accent: '#4f46e5',
     iconBg: 'bg-indigo-100',
