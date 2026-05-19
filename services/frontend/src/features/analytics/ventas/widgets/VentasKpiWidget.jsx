@@ -5,14 +5,19 @@ import { useFilterStore } from '../../../../store/filterStore';
 const fmtPct = (v) => `${Number(v ?? 0).toFixed(1)}%`;
 
 const KPI_DEFS = {
-  'ventas-kpi-facturado':       { label: 'Facturado neto',     field: 'facturado_neto',   format: 'currency', severity: 'neutral' },
-  'ventas-kpi-tickets':         { label: 'Tickets',            field: 'tickets',          format: 'number',   severity: 'neutral' },
-  'ventas-kpi-ticket-promedio': { label: 'Ticket promedio',    field: 'ticket_promedio',  format: 'currency', severity: 'success' },
-  'ventas-kpi-unidades':        { label: 'Unidades vendidas',  field: 'unidades',         format: 'number',   severity: 'neutral' },
-  'ventas-kpi-clientes':        { label: 'Clientes únicos',    field: 'clientes_unicos',  format: 'number',   severity: 'neutral' },
-  'ventas-kpi-devolucion':      { label: 'Tasa devolución',    field: 'tasa_devolucion',  format: 'percent',  invertTrend: true,  getSeverity: (v) => v > 10 ? 'danger' : v > 5 ? 'warning' : 'success' },
-  'ventas-kpi-iva':             { label: 'IVA débito fiscal',  field: 'iva_debito',       format: 'currency', severity: 'neutral' },
-  'ventas-kpi-margen':          { label: 'Margen bruto est.',  field: 'margen_bruto_pct', format: 'percent',  getSeverity: (v) => v > 30 ? 'success' : v > 15 ? 'neutral' : 'warning' },
+  'ventas-kpi-facturado':       { label: 'Facturado c/IVA',    field: 'facturado_total',        format: 'currency', severity: 'neutral',
+                                   tooltip: 'Total facturado neto de devoluciones (FA − NC), incluye IVA.' },
+  'ventas-kpi-neto-sin-iva':    { label: 'Neto s/IVA',         field: 'facturado_neto_sin_iva', format: 'currency', severity: 'neutral',
+                                   tooltip: 'Base imponible neta: facturado total menos IVA débito.' },
+  'ventas-kpi-tickets':         { label: 'Tickets',            field: 'tickets',                format: 'number',   severity: 'neutral' },
+  'ventas-kpi-ticket-promedio': { label: 'Ticket promedio',    field: 'ticket_promedio',        format: 'currency', severity: 'success' },
+  'ventas-kpi-unidades':        { label: 'Unidades vendidas',  field: 'unidades',               format: 'number',   severity: 'neutral' },
+  'ventas-kpi-clientes':        { label: 'Clientes únicos',    field: 'clientes_unicos',        format: 'number',   severity: 'neutral' },
+  'ventas-kpi-devolucion':      { label: 'Tasa devolución',    field: 'tasa_devolucion',        format: 'percent',  invertTrend: true,
+                                   getSeverity: (v) => v > 10 ? 'danger' : v > 5 ? 'warning' : 'success' },
+  'ventas-kpi-iva':             { label: 'IVA débito fiscal',  field: 'iva_debito',             format: 'currency', severity: 'neutral' },
+  'ventas-kpi-margen':          { label: 'Margen bruto est.',  field: 'margen_bruto_pct',       format: 'percent',  showCoverage: true,
+                                   getSeverity: (v) => v > 30 ? 'success' : v > 15 ? 'neutral' : 'warning' },
 };
 
 const SEVERITY_CLASSES = {
@@ -61,9 +66,10 @@ function VentasKpiWidget({ type }) {
   }
 
   const vsLabel = compareMode === 'anio' ? 'año ant.' : 'per. ant.';
+  const coveragePct = def.showCoverage ? (kpis?.cobertura_costo_pct ?? null) : null;
 
   return (
-    <div className={`h-full flex flex-col justify-center rounded-xl border px-4 py-3 ${cls.card}`}>
+    <div className={`h-full flex flex-col justify-center rounded-xl border px-4 py-3 ${cls.card}`} title={def.tooltip ?? ''}>
       <div className="flex items-center gap-2 mb-1.5">
         <div className={`h-2 w-2 rounded-full shrink-0 ${cls.dot}`} />
         <p className={`text-[11px] font-semibold uppercase tracking-wide truncate ${cls.label}`} title={def.label}>
@@ -80,6 +86,11 @@ function VentasKpiWidget({ type }) {
         comparar && prev != null && (
           <p className="mt-1 text-[11px] text-slate-400">sin variación</p>
         )
+      )}
+      {coveragePct !== null && (
+        <p className={`mt-1 text-[10px] font-medium ${coveragePct >= 80 ? 'text-slate-400' : 'text-amber-600'}`}>
+          {coveragePct < 80 && '⚠ '}Cobertura de costos: {coveragePct.toFixed(0)}%
+        </p>
       )}
     </div>
   );

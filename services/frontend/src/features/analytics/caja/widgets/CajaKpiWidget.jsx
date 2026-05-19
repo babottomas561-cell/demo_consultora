@@ -5,12 +5,12 @@ import { useFilterStore } from '../../../../store/filterStore';
 
 const KPI_DEFS = {
   'caja-kpi-ingresos':      { label: 'Ingresos totales',   getValue: (k) => k?.ingresos,        format: 'currency', severity: 'success' },
-  'caja-kpi-egresos':       { label: 'Egresos totales',    getValue: (k) => k?.egresos,         format: 'currency', invertTrend: true },
+  'caja-kpi-egresos':       { label: 'Egresos (caja + compras)', getValue: (k) => k?.egresos, format: 'currency', invertTrend: true },
   'caja-kpi-flujo-neto':    { label: 'Flujo neto',         getValue: (k) => k?.flujo_neto,      format: 'currency', getSeverity: (v) => v >= 0 ? 'success' : 'danger' },
   'caja-kpi-movimientos':   { label: 'Movimientos',        getValue: (k) => k?.movimientos,     format: 'number' },
   'caja-kpi-saldo-actual':  { label: 'Saldo actual',       getValue: (k) => k?.saldo_actual,    format: 'currency', getSeverity: (v) => v >= 0 ? 'success' : 'danger' },
   'caja-kpi-mayor-ingreso': { label: 'Mayor ingreso',      getValue: (k) => k?.mayor_ingreso,   format: 'currency', severity: 'success' },
-  'caja-kpi-mayor-egreso':  { label: 'Mayor egreso',       getValue: (k) => k?.mayor_egreso,    format: 'currency', invertTrend: true },
+  'caja-kpi-mayor-egreso':  { label: 'Mayor egreso caja',  getValue: (k) => k?.mayor_egreso,    format: 'currency', invertTrend: true, hideIfZero: true },
   'caja-kpi-ratio':         { label: 'Ratio cobro/pago',   getValue: (k) => k?.ratio_cobro_pago, format: 'number', getSeverity: (v) => v >= 1 ? 'success' : 'warning' },
 };
 
@@ -48,6 +48,21 @@ function CajaKpiWidget({ type }) {
   const actual = raw?.actual ?? (typeof raw === 'object' ? 0 : raw) ?? 0;
   const prev   = raw?.anterior;
   const formatted = formatValue(raw, def.format);
+
+  // Hide misleading $0 values
+  if (def.hideIfZero && Number(actual) === 0) {
+    return (
+      <div className="h-full flex flex-col justify-center rounded-xl border p-4 bg-slate-50 border-slate-200">
+        <div className="flex items-center gap-2 mb-2">
+          <div className="h-2 w-2 rounded-full shrink-0 bg-slate-300" />
+          <p className="text-xs font-medium uppercase tracking-wide truncate text-slate-400">{def.label}</p>
+        </div>
+        <p className="text-2xl font-bold leading-tight text-slate-300">—</p>
+        <p className="mt-1 text-[10px] text-slate-400">Sin movimientos de egreso en caja</p>
+      </div>
+    );
+  }
+
   const severity = def.getSeverity ? def.getSeverity(Number(actual)) : (def.severity ?? 'neutral');
   const cls = SEVERITY_CLASSES[severity] ?? SEVERITY_CLASSES.neutral;
 

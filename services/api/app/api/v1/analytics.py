@@ -237,14 +237,17 @@ async def _fetch_kpi_row(db: AsyncSession, where: str, params: dict) -> dict:
             COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN ABS(total) ELSE 0 END),0)            AS fa_bruto,
             COALESCE(SUM(CASE WHEN tipo_comprobante='NC' THEN ABS(total) ELSE 0 END),0)            AS nc_total,
             COALESCE(SUM(CASE WHEN tipo_comprobante='ND' THEN ABS(total) ELSE 0 END),0)            AS nd_total,
-            COALESCE(SUM({venta_importe_neto_expr()}),0)                                          AS facturado_neto,
-            COALESCE(SUM({venta_iva_neto_expr()}),0)                                              AS iva_debito,
-            COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END)                                 AS tickets,
-            COUNT(DISTINCT CASE WHEN tipo_comprobante='FA' THEN cliente_id END)               AS clientes_unicos,
-            COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN cantidad ELSE 0 END),0)         AS unidades,
-            COALESCE(SUM({venta_importe_neto_expr()} - {venta_costo_neto_expr()}),0)           AS margen_dolares,
+            COALESCE(SUM({venta_importe_neto_expr()}),0)                                           AS facturado_total,
+            COALESCE(SUM({venta_iva_neto_expr()}),0)                                               AS iva_debito,
+            COALESCE(SUM({venta_importe_neto_expr()} - {venta_iva_neto_expr()}),0)                 AS facturado_neto_sin_iva,
+            COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END)                                      AS tickets,
+            COUNT(DISTINCT CASE WHEN tipo_comprobante='FA' THEN cliente_id END)                    AS clientes_unicos,
+            COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN cantidad ELSE 0 END),0)              AS unidades,
+            COALESCE(SUM({venta_importe_neto_expr()} - {venta_costo_neto_expr()}),0)               AS margen_dolares,
             COALESCE(SUM(
-              CASE WHEN precio_compra_actual IS NOT NULL THEN ABS(total) ELSE 0 END),0) AS total_con_costo
+              CASE WHEN precio_compra_actual IS NOT NULL THEN ABS(total) ELSE 0 END),0) AS total_con_costo,
+            COUNT(CASE WHEN precio_compra_actual IS NOT NULL THEN 1 END)                AS items_con_costo,
+            COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END)                           AS items_fa
         FROM ventas
         WHERE {where}
     """), params)).mappings().one()
@@ -1763,10 +1766,16 @@ async def ventas_kpis(
     unidades = money(row["unidades"])
     margen_d = money(row["margen_dolares"])
     total_con_costo = money(row["total_con_costo"])
-    facturado_neto = money(row["facturado_neto"])
-    ticket_prom = facturado_neto / tickets if tickets else 0
+    facturado_total = money(row["facturado_total"])
+    facturado_neto_sin_iva = money(row["facturado_neto_sin_iva"])
+    items_con_costo = int(row["items_con_costo"] or 0)
+    items_fa = int(row["items_fa"] or 0)
+    cobertura_costo_pct = round(items_con_costo / items_fa * 100, 1) if items_fa else 0
+
+    ticket_prom = facturado_total / tickets if tickets else 0
     tasa_dev = min((nc / fa * 100) if fa else 0, 100.0)
-    margen_pct = (margen_d / total_con_costo * 100) if total_con_costo else 0
+    # Use facturado_total as denominator (same base as Estado de Resultados) for consistency
+    margen_pct = (margen_d / facturado_total * 100) if facturado_total else 0
 
     # DSO (Days Sales Outstanding) — días promedio de cobro
     # Fórmula: (saldo cuentas por cobrar / ventas a crédito) * días del período
@@ -1817,20 +1826,22 @@ async def ventas_kpis(
         prev_row = await _fetch_kpi_row(db, where, prev_params)
         ant_fa = money(prev_row["fa_bruto"])
         ant_nc = money(prev_row["nc_total"])
-        ant["facturado_neto"] = money(prev_row["facturado_neto"])
+        ant["facturado_total"] = money(prev_row["facturado_total"])
+        ant["facturado_neto_sin_iva"] = money(prev_row["facturado_neto_sin_iva"])
         ant["facturado_bruto"] = ant_fa
         ant["iva_debito"] = money(prev_row["iva_debito"])
         ant["tickets"] = int(prev_row["tickets"] or 0)
-        ant["ticket_promedio"] = ant["facturado_neto"] / ant["tickets"] if ant["tickets"] else 0
+        ant["ticket_promedio"] = ant["facturado_total"] / ant["tickets"] if ant["tickets"] else 0
         ant["unidades"] = money(prev_row["unidades"])
         ant["tasa_devolucion"] = min((ant_nc / ant_fa * 100) if ant_fa else 0, 100.0)
         ant["clientes_unicos"] = int(prev_row["clientes_unicos"] or 0)
         ant_margen_d = money(prev_row["margen_dolares"])
-        ant_total_con_costo = money(prev_row["total_con_costo"])
-        ant["margen_bruto_pct"] = (ant_margen_d / ant_total_con_costo * 100) if ant_total_con_costo else 0
+        ant_facturado_total = money(prev_row["facturado_total"])
+        ant["margen_bruto_pct"] = (ant_margen_d / ant_facturado_total * 100) if ant_facturado_total else 0
 
     return {
-        "facturado_neto": _kpi_obj(facturado_neto, ant.get("facturado_neto")),
+        "facturado_total": _kpi_obj(facturado_total, ant.get("facturado_total")),
+        "facturado_neto_sin_iva": _kpi_obj(facturado_neto_sin_iva, ant.get("facturado_neto_sin_iva")),
         "facturado_bruto": _kpi_obj(fa, ant.get("facturado_bruto")),
         "iva_debito": _kpi_obj(iva, ant.get("iva_debito")),
         "tickets": _kpi_obj(tickets, ant.get("tickets")),
@@ -1840,6 +1851,7 @@ async def ventas_kpis(
         "clientes_unicos": _kpi_obj(clientes, ant.get("clientes_unicos")),
         "margen_bruto_pct": _kpi_obj(round(margen_pct, 2), ant.get("margen_bruto_pct")),
         "dso_dias": {"actual": dso} if dso is not None else {"actual": None},
+        "cobertura_costo_pct": cobertura_costo_pct,
     }
 
 
@@ -1910,12 +1922,14 @@ async def ventas_temporal(
             ma = float(d["margen_abs"] or 0)
             d["margen_pct"] = round(ma / tc * 100, 1) if tc else None
             prev_map[d["periodo"]] = d
+        # Align by relative position (index) — same bucket position across periods
         prev_vals = list(prev_map.values())
         for i, row in enumerate(result):
             if i < len(prev_vals):
                 row["facturado_anterior"] = prev_vals[i]["facturado"]
                 row["tickets_anterior"] = prev_vals[i]["tickets"]
                 row["margen_pct_anterior"] = prev_vals[i].get("margen_pct")
+                row["periodo_anterior"] = prev_vals[i]["periodo"]
 
     return {"series": result}
 
@@ -2369,13 +2383,30 @@ async def ventas_por_comprobante(
         GROUP BY punto_de_venta ORDER BY facturado DESC
     """), params)).mappings().all()
 
+    # Resolve punto_de_venta names from catalogue table
+    pdv_names: dict[str, str] = {}
+    try:
+        pdv_cat = (await db.execute(text("SELECT id, nombre FROM puntos_de_venta"))).mappings().all()
+        pdv_names = {str(r["id"]): r["nombre"] for r in pdv_cat}
+    except Exception:
+        pass
+
     total_fa = sum(money(r["importe"]) for r in tipo_rows if r["tipo_comprobante"] == "FA") or 1
 
     return {
         "por_tipo": [{"tipo": r["tipo_comprobante"], "cantidad": int(r["cantidad"]), "importe": money(r["importe"])} for r in tipo_rows],
         "por_tipo_factura": [{"tipo": r["tipo_factura"], "cantidad": int(r["cantidad"]), "importe": money(r["importe"])} for r in factura_rows],
         "por_condicion_venta": [{"condicion": r["condicion"], "cantidad": int(r["cantidad"]), "importe": money(r["importe"])} for r in condicion_rows],
-        "por_punto_de_venta": [{"punto": r["punto_de_venta"], "tickets": int(r["tickets"]), "facturado": money(r["facturado"]), "pct_total": round(money(r["facturado"]) / total_fa * 100, 1)} for r in pdv_rows],
+        "por_punto_de_venta": [
+            {
+                "punto": r["punto_de_venta"],
+                "nombre": pdv_names.get(str(r["punto_de_venta"]), f"Pto. {r['punto_de_venta']}"),
+                "tickets": int(r["tickets"]),
+                "facturado": money(r["facturado"]),
+                "pct_total": round(money(r["facturado"]) / total_fa * 100, 1),
+            }
+            for r in pdv_rows
+        ],
     }
 
 
@@ -2441,71 +2472,78 @@ async def ventas_aging(
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    tenant_schema = await get_tenant_schema(current_user, db, company_id)
-    await set_tenant_search_path(db, tenant_schema)
+    empty = {'buckets': [], 'total_pendiente': 0, 'total_vigente': 0, 'top_deudores': []}
+    try:
+        tenant_schema = await get_tenant_schema(current_user, db, company_id)
+        await set_tenant_search_path(db, tenant_schema)
+    except Exception:
+        return empty
 
-    buckets_raw = (await db.execute(text("""
-        SELECT
-            CASE
-                WHEN fecha_venc > CURRENT_DATE THEN 'vigente'
-                WHEN dias_vencido <= 30  THEN '0_30'
-                WHEN dias_vencido <= 60  THEN '31_60'
-                WHEN dias_vencido <= 90  THEN '61_90'
-                ELSE '90_mas'
-            END AS bucket,
-            COUNT(*)       AS cantidad,
-            SUM(importe)   AS total
-        FROM (
+    try:
+        buckets_raw = (await db.execute(text("""
             SELECT
-                importe,
-                COALESCE(fecha_vencimiento, fecha + INTERVAL '30 days') AS fecha_venc,
-                GREATEST(0, CURRENT_DATE - COALESCE(fecha_vencimiento, fecha + INTERVAL '30 days')::date) AS dias_vencido
-            FROM cuentas_corrientes_clientes
-            WHERE tipo IN ('FA','ND','saldo') AND importe > 0
-        ) sub
-        GROUP BY 1
-    """))).mappings().all()
+                CASE
+                    WHEN fecha_venc > CURRENT_DATE THEN 'vigente'
+                    WHEN dias_vencido <= 30  THEN '0_30'
+                    WHEN dias_vencido <= 60  THEN '31_60'
+                    WHEN dias_vencido <= 90  THEN '61_90'
+                    ELSE '90_mas'
+                END AS bucket,
+                COUNT(*)       AS cantidad,
+                SUM(importe)   AS total
+            FROM (
+                SELECT
+                    importe,
+                    COALESCE(fecha_vencimiento, fecha + INTERVAL '30 days') AS fecha_venc,
+                    GREATEST(0, CURRENT_DATE - COALESCE(fecha_vencimiento, fecha + INTERVAL '30 days')::date) AS dias_vencido
+                FROM cuentas_corrientes_clientes
+                WHERE tipo IN ('FA','ND','saldo') AND importe > 0
+            ) sub
+            GROUP BY 1
+        """))).mappings().all()
 
-    bucket_order = ['vigente', '0_30', '31_60', '61_90', '90_mas']
-    bucket_labels = {
-        'vigente': 'Vigente', '0_30': '0-30 días',
-        '31_60': '31-60 días', '61_90': '61-90 días', '90_mas': '+90 días',
-    }
-    buckets_map = {r['bucket']: dict(r) for r in buckets_raw}
-    buckets = [
-        {
-            'bucket': k,
-            'label': bucket_labels[k],
-            'cantidad': int(buckets_map[k]['cantidad']) if k in buckets_map else 0,
-            'total': round(money(buckets_map[k]['total']), 2) if k in buckets_map else 0,
+        bucket_order = ['vigente', '0_30', '31_60', '61_90', '90_mas']
+        bucket_labels = {
+            'vigente': 'Vigente', '0_30': '0-30 días',
+            '31_60': '31-60 días', '61_90': '61-90 días', '90_mas': '+90 días',
         }
-        for k in bucket_order
-    ]
+        buckets_map = {r['bucket']: dict(r) for r in buckets_raw}
+        buckets = [
+            {
+                'bucket': k,
+                'label': bucket_labels[k],
+                'cantidad': int(buckets_map[k]['cantidad']) if k in buckets_map else 0,
+                'total': round(money(buckets_map[k]['total']), 2) if k in buckets_map else 0,
+            }
+            for k in bucket_order
+        ]
 
-    total_pendiente = sum(b['total'] for b in buckets if b['bucket'] != 'vigente')
-    total_vigente = next((b['total'] for b in buckets if b['bucket'] == 'vigente'), 0)
+        total_pendiente = sum(b['total'] for b in buckets if b['bucket'] != 'vigente')
+        total_vigente = next((b['total'] for b in buckets if b['bucket'] == 'vigente'), 0)
 
-    top_deudores = (await db.execute(text("""
-        SELECT cliente_id, MAX(cliente_nombre) AS nombre, saldo_acumulado
-        FROM (
-            SELECT cliente_id, cliente_nombre, saldo_acumulado,
-                   ROW_NUMBER() OVER (PARTITION BY cliente_id ORDER BY id DESC) AS rn
-            FROM cuentas_corrientes_clientes
-        ) t
-        WHERE rn = 1 AND saldo_acumulado > 0
-        ORDER BY saldo_acumulado DESC
-        LIMIT 10
-    """))).mappings().all()
+        top_deudores = (await db.execute(text("""
+            SELECT cliente_id, MAX(cliente_nombre) AS nombre, saldo_acumulado
+            FROM (
+                SELECT cliente_id, cliente_nombre, saldo_acumulado,
+                       ROW_NUMBER() OVER (PARTITION BY cliente_id ORDER BY id DESC) AS rn
+                FROM cuentas_corrientes_clientes
+            ) t
+            WHERE rn = 1 AND saldo_acumulado > 0
+            ORDER BY saldo_acumulado DESC
+            LIMIT 10
+        """))).mappings().all()
 
-    return {
-        'buckets': buckets,
-        'total_pendiente': round(total_pendiente, 2),
-        'total_vigente': round(total_vigente, 2),
-        'top_deudores': [
-            {'cliente_id': r['cliente_id'], 'nombre': r['nombre'], 'saldo': round(money(r['saldo_acumulado']), 2)}
-            for r in top_deudores
-        ],
-    }
+        return {
+            'buckets': buckets,
+            'total_pendiente': round(total_pendiente, 2),
+            'total_vigente': round(total_vigente, 2),
+            'top_deudores': [
+                {'cliente_id': r['cliente_id'], 'nombre': r['nombre'], 'saldo': round(money(r['saldo_acumulado']), 2)}
+                for r in top_deudores
+            ],
+        }
+    except Exception:
+        return empty
 
 
 @router.get("/ventas/ticket-dist")
@@ -5162,11 +5200,14 @@ async def caja_kpis(
         saldo_row = {"saldo_actual": 0}
 
     ingresos = float(row["ingresos"] or 0)
-    egresos = float(row["egresos_caja"] or 0) + compras_egresos
+    egresos_caja = float(row["egresos_caja"] or 0)
+    egresos = egresos_caja + compras_egresos
 
     return {
         "ingresos":      {"actual": round(ingresos, 2)},
         "egresos":       {"actual": round(egresos, 2)},
+        "egresos_caja":  {"actual": round(egresos_caja, 2)},
+        "compras_periodo": {"actual": round(compras_egresos, 2)},
         "flujo_neto":    {"actual": round(ingresos - egresos, 2)},
         "movimientos":   {"actual": int(row["movimientos"] or 0)},
         "saldo_actual":  {"actual": round(float(saldo_row["saldo_actual"] or 0), 2)},

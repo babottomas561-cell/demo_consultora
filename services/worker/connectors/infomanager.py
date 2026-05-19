@@ -934,6 +934,19 @@ class InfomanagerConnector:
     def obtener_vendedores(self) -> list[dict[str, Any]]:
         return self.fetch_paginated("/api/v1/vendedores", max_pages=1)
 
+    def sync_puntos_de_venta(self) -> list[dict[str, Any]]:
+        data = self.fetch_paginated("/api/v1/puntos-de-venta", max_pages=1)
+        return [
+            {
+                "id": _as_int(p.get("id") or p.get("punto_de_venta") or p.get("cod_punto_venta")),
+                "nombre": p.get("nombre") or p.get("descripcion") or f"Pto. Venta {p.get('id')}",
+                "cod_empresa": _as_int(p.get("cod_empresa") or p.get("empresa")),
+                "habilitado": str(p.get("habilitado", "1")) not in ("0", "false", "False", "N"),
+            }
+            for p in data
+            if _as_int(p.get("id") or p.get("punto_de_venta") or p.get("cod_punto_venta"))
+        ]
+
     def obtener_listas_precios(self) -> list[dict[str, Any]]:
         return self.fetch_paginated("/api/v1/listaprecios/cabeceras/all", max_pages=1)
 

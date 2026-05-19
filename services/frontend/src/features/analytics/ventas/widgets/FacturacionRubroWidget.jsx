@@ -61,7 +61,9 @@ export default function FacturacionRubroWidget() {
     return <ChartSkeleton />;
   }
 
-  const rubros = productos?.por_rubro ?? [];
+  const rubros = productos?.por_rubro?.length
+    ? productos.por_rubro
+    : (productos?.por_subrubro ?? []);
   if (!rubros.length) return <p className="p-4 text-sm text-slate-400">Sin datos de rubros.</p>;
 
   return (

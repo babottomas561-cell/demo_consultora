@@ -1,21 +1,25 @@
 import { formatCurrency } from '../../analyticsUtils';
 import { useInfomanagerFetch } from '../../infomanager/useInfomanagerFetch';
 import { WidgetShell, Badge, pctColor } from './_shared';
+import { buildEficienciaCobranza } from './eficienciaCobranzaUtils';
 
 export default function EficienciaCobranzaWidget() {
-  const { data, loading, error, refetch } = useInfomanagerFetch('reportes/facturas-con-pagos', (f) => ({
+  const { data, loading, error, refetch } = useInfomanagerFetch('caja/recibos', (f) => ({
     desde: f.desde || undefined,
     hasta: f.hasta || undefined,
+    cod_empresa: f.cod_empresa?.[0] ?? undefined,
+    limit: 5000,
   }));
-  const filas = data?.filas ?? [];
+  const resumen = buildEficienciaCobranza(data);
+  const filas = resumen.filas;
   const kpis = data
     ? [
-        { label: 'Facturado', value: formatCurrency(data.kpi?.total_facturado || 0) },
-        { label: 'Cobrado', value: formatCurrency(data.kpi?.total_cobrado || 0), className: 'text-green-700' },
+        { label: 'Facturado', value: formatCurrency(resumen.kpi.total_facturado || 0) },
+        { label: 'Cobrado', value: formatCurrency(resumen.kpi.total_cobrado || 0), className: 'text-green-700' },
         {
           label: 'Eficiencia',
-          value: `${data.kpi?.pct_eficiencia_cobranza ?? 0}%`,
-          sub: `${data.kpi?.facturas_cobradas ?? 0} / ${data.kpi?.total_facturas ?? 0} facturas`,
+          value: `${resumen.kpi.pct_eficiencia_cobranza ?? 0}%`,
+          sub: `${resumen.kpi.facturas_cobradas ?? 0} / ${resumen.kpi.total_facturas ?? 0} facturas`,
         },
       ]
     : null;
@@ -26,7 +30,7 @@ export default function EficienciaCobranzaWidget() {
       error={error}
       onRetry={refetch}
       kpis={kpis}
-      empty={!loading && !error && filas.length === 0 ? 'Sin facturas en el período' : null}
+      empty={!loading && !error && filas.length === 0 ? 'Sin recibos en el período' : null}
     >
       <table className="min-w-full text-left text-xs">
         <thead className="sticky top-0 bg-slate-50 text-[11px] uppercase tracking-wide text-slate-400">

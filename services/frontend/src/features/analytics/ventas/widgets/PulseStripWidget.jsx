@@ -78,7 +78,7 @@ const KPIS = [
     accent: '#dc2626',
     iconBg: 'bg-red-100',
     iconColor: 'text-red-600',
-    valueFmt: (v) => v != null ? `${Number(v).toFixed(0)} d` : '—',
+    valueFmt: (v) => (v != null && !Number.isNaN(Number(v))) ? `${Number(v).toFixed(0)} d` : '—',
     sparkKey: null,
     getSeverity: (v) => v == null ? 'neutral' : v > 60 ? 'danger' : v > 30 ? 'warning' : 'success',
     invertTrend: true,
@@ -193,7 +193,7 @@ export default function PulseStripWidget() {
         <div className="shrink-0 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
           <span className="text-base leading-none">⚠</span>
           <span>
-            <strong>{productosBajoCosto} producto{productosBajoCosto !== 1 ? 's' : ''}</strong> se vendieron por debajo del costo en este período.
+            <strong>{productosBajoCosto} producto{productosBajoCosto !== 1 ? 's' : ''}</strong> {productosBajoCosto !== 1 ? 'se vendieron' : 'se vendió'} por debajo del costo en este período.
             {coberturaCosto != null && coberturaCosto < 60 && (
               <span className="ml-1 text-red-500">(solo {coberturaCosto}% de líneas tienen costo cargado — el margen puede estar subestimado)</span>
             )}

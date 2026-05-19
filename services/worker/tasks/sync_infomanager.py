@@ -395,6 +395,19 @@ def sync_company(self, company_id: int, connector_id: int):
                 deposito,
             )
 
+        for pdv in im.sync_puntos_de_venta():
+            cur.execute(
+                """
+                INSERT INTO puntos_de_venta (id, nombre, cod_empresa, habilitado)
+                VALUES (%(id)s, %(nombre)s, %(cod_empresa)s, %(habilitado)s)
+                ON CONFLICT (id) DO UPDATE SET
+                  nombre=EXCLUDED.nombre,
+                  cod_empresa=EXCLUDED.cod_empresa,
+                  habilitado=EXCLUDED.habilitado
+                """,
+                pdv,
+            )
+
         stock_data = im.sync_stock()
         for stock in stock_data:
             cur.execute(
@@ -1373,6 +1386,20 @@ def sync_incremental(tenant_schema: str, erp_config: dict, connector_id: int = N
             )
         counts["vendedores"] = 1
 
+        for pdv in im.sync_puntos_de_venta():
+            cur.execute(
+                """
+                INSERT INTO puntos_de_venta (id, nombre, cod_empresa, habilitado)
+                VALUES (%(id)s, %(nombre)s, %(cod_empresa)s, %(habilitado)s)
+                ON CONFLICT (id) DO UPDATE SET
+                  nombre=EXCLUDED.nombre,
+                  cod_empresa=EXCLUDED.cod_empresa,
+                  habilitado=EXCLUDED.habilitado
+                """,
+                pdv,
+            )
+        counts["puntos_de_venta"] = 1
+
         _upsert_listas_precios(cur, im.obtener_listas_precios())
         counts["listas_precios"] = 1
 
@@ -1468,6 +1495,20 @@ def sync_completo(tenant_schema: str, erp_config: dict, connector_id: int = None
                     True,
                 ),
             )
+
+        for pdv in im.sync_puntos_de_venta():
+            cur.execute(
+                """
+                INSERT INTO puntos_de_venta (id, nombre, cod_empresa, habilitado)
+                VALUES (%(id)s, %(nombre)s, %(cod_empresa)s, %(habilitado)s)
+                ON CONFLICT (id) DO UPDATE SET
+                  nombre=EXCLUDED.nombre,
+                  cod_empresa=EXCLUDED.cod_empresa,
+                  habilitado=EXCLUDED.habilitado
+                """,
+                pdv,
+            )
+        counts["puntos_de_venta"] = 1
 
         listas = im.obtener_listas_precios()
         _upsert_listas_precios(cur, listas)
