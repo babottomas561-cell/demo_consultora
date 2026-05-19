@@ -1860,6 +1860,7 @@ async def ventas_kpis(
 
     return {
         "facturado_total": _kpi_obj(facturado_total, ant.get("facturado_total")),
+        "facturado_neto": _kpi_obj(facturado_total, ant.get("facturado_total")),  # backward compat alias
         "facturado_neto_sin_iva": _kpi_obj(facturado_neto_sin_iva, ant.get("facturado_neto_sin_iva")),
         "facturado_bruto": _kpi_obj(fa, ant.get("facturado_bruto")),
         "iva_debito": _kpi_obj(iva, ant.get("iva_debito")),
