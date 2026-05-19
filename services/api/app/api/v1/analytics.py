@@ -1765,6 +1765,43 @@ async def ventas_kpis(
     tasa_dev = min((nc / fa * 100) if fa else 0, 100.0)
     margen_pct = (margen_d / total_con_costo * 100) if total_con_costo else 0
 
+    # DSO (Days Sales Outstanding) — días promedio de cobro
+    # Fórmula: (saldo cuentas por cobrar / ventas a crédito) * días del período
+    # Solo cuenta facturas con condición venta = cuenta corriente
+    dso = None
+    try:
+        dso_row = (await db.execute(text(f"""
+            SELECT
+                COALESCE(SUM({venta_importe_neto_expr()}) FILTER (
+                    WHERE condicion_venta_tipo IN ('cta_cte', 'cuenta_corriente', 'CC')
+                ), 0) AS ventas_credito,
+                COALESCE(SUM({venta_importe_neto_expr()}), 0) AS ventas_totales
+            FROM ventas WHERE {where}
+        """), params)).mappings().one()
+        ventas_credito = money(dso_row["ventas_credito"])
+        ventas_totales = money(dso_row["ventas_totales"])
+
+        saldo_row = (await db.execute(text("""
+            SELECT COALESCE(SUM(saldo_acumulado), 0) AS saldo_total
+            FROM (
+                SELECT cliente_id, saldo_acumulado,
+                       ROW_NUMBER() OVER (PARTITION BY cliente_id ORDER BY id DESC) AS rn
+                FROM cuentas_corrientes_clientes
+            ) t
+            WHERE rn = 1 AND saldo_acumulado > 0
+        """))).mappings().one()
+        saldo_cc = money(saldo_row["saldo_total"])
+
+        dias_periodo = max(1, (filters.hasta - filters.desde).days)
+
+        # Si hay ventas a crédito identificadas, usar ratio puro
+        # Si no (porque el dato condicion_venta_tipo viene vacío), usar fallback con ventas totales
+        denominador = ventas_credito if ventas_credito > 0 else ventas_totales
+        if denominador > 0 and saldo_cc > 0:
+            dso = round(saldo_cc / denominador * dias_periodo, 1)
+    except Exception:
+        dso = None
+
     # previous period
     ant: dict[str, Optional[float]] = {}
     if filters.comparar_anterior:
@@ -1797,6 +1834,7 @@ async def ventas_kpis(
         "tasa_devolucion": _kpi_obj(round(tasa_dev, 2), ant.get("tasa_devolucion")),
         "clientes_unicos": _kpi_obj(clientes, ant.get("clientes_unicos")),
         "margen_bruto_pct": _kpi_obj(round(margen_pct, 2), ant.get("margen_bruto_pct")),
+        "dso_dias": {"actual": dso} if dso is not None else {"actual": None},
     }
 
 
@@ -2627,6 +2665,237 @@ async def ventas_cohort(
         cohorts[cm]['retention'][int(r['month_offset'])] = int(r['retention_pct'])
 
     return {'cohorts': list(cohorts.values()), 'max_offset': meses - 1}
+
+
+@router.get("/ventas/clientes-riesgo")
+async def ventas_clientes_riesgo(
+    company_id: int = None,
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Clientes que compraron en el período anterior pero NO en el actual.
+
+    Tres categorías:
+    - perdidos: compraban en período anterior, 0 compras en actual
+    - en_caida: compraron en ambos pero el actual cayó >40% vs. anterior
+    - nuevos: primera compra en el período actual (vinieron por primera vez)
+    """
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+
+    params = filters.sql_params()
+    where = _ventas_base_where(filters)
+    prev_desde, prev_hasta = _prev_period(filters)
+    prev_params = dict(params)
+    prev_params["desde"] = prev_desde
+    prev_params["hasta"] = prev_hasta
+
+    # Facturado actual por cliente
+    actual_rows = (await db.execute(text(f"""
+        SELECT cliente_id,
+               COALESCE(MAX(cliente_nombre), cliente_id) AS cliente_nombre,
+               COALESCE(SUM({venta_importe_neto_expr()}), 0) AS facturado,
+               COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END) AS tickets,
+               MAX(fecha) AS ultima_compra
+        FROM ventas WHERE {where}
+        GROUP BY cliente_id
+    """), params)).mappings().all()
+    actual_map = {r["cliente_id"]: dict(r) for r in actual_rows}
+
+    # Facturado período anterior por cliente
+    prev_rows = (await db.execute(text(f"""
+        SELECT cliente_id,
+               COALESCE(MAX(cliente_nombre), cliente_id) AS cliente_nombre,
+               COALESCE(SUM({venta_importe_neto_expr()}), 0) AS facturado,
+               MAX(fecha) AS ultima_compra
+        FROM ventas WHERE {where}
+        GROUP BY cliente_id
+    """), prev_params)).mappings().all()
+    prev_map = {r["cliente_id"]: dict(r) for r in prev_rows}
+
+    # Clientes históricos (cualquier compra antes del período anterior) — para detectar nuevos
+    hist_rows = (await db.execute(text(f"""
+        SELECT DISTINCT cliente_id FROM ventas
+        WHERE fecha < :prev_desde AND tipo_comprobante='FA'
+    """), {"prev_desde": prev_desde})).all()
+    historicos = {r[0] for r in hist_rows}
+
+    perdidos = []
+    en_caida = []
+    nuevos = []
+
+    for cli_id, prev in prev_map.items():
+        prev_fact = money(prev["facturado"])
+        if prev_fact <= 0:
+            continue
+        actual = actual_map.get(cli_id)
+        actual_fact = money(actual["facturado"]) if actual else 0
+
+        if actual_fact <= 0:
+            perdidos.append({
+                "cod_cliente": cli_id,
+                "cliente_nombre": prev["cliente_nombre"],
+                "facturado_anterior": prev_fact,
+                "facturado_actual": 0,
+                "variacion_pct": -100,
+                "ultima_compra": prev["ultima_compra"].isoformat() if prev["ultima_compra"] else None,
+            })
+        else:
+            var = (actual_fact - prev_fact) / prev_fact * 100
+            if var <= -40:
+                en_caida.append({
+                    "cod_cliente": cli_id,
+                    "cliente_nombre": prev["cliente_nombre"],
+                    "facturado_anterior": prev_fact,
+                    "facturado_actual": actual_fact,
+                    "variacion_pct": round(var, 1),
+                    "ultima_compra": actual["ultima_compra"].isoformat() if actual["ultima_compra"] else None,
+                })
+
+    for cli_id, actual in actual_map.items():
+        if cli_id in historicos or cli_id in prev_map:
+            continue
+        nuevos.append({
+            "cod_cliente": cli_id,
+            "cliente_nombre": actual["cliente_nombre"],
+            "facturado_actual": money(actual["facturado"]),
+            "tickets": int(actual["tickets"] or 0),
+            "primera_compra": actual["ultima_compra"].isoformat() if actual["ultima_compra"] else None,
+        })
+
+    # Ordenar por importancia (mayor facturado primero)
+    perdidos.sort(key=lambda x: x["facturado_anterior"], reverse=True)
+    en_caida.sort(key=lambda x: x["facturado_anterior"] - x["facturado_actual"], reverse=True)
+    nuevos.sort(key=lambda x: x["facturado_actual"], reverse=True)
+
+    return {
+        "perdidos": perdidos[:30],
+        "en_caida": en_caida[:30],
+        "nuevos": nuevos[:30],
+        "totales": {
+            "perdidos_cnt": len(perdidos),
+            "perdidos_facturado_ant": sum(p["facturado_anterior"] for p in perdidos),
+            "en_caida_cnt": len(en_caida),
+            "en_caida_riesgo": sum(p["facturado_anterior"] - p["facturado_actual"] for p in en_caida),
+            "nuevos_cnt": len(nuevos),
+            "nuevos_facturado": sum(n["facturado_actual"] for n in nuevos),
+        },
+    }
+
+
+@router.get("/ventas/dia-semana")
+async def ventas_dia_semana(
+    company_id: int = None,
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Facturación, tickets y ticket promedio agregado por día de la semana."""
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+    params = filters.sql_params()
+    where = _ventas_base_where(filters)
+
+    rows = (await db.execute(text(f"""
+        SELECT
+            EXTRACT(ISODOW FROM fecha)::int AS dow,
+            COALESCE(SUM({venta_importe_neto_expr()}), 0)                    AS facturado,
+            COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END)                AS tickets,
+            COUNT(DISTINCT fecha::date) FILTER (WHERE tipo_comprobante='FA') AS dias_activos
+        FROM ventas
+        WHERE {where}
+        GROUP BY 1
+        ORDER BY 1
+    """), params)).mappings().all()
+
+    NOMBRES = {1: 'Lun', 2: 'Mar', 3: 'Mié', 4: 'Jue', 5: 'Vie', 6: 'Sáb', 7: 'Dom'}
+    result = []
+    for d in range(1, 8):
+        r = next((row for row in rows if int(row["dow"]) == d), None)
+        if r:
+            fact = money(r["facturado"])
+            tk = int(r["tickets"] or 0)
+            dias = int(r["dias_activos"] or 0) or 1
+            result.append({
+                "dow": d,
+                "dia": NOMBRES[d],
+                "facturado": fact,
+                "tickets": tk,
+                "ticket_promedio": fact / tk if tk else 0,
+                "facturado_promedio_dia": fact / dias,
+                "tickets_promedio_dia": round(tk / dias, 1),
+                "dias_activos": dias,
+            })
+        else:
+            result.append({
+                "dow": d, "dia": NOMBRES[d],
+                "facturado": 0, "tickets": 0, "ticket_promedio": 0,
+                "facturado_promedio_dia": 0, "tickets_promedio_dia": 0, "dias_activos": 0,
+            })
+
+    total_fact = sum(r["facturado"] for r in result) or 1
+    for r in result:
+        r["pct_total"] = round(r["facturado"] / total_fact * 100, 1)
+
+    return {"por_dia": result}
+
+
+@router.get("/ventas/nuevos-recurrentes")
+async def ventas_nuevos_recurrentes(
+    company_id: int = None,
+    granularidad: Literal["dia", "semana", "mes", "trimestre"] = "mes",
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Serie temporal con facturado segmentado por clientes nuevos vs. recurrentes."""
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+    trunc = {"dia": "day", "semana": "week", "mes": "month", "trimestre": "quarter"}.get(granularidad, "month")
+    params = filters.sql_params()
+    where = _ventas_base_where(filters)
+
+    rows = (await db.execute(text(f"""
+        WITH first_purchase AS (
+            SELECT cliente_id, MIN(fecha::date) AS first_date
+            FROM ventas
+            WHERE tipo_comprobante='FA'
+            GROUP BY cliente_id
+        )
+        SELECT
+            to_char(date_trunc('{trunc}', v.fecha), 'YYYY-MM-DD') AS periodo,
+            COALESCE(SUM({venta_importe_neto_expr('v')}) FILTER (
+                WHERE fp.first_date >= :desde AND fp.first_date < :hasta
+            ), 0) AS facturado_nuevos,
+            COALESCE(SUM({venta_importe_neto_expr('v')}) FILTER (
+                WHERE fp.first_date < :desde
+            ), 0) AS facturado_recurrentes,
+            COUNT(DISTINCT v.cliente_id) FILTER (
+                WHERE fp.first_date >= :desde AND fp.first_date < :hasta
+            ) AS clientes_nuevos,
+            COUNT(DISTINCT v.cliente_id) FILTER (
+                WHERE fp.first_date < :desde
+            ) AS clientes_recurrentes
+        FROM ventas v
+        LEFT JOIN first_purchase fp ON fp.cliente_id = v.cliente_id
+        WHERE {where}
+        GROUP BY 1
+        ORDER BY 1
+    """), params)).mappings().all()
+
+    return {
+        "series": [
+            {
+                "periodo": r["periodo"],
+                "facturado_nuevos": money(r["facturado_nuevos"]),
+                "facturado_recurrentes": money(r["facturado_recurrentes"]),
+                "clientes_nuevos": int(r["clientes_nuevos"] or 0),
+                "clientes_recurrentes": int(r["clientes_recurrentes"] or 0),
+            }
+            for r in rows
+        ],
+    }
 
 
 @router.get("/ventas/exportar")

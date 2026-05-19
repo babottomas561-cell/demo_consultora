@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import {
   DollarSign, ShoppingCart, Users, TrendingUp, Package, PercentIcon,
-  ArrowUpRight, ArrowDownRight,
+  ArrowUpRight, ArrowDownRight, Clock,
 } from 'lucide-react';
 import { useVentasData } from '../VentasDataContext';
 import { formatCurrency, formatNumber } from '../../analyticsUtils';
@@ -72,14 +72,16 @@ const KPIS = [
     sparkKey: 'tickets',
   },
   {
-    id: 'unidades',
-    label: 'Unidades',
-    icon: TrendingUp,
-    accent: '#0d9488',
-    iconBg: 'bg-teal-100',
-    iconColor: 'text-teal-600',
-    valueFmt: formatNumber,
+    id: 'dso_dias',
+    label: 'Días de cobro',
+    icon: Clock,
+    accent: '#dc2626',
+    iconBg: 'bg-red-100',
+    iconColor: 'text-red-600',
+    valueFmt: (v) => v != null ? `${Number(v).toFixed(0)} d` : '—',
     sparkKey: null,
+    getSeverity: (v) => v == null ? 'neutral' : v > 60 ? 'danger' : v > 30 ? 'warning' : 'success',
+    invertTrend: true,
   },
 ];
 

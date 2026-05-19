@@ -104,6 +104,15 @@ export default function ScatterPortafolioWidget() {
   const avgMargen = data.reduce((a, d) => a + d.y, 0) / (data.length || 1);
   const avgUnidades = data.reduce((a, d) => a + d.x, 0) / (data.length || 1);
 
+  // Contar productos por cuadrante para labels informativos
+  const quadrants = data.reduce((acc, d) => {
+    if (d.y >= avgMargen && d.x >= avgUnidades) acc.stars++;
+    else if (d.y >= avgMargen && d.x < avgUnidades) acc.niche++;
+    else if (d.y < avgMargen && d.x >= avgUnidades) acc.cows++;
+    else acc.dogs++;
+    return acc;
+  }, { stars: 0, niche: 0, cows: 0, dogs: 0 });
+
   return (
     <>
       <div className="h-full flex flex-col px-2 py-2">
@@ -114,20 +123,41 @@ export default function ScatterPortafolioWidget() {
           </div>
           <p className="text-[10px] text-slate-400 ml-auto">Clic en un punto para ver detalle</p>
         </div>
-        <div className="flex-1 min-h-0">
+        <div className="flex-1 min-h-0 relative">
+          {/* Etiquetas de cuadrantes BCG */}
+          <div className="absolute inset-0 pointer-events-none z-10">
+            <div className="absolute top-3 right-3 text-right">
+              <p className="text-[10px] font-bold text-emerald-600">⭐ Estrellas</p>
+              <p className="text-[9px] text-slate-400">{quadrants.stars} prods. — alto vol. + alto margen</p>
+            </div>
+            <div className="absolute top-3 left-12 text-left">
+              <p className="text-[10px] font-bold text-violet-600">💎 Nicho</p>
+              <p className="text-[9px] text-slate-400">{quadrants.niche} prods. — bajo vol. + alto margen</p>
+            </div>
+            <div className="absolute bottom-12 right-3 text-right">
+              <p className="text-[10px] font-bold text-indigo-600">🐄 Vacas</p>
+              <p className="text-[9px] text-slate-400">{quadrants.cows} prods. — alto vol. + bajo margen</p>
+            </div>
+            <div className="absolute bottom-12 left-12 text-left">
+              <p className="text-[10px] font-bold text-slate-500">🐕 Perros</p>
+              <p className="text-[9px] text-slate-400">{quadrants.dogs} prods. — bajo vol. + bajo margen</p>
+            </div>
+          </div>
+
           <ResponsiveContainer width="100%" height="100%">
-            <ScatterChart margin={{ left: 8, right: 8, top: 4, bottom: 4 }}>
+            <ScatterChart margin={{ left: 8, right: 8, top: 36, bottom: 4 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
               <XAxis type="number" dataKey="x" name="Unidades"
                 axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10 }}
-                label={{ value: 'Unidades vendidas', position: 'insideBottom', offset: -2, fontSize: 10, fill: '#94a3b8' }} />
+                label={{ value: 'Unidades vendidas →', position: 'insideBottom', offset: -2, fontSize: 10, fill: '#94a3b8' }} />
               <YAxis type="number" dataKey="y" name="Margen%"
                 axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10 }}
                 tickFormatter={v => `${v}%`}
-                label={{ value: 'Margen%', angle: -90, position: 'insideLeft', fontSize: 10, fill: '#94a3b8' }} />
+                label={{ value: 'Margen% →', angle: -90, position: 'insideLeft', fontSize: 10, fill: '#94a3b8' }} />
               <Tooltip content={<CustomTooltip />} />
-              <ReferenceLine y={avgMargen} stroke="#e2e8f0" strokeDasharray="4 2" />
-              <ReferenceLine x={avgUnidades} stroke="#e2e8f0" strokeDasharray="4 2" />
+              <ReferenceLine y={avgMargen} stroke="#cbd5e1" strokeDasharray="4 2"
+                label={{ value: `prom. ${avgMargen.toFixed(0)}%`, position: 'right', fontSize: 9, fill: '#94a3b8' }} />
+              <ReferenceLine x={avgUnidades} stroke="#cbd5e1" strokeDasharray="4 2" />
               <Scatter
                 data={data}
                 shape={(props) => <CustomDot {...props} selectedId={selected?.producto_id} onClick={setSelected} />}

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { RadialBarChart, RadialBar, ResponsiveContainer, PolarAngleAxis } from 'recharts';
 import { Settings } from 'lucide-react';
 import { useVentasData } from '../VentasDataContext';
@@ -20,11 +20,14 @@ function parseGoalInput(raw) {
 }
 
 export default function GoalTrackerWidget() {
-  const { kpis, loadingKpis } = useVentasData();
+  const { kpis, diaSemana, fetchDiaSemana, loadingKpis } = useVentasData();
   const [showConfig, setShowConfig] = useState(false);
   const [goalInput, setGoalInput] = useState('');
   const [labelInput, setLabelInput] = useState('Meta mensual');
   const [goal, setGoal] = useState(() => loadGoal());
+
+  // Pre-fetch día-semana para usar en proyección estacional
+  useEffect(() => { fetchDiaSemana?.(); }, [fetchDiaSemana]);
 
   const facturado = Number(kpis?.facturado_neto?.actual ?? kpis?.facturado_neto ?? 0);
   const meta = goal?.value ?? 0;
@@ -33,15 +36,42 @@ export default function GoalTrackerWidget() {
 
   const color = display_pct >= 100 ? '#22c55e' : display_pct >= 75 ? '#4f46e5' : display_pct >= 50 ? '#f59e0b' : '#ef4444';
 
-  const proyeccion = (() => {
+  // Proyección estacional: pondera por % histórico de cada día de la semana
+  const proyeccion = useMemo(() => {
     if (!meta || !facturado) return null;
     const today = new Date();
-    const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+    const year = today.getFullYear();
+    const month = today.getMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
     const dayOfMonth = today.getDate();
-    const dailyRate = facturado / dayOfMonth;
-    const projected = dailyRate * daysInMonth;
-    return projected;
-  })();
+
+    // Si no hay datos de día-semana, fallback a lineal
+    const porDia = diaSemana?.por_dia ?? [];
+    const weights = porDia.length === 7 && porDia.some(d => Number(d.pct_total ?? 0) > 0);
+
+    if (!weights) {
+      const dailyRate = facturado / dayOfMonth;
+      return { value: dailyRate * daysInMonth, method: 'lineal' };
+    }
+
+    // Calcular peso del período transcurrido vs. el total del mes
+    // ISODOW: 1 = Lunes, 7 = Domingo
+    const pctByDow = {};
+    porDia.forEach(d => { pctByDow[d.dow] = Number(d.pct_total ?? 0); });
+
+    let weightTranscurrido = 0;
+    let weightTotal = 0;
+    for (let day = 1; day <= daysInMonth; day++) {
+      const date = new Date(year, month, day);
+      const isodow = ((date.getDay() + 6) % 7) + 1; // JS getDay: 0=Dom, ajustar a ISODOW
+      const w = pctByDow[isodow] ?? (100 / 7);
+      weightTotal += w;
+      if (day <= dayOfMonth) weightTranscurrido += w;
+    }
+
+    if (weightTranscurrido <= 0) return null;
+    return { value: facturado / weightTranscurrido * weightTotal, method: 'estacional' };
+  }, [meta, facturado, diaSemana]);
 
   const handleSave = () => {
     const v = parseGoalInput(goalInput);
@@ -146,9 +176,11 @@ export default function GoalTrackerWidget() {
         </div>
         {proyeccion && (
           <div className="flex justify-between text-xs border-t border-slate-100 pt-1">
-            <span className="text-slate-400">Proyección mes</span>
-            <span className={`font-semibold tabular-nums ${proyeccion >= meta ? 'text-emerald-600' : 'text-amber-600'}`}>
-              {formatCurrencyShort(proyeccion)}
+            <span className="text-slate-400" title={proyeccion.method === 'estacional' ? 'Ajustada por día de semana histórico' : 'Proyección lineal'}>
+              Proyección {proyeccion.method === 'estacional' ? '★' : ''}
+            </span>
+            <span className={`font-semibold tabular-nums ${proyeccion.value >= meta ? 'text-emerald-600' : 'text-amber-600'}`}>
+              {formatCurrencyShort(proyeccion.value)}
             </span>
           </div>
         )}

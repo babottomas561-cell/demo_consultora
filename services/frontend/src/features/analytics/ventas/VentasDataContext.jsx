@@ -62,6 +62,12 @@ export default function VentasDataProvider({ children }) {
   const [loadingTicketDist, setLoadingTicketDist] = useState(false);
   const [cohort, setCohort] = useState(null);
   const [loadingCohort, setLoadingCohort] = useState(false);
+  const [clientesRiesgo, setClientesRiesgo] = useState(null);
+  const [loadingClientesRiesgo, setLoadingClientesRiesgo] = useState(false);
+  const [diaSemana, setDiaSemana] = useState(null);
+  const [loadingDiaSemana, setLoadingDiaSemana] = useState(false);
+  const [nuevosRecurrentes, setNuevosRecurrentes] = useState(null);
+  const [loadingNuevosRecurrentes, setLoadingNuevosRecurrentes] = useState(false);
   const [txPage, setTxPage] = useState(1);
   const [error, setError] = useState(null);
 
@@ -79,6 +85,9 @@ export default function VentasDataProvider({ children }) {
     setAging(null);
     setTicketDist(null);
     setCohort(null);
+    setClientesRiesgo(null);
+    setDiaSemana(null);
+    setNuevosRecurrentes(null);
     setTxPage(1);
 
     setLoadingKpis(true); setLoadingTemporal(true);
@@ -189,6 +198,33 @@ export default function VentasDataProvider({ children }) {
     } catch (e) { console.error(e); } finally { setLoadingCohort(false); }
   }, [qs, canFetch]);
 
+  const fetchClientesRiesgo = useCallback(async () => {
+    if (!canFetch) return;
+    setLoadingClientesRiesgo(true);
+    try {
+      const r = await apiClient.get(`/analytics/ventas/clientes-riesgo${qs}`);
+      setClientesRiesgo(r.data);
+    } catch (e) { console.error(e); } finally { setLoadingClientesRiesgo(false); }
+  }, [qs, canFetch]);
+
+  const fetchDiaSemana = useCallback(async () => {
+    if (!canFetch) return;
+    setLoadingDiaSemana(true);
+    try {
+      const r = await apiClient.get(`/analytics/ventas/dia-semana${qs}`);
+      setDiaSemana(r.data);
+    } catch (e) { console.error(e); } finally { setLoadingDiaSemana(false); }
+  }, [qs, canFetch]);
+
+  const fetchNuevosRecurrentes = useCallback(async () => {
+    if (!canFetch) return;
+    setLoadingNuevosRecurrentes(true);
+    try {
+      const r = await apiClient.get(`/analytics/ventas/nuevos-recurrentes${appendQueryParams(qs, { granularidad })}`);
+      setNuevosRecurrentes(r.data);
+    } catch (e) { console.error(e); } finally { setLoadingNuevosRecurrentes(false); }
+  }, [qs, granularidad, canFetch]);
+
   const fetchYoy = useCallback(async () => {
     if (!canFetch || yoy) return;
     setLoadingYoy(true);
@@ -218,24 +254,30 @@ export default function VentasDataProvider({ children }) {
   const value = useMemo(() => ({
     kpis, resultadoKpis, temporal, productos, vendedores, clientes, comprobantes, transacciones,
     heatmap, yoy, descuentos, aging, ticketDist, cohort,
+    clientesRiesgo, diaSemana, nuevosRecurrentes,
     granularidad, setGranularidad, comparar,
     loadingKpis, loadingTemporal, loadingProductos, loadingVendedores,
     loadingClientes, loadingComprobantes, loadingTransacciones, loadingHeatmap, loadingYoy,
     loadingDescuentos, loadingAging, loadingTicketDist, loadingCohort,
+    loadingClientesRiesgo, loadingDiaSemana, loadingNuevosRecurrentes,
     txPage, error,
     fetchClientes, fetchComprobantes, fetchTransacciones, fetchHeatmap, fetchYoy,
     fetchDescuentos, fetchAging, fetchTicketDist, fetchCohort,
+    fetchClientesRiesgo, fetchDiaSemana, fetchNuevosRecurrentes,
     refetch: fetchPrimary,
     user, activeCompany,
   }), [
     kpis, resultadoKpis, temporal, productos, vendedores, clientes, comprobantes, transacciones,
     heatmap, yoy, descuentos, aging, ticketDist, cohort,
+    clientesRiesgo, diaSemana, nuevosRecurrentes,
     granularidad, comparar,
     loadingKpis, loadingTemporal, loadingProductos, loadingVendedores,
     loadingClientes, loadingComprobantes, loadingTransacciones, loadingHeatmap, loadingYoy,
     loadingDescuentos, loadingAging, loadingTicketDist, loadingCohort,
+    loadingClientesRiesgo, loadingDiaSemana, loadingNuevosRecurrentes,
     txPage, error, fetchPrimary, fetchClientes, fetchComprobantes, fetchTransacciones,
     fetchHeatmap, fetchYoy, fetchDescuentos, fetchAging, fetchTicketDist, fetchCohort,
+    fetchClientesRiesgo, fetchDiaSemana, fetchNuevosRecurrentes,
     user, activeCompany,
   ]);
 

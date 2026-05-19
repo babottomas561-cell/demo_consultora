@@ -2,6 +2,7 @@ import {
   DollarSign, ShoppingCart, Package, Users, TrendingDown,
   Activity, BarChart3, PieChart, Trophy, FileText, List, Layers, Receipt, Tag,
   Zap, CalendarDays, TrendingUp, Crosshair, Scissors, GitFork, Clock, Target,
+  AlertTriangle, CalendarRange, UserPlus, FileSpreadsheet,
 } from 'lucide-react';
 import { createKpiWidget } from './VentasKpiWidget';
 import EvolucionTemporalWidget from './EvolucionTemporalWidget';
@@ -29,6 +30,10 @@ import AgingCobranzaWidget from './AgingCobranzaWidget';
 import TicketDistribucionWidget from './TicketDistribucionWidget';
 import CohortRetencionWidget from './CohortRetencionWidget';
 import GoalTrackerWidget from './GoalTrackerWidget';
+import ClientesRiesgoWidget from './ClientesRiesgoWidget';
+import DiaSemanaWidget from './DiaSemanaWidget';
+import NuevosRecurrentesWidget from './NuevosRecurrentesWidget';
+import EstadoResultadosWidget from './EstadoResultadosWidget';
 
 const VENTAS_WIDGET_CATALOG = [
   // ── Pulse Strip (mega-KPI row) ──
@@ -335,6 +340,43 @@ const VENTAS_WIDGET_CATALOG = [
     defaultSize: { w: 3, h: 5 },
     category: 'kpi',
   },
+  // ── Nuevos widgets críticos para CPN / dueño / analista ──
+  {
+    type: 'ventas-clientes-riesgo',
+    name: 'Clientes en Riesgo',
+    description: 'Perdidos, en caída y nuevos del período vs. el anterior',
+    icon: AlertTriangle,
+    component: ClientesRiesgoWidget,
+    defaultSize: { w: 6, h: 5 },
+    category: 'table',
+  },
+  {
+    type: 'ventas-dia-semana',
+    name: 'Ventas por Día de Semana',
+    description: 'Distribución y promedios por día (lun-dom)',
+    icon: CalendarRange,
+    component: DiaSemanaWidget,
+    defaultSize: { w: 5, h: 5 },
+    category: 'chart',
+  },
+  {
+    type: 'ventas-nuevos-recurrentes',
+    name: 'Nuevos vs. Recurrentes',
+    description: 'Facturado por clientes nuevos vs. recurrentes en el tiempo',
+    icon: UserPlus,
+    component: NuevosRecurrentesWidget,
+    defaultSize: { w: 7, h: 5 },
+    category: 'chart',
+  },
+  {
+    type: 'ventas-estado-resultados',
+    name: 'Estado de Resultados',
+    description: 'Mini P&L: ventas → COGS → margen bruto',
+    icon: FileSpreadsheet,
+    component: EstadoResultadosWidget,
+    defaultSize: { w: 5, h: 5 },
+    category: 'kpi',
+  },
 ];
 
 export default VENTAS_WIDGET_CATALOG;
@@ -343,124 +385,74 @@ export function getVentasWidgetDef(type) {
   return VENTAS_WIDGET_CATALOG.find((w) => w.type === type);
 }
 
-// Default widgets and layouts for the ventas panel
+// Default widgets — vista ejecutiva limpia (12 widgets esenciales).
+// El resto del catálogo está disponible vía "+ Agregar widget".
 export const VENTAS_DEFAULT_WIDGETS = [
-  { id: 'v-0',  type: 'ventas-pulse-strip'     },
-  { id: 'v-30', type: 'ventas-goal'            },
-  { id: 'v-9',  type: 'ventas-evolucion'        },
-  { id: 'v-10', type: 'ventas-devoluciones'     },
-  { id: 'v-23', type: 'ventas-heatmap'          },
-  { id: 'v-24', type: 'ventas-yoy'              },
-  { id: 'v-11', type: 'ventas-pareto'           },
-  { id: 'v-27', type: 'ventas-scatter'          },
-  { id: 'v-12', type: 'ventas-por-rubro'        },
-  { id: 'v-25', type: 'ventas-por-subrubro'     },
-  { id: 'v-28', type: 'ventas-descuentos'       },
-  { id: 'v-13', type: 'ventas-vendedores'       },
-  { id: 'v-14', type: 'ventas-abc-clientes'     },
-  { id: 'v-26', type: 'ventas-rfm'              },
-  { id: 'v-15', type: 'ventas-comprobantes'     },
-  { id: 'v-29', type: 'ventas-aging'            },
-  { id: 'v-31', type: 'ventas-ticket-dist'      },
-  { id: 'v-32', type: 'ventas-cohort'           },
-  { id: 'v-16', type: 'ventas-ranking-productos'},
-  { id: 'v-17', type: 'ventas-ranking-clientes' },
-  { id: 'v-18', type: 'ventas-transacciones'    },
-  { id: 'v-19', type: 'ventas-facturas-im'      },
-  { id: 'v-20', type: 'ventas-margen-lista'     },
-  { id: 'v-21', type: 'ventas-por-lista'        },
-  { id: 'v-22', type: 'ventas-cobranza'         },
+  // Vista ejecutiva: lo primero que ve un dueño
+  { id: 'v-0',  type: 'ventas-pulse-strip'        },  // KPIs + alerta bajo costo
+  { id: 'v-30', type: 'ventas-goal'               },  // Meta + proyección
+  { id: 'v-33', type: 'ventas-estado-resultados'  },  // Mini P&L
+  { id: 'v-34', type: 'ventas-clientes-riesgo'    },  // Perdidos/caída/nuevos
+  // Análisis temporal
+  { id: 'v-9',  type: 'ventas-evolucion'          },  // Evolución con margen toggle
+  { id: 'v-35', type: 'ventas-nuevos-recurrentes' },  // Nuevos vs. recurrentes
+  { id: 'v-36', type: 'ventas-dia-semana'         },  // Día de semana
+  { id: 'v-24', type: 'ventas-yoy'                },  // YoY
+  // Productos / portafolio
+  { id: 'v-11', type: 'ventas-pareto'             },
+  { id: 'v-27', type: 'ventas-scatter'            },  // BCG con cuadrantes
+  { id: 'v-12', type: 'ventas-por-rubro'          },
+  { id: 'v-29', type: 'ventas-aging'              },
 ];
 
 export const VENTAS_DEFAULT_LAYOUTS = {
   lg: [
-    // Row 0: Pulse strip + Goal Tracker
+    // Row 0: Pulse strip (9) + Goal Tracker (3)
     { i: 'v-0',  x: 0,  y: 0,  w: 9,  h: 4,  minW: 6, minH: 3  },
     { i: 'v-30', x: 9,  y: 0,  w: 3,  h: 4,  minW: 2, minH: 3  },
-    // Row 1: Evolución + Devoluciones
-    { i: 'v-9',  x: 0,  y: 4,  w: 8,  h: 5,  minW: 4, minH: 3  },
-    { i: 'v-10', x: 8,  y: 4,  w: 4,  h: 5,  minW: 3, minH: 3  },
-    // Row 2: Heatmap + YoY
-    { i: 'v-23', x: 0,  y: 9,  w: 5,  h: 4,  minW: 4, minH: 3  },
-    { i: 'v-24', x: 5,  y: 9,  w: 7,  h: 4,  minW: 4, minH: 3  },
-    // Row 3: Pareto + Scatter Portafolio
-    { i: 'v-11', x: 0,  y: 13, w: 6,  h: 5,  minW: 4, minH: 3  },
-    { i: 'v-27', x: 6,  y: 13, w: 6,  h: 5,  minW: 4, minH: 3  },
-    // Row 4: Rubro + Subrubro + Descuentos
-    { i: 'v-12', x: 0,  y: 18, w: 4,  h: 5,  minW: 3, minH: 3  },
-    { i: 'v-25', x: 4,  y: 18, w: 4,  h: 5,  minW: 3, minH: 3  },
-    { i: 'v-28', x: 8,  y: 18, w: 4,  h: 5,  minW: 3, minH: 3  },
-    // Row 5: Vendedores full width
-    { i: 'v-13', x: 0,  y: 23, w: 12, h: 5,  minW: 6, minH: 4  },
-    // Row 6: ABC + RFM + Comprobantes
-    { i: 'v-14', x: 0,  y: 28, w: 4,  h: 5,  minW: 3, minH: 3  },
-    { i: 'v-26', x: 4,  y: 28, w: 4,  h: 5,  minW: 3, minH: 3  },
-    { i: 'v-15', x: 8,  y: 28, w: 4,  h: 5,  minW: 3, minH: 3  },
-    // Row 7: Aging + Ticket Dist + Cohort
-    { i: 'v-29', x: 0,  y: 33, w: 4,  h: 5,  minW: 3, minH: 4  },
-    { i: 'v-31', x: 4,  y: 33, w: 4,  h: 5,  minW: 3, minH: 4  },
-    { i: 'v-32', x: 8,  y: 33, w: 4,  h: 5,  minW: 3, minH: 4  },
-    // Tables
-    { i: 'v-16', x: 0,  y: 38, w: 6,  h: 4,  minW: 4, minH: 3  },
-    { i: 'v-17', x: 6,  y: 38, w: 6,  h: 4,  minW: 4, minH: 3  },
-    { i: 'v-18', x: 0,  y: 42, w: 12, h: 5,  minW: 6, minH: 3  },
-    { i: 'v-19', x: 0,  y: 47, w: 12, h: 6,  minW: 6, minH: 4  },
-    { i: 'v-20', x: 0,  y: 53, w: 12, h: 7,  minW: 6, minH: 4  },
-    { i: 'v-21', x: 0,  y: 60, w: 12, h: 7,  minW: 6, minH: 4  },
-    { i: 'v-22', x: 0,  y: 67, w: 12, h: 7,  minW: 6, minH: 4  },
+    // Row 1: Estado de resultados (5) + Clientes en riesgo (7)
+    { i: 'v-33', x: 0,  y: 4,  w: 5,  h: 5,  minW: 4, minH: 4  },
+    { i: 'v-34', x: 5,  y: 4,  w: 7,  h: 5,  minW: 5, minH: 4  },
+    // Row 2: Evolución (8) + Nuevos vs Recurrentes truncado (esta no — Nuevos abajo)
+    { i: 'v-9',  x: 0,  y: 9,  w: 12, h: 5,  minW: 6, minH: 3  },
+    // Row 3: Nuevos vs Recurrentes (7) + Día semana (5)
+    { i: 'v-35', x: 0,  y: 14, w: 7,  h: 5,  minW: 5, minH: 4  },
+    { i: 'v-36', x: 7,  y: 14, w: 5,  h: 5,  minW: 4, minH: 4  },
+    // Row 4: YoY (full)
+    { i: 'v-24', x: 0,  y: 19, w: 12, h: 4,  minW: 6, minH: 3  },
+    // Row 5: Pareto (6) + Scatter (6)
+    { i: 'v-11', x: 0,  y: 23, w: 6,  h: 5,  minW: 4, minH: 3  },
+    { i: 'v-27', x: 6,  y: 23, w: 6,  h: 5,  minW: 4, minH: 3  },
+    // Row 6: Rubro (8) + Aging (4)
+    { i: 'v-12', x: 0,  y: 28, w: 8,  h: 5,  minW: 4, minH: 3  },
+    { i: 'v-29', x: 8,  y: 28, w: 4,  h: 5,  minW: 3, minH: 4  },
   ],
   md: [
     { i: 'v-0',  x: 0,  y: 0,  w: 9,  h: 4,  minW: 6, minH: 3  },
     { i: 'v-30', x: 9,  y: 0,  w: 3,  h: 4,  minW: 2, minH: 3  },
-    { i: 'v-9',  x: 0,  y: 4,  w: 7,  h: 5,  minW: 4, minH: 3  },
-    { i: 'v-10', x: 7,  y: 4,  w: 5,  h: 5,  minW: 3, minH: 3  },
-    { i: 'v-23', x: 0,  y: 9,  w: 5,  h: 4,  minW: 4, minH: 3  },
-    { i: 'v-24', x: 5,  y: 9,  w: 7,  h: 4,  minW: 4, minH: 3  },
-    { i: 'v-11', x: 0,  y: 13, w: 6,  h: 5,  minW: 4, minH: 3  },
-    { i: 'v-27', x: 6,  y: 13, w: 6,  h: 5,  minW: 4, minH: 3  },
-    { i: 'v-12', x: 0,  y: 18, w: 4,  h: 5,  minW: 3, minH: 3  },
-    { i: 'v-25', x: 4,  y: 18, w: 4,  h: 5,  minW: 3, minH: 3  },
-    { i: 'v-28', x: 8,  y: 18, w: 4,  h: 5,  minW: 3, minH: 3  },
-    { i: 'v-13', x: 0,  y: 23, w: 12, h: 5,  minW: 6, minH: 4  },
-    { i: 'v-14', x: 0,  y: 28, w: 4,  h: 5,  minW: 3, minH: 3  },
-    { i: 'v-26', x: 4,  y: 28, w: 4,  h: 5,  minW: 3, minH: 3  },
-    { i: 'v-15', x: 8,  y: 28, w: 4,  h: 5,  minW: 3, minH: 3  },
-    { i: 'v-29', x: 0,  y: 33, w: 4,  h: 5,  minW: 3, minH: 4  },
-    { i: 'v-31', x: 4,  y: 33, w: 4,  h: 5,  minW: 3, minH: 4  },
-    { i: 'v-32', x: 8,  y: 33, w: 4,  h: 5,  minW: 3, minH: 4  },
-    { i: 'v-16', x: 0,  y: 38, w: 6,  h: 4,  minW: 4, minH: 3  },
-    { i: 'v-17', x: 6,  y: 38, w: 6,  h: 4,  minW: 4, minH: 3  },
-    { i: 'v-18', x: 0,  y: 42, w: 12, h: 5,  minW: 6, minH: 3  },
-    { i: 'v-19', x: 0,  y: 47, w: 12, h: 6,  minW: 6, minH: 4  },
-    { i: 'v-20', x: 0,  y: 53, w: 12, h: 7,  minW: 6, minH: 4  },
-    { i: 'v-21', x: 0,  y: 60, w: 12, h: 7,  minW: 6, minH: 4  },
-    { i: 'v-22', x: 0,  y: 67, w: 12, h: 7,  minW: 6, minH: 4  },
+    { i: 'v-33', x: 0,  y: 4,  w: 5,  h: 5,  minW: 4, minH: 4  },
+    { i: 'v-34', x: 5,  y: 4,  w: 7,  h: 5,  minW: 5, minH: 4  },
+    { i: 'v-9',  x: 0,  y: 9,  w: 12, h: 5,  minW: 6, minH: 3  },
+    { i: 'v-35', x: 0,  y: 14, w: 7,  h: 5,  minW: 5, minH: 4  },
+    { i: 'v-36', x: 7,  y: 14, w: 5,  h: 5,  minW: 4, minH: 4  },
+    { i: 'v-24', x: 0,  y: 19, w: 12, h: 4,  minW: 6, minH: 3  },
+    { i: 'v-11', x: 0,  y: 23, w: 6,  h: 5,  minW: 4, minH: 3  },
+    { i: 'v-27', x: 6,  y: 23, w: 6,  h: 5,  minW: 4, minH: 3  },
+    { i: 'v-12', x: 0,  y: 28, w: 8,  h: 5,  minW: 4, minH: 3  },
+    { i: 'v-29', x: 8,  y: 28, w: 4,  h: 5,  minW: 3, minH: 4  },
   ],
   sm: [
     { i: 'v-0',  x: 0, y: 0,  w: 4, h: 5,  minW: 3, minH: 3  },
     { i: 'v-30', x: 4, y: 0,  w: 2, h: 5,  minW: 2, minH: 3  },
-    { i: 'v-9',  x: 0, y: 5,  w: 6, h: 5,  minW: 3, minH: 3  },
-    { i: 'v-10', x: 0, y: 10, w: 6, h: 4,  minW: 3, minH: 3  },
-    { i: 'v-23', x: 0, y: 14, w: 6, h: 4,  minW: 3, minH: 3  },
-    { i: 'v-24', x: 0, y: 18, w: 6, h: 4,  minW: 3, minH: 3  },
-    { i: 'v-11', x: 0, y: 22, w: 6, h: 5,  minW: 3, minH: 3  },
-    { i: 'v-27', x: 0, y: 27, w: 6, h: 5,  minW: 3, minH: 3  },
-    { i: 'v-12', x: 0, y: 32, w: 3, h: 4,  minW: 3, minH: 3  },
-    { i: 'v-25', x: 3, y: 32, w: 3, h: 4,  minW: 3, minH: 3  },
-    { i: 'v-28', x: 0, y: 36, w: 6, h: 5,  minW: 3, minH: 3  },
-    { i: 'v-13', x: 0, y: 41, w: 6, h: 5,  minW: 3, minH: 4  },
-    { i: 'v-14', x: 0, y: 46, w: 3, h: 4,  minW: 3, minH: 3  },
-    { i: 'v-26', x: 3, y: 46, w: 3, h: 5,  minW: 3, minH: 3  },
-    { i: 'v-15', x: 0, y: 51, w: 6, h: 4,  minW: 3, minH: 3  },
-    { i: 'v-29', x: 0, y: 55, w: 6, h: 5,  minW: 3, minH: 4  },
-    { i: 'v-31', x: 0, y: 60, w: 6, h: 5,  minW: 3, minH: 4  },
-    { i: 'v-32', x: 0, y: 65, w: 6, h: 5,  minW: 3, minH: 4  },
-    { i: 'v-16', x: 0, y: 70, w: 6, h: 4,  minW: 3, minH: 3  },
-    { i: 'v-17', x: 0, y: 74, w: 6, h: 4,  minW: 3, minH: 3  },
-    { i: 'v-18', x: 0, y: 78, w: 6, h: 5,  minW: 3, minH: 3  },
-    { i: 'v-19', x: 0, y: 83, w: 6, h: 6,  minW: 3, minH: 4  },
-    { i: 'v-20', x: 0, y: 89, w: 6, h: 7,  minW: 3, minH: 4  },
-    { i: 'v-21', x: 0, y: 96, w: 6, h: 7,  minW: 3, minH: 4  },
-    { i: 'v-22', x: 0, y: 103,w: 6, h: 7,  minW: 3, minH: 4  },
+    { i: 'v-33', x: 0, y: 5,  w: 6, h: 5,  minW: 3, minH: 4  },
+    { i: 'v-34', x: 0, y: 10, w: 6, h: 5,  minW: 3, minH: 4  },
+    { i: 'v-9',  x: 0, y: 15, w: 6, h: 5,  minW: 3, minH: 3  },
+    { i: 'v-35', x: 0, y: 20, w: 6, h: 5,  minW: 3, minH: 4  },
+    { i: 'v-36', x: 0, y: 25, w: 6, h: 5,  minW: 3, minH: 4  },
+    { i: 'v-24', x: 0, y: 30, w: 6, h: 4,  minW: 3, minH: 3  },
+    { i: 'v-11', x: 0, y: 34, w: 6, h: 5,  minW: 3, minH: 3  },
+    { i: 'v-27', x: 0, y: 39, w: 6, h: 5,  minW: 3, minH: 3  },
+    { i: 'v-12', x: 0, y: 44, w: 6, h: 5,  minW: 3, minH: 3  },
+    { i: 'v-29', x: 0, y: 49, w: 6, h: 5,  minW: 3, minH: 4  },
   ],
 };
