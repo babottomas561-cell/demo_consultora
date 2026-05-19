@@ -34,6 +34,7 @@ export default function VentasDataProvider({ children }) {
   const canFetch = user?.company_id || (user?.is_admin && activeCompany);
 
   const [kpis, setKpis] = useState(null);
+  const [resultadoKpis, setResultadoKpis] = useState(null);
   const [temporal, setTemporal] = useState(null);
   const [productos, setProductos] = useState(null);
   const [vendedores, setVendedores] = useState(null);
@@ -53,6 +54,20 @@ export default function VentasDataProvider({ children }) {
   const [loadingHeatmap, setLoadingHeatmap] = useState(false);
   const [yoy, setYoy] = useState(null);
   const [loadingYoy, setLoadingYoy] = useState(false);
+  const [descuentos, setDescuentos] = useState(null);
+  const [loadingDescuentos, setLoadingDescuentos] = useState(false);
+  const [aging, setAging] = useState(null);
+  const [loadingAging, setLoadingAging] = useState(false);
+  const [ticketDist, setTicketDist] = useState(null);
+  const [loadingTicketDist, setLoadingTicketDist] = useState(false);
+  const [cohort, setCohort] = useState(null);
+  const [loadingCohort, setLoadingCohort] = useState(false);
+  const [clientesRiesgo, setClientesRiesgo] = useState(null);
+  const [loadingClientesRiesgo, setLoadingClientesRiesgo] = useState(false);
+  const [diaSemana, setDiaSemana] = useState(null);
+  const [loadingDiaSemana, setLoadingDiaSemana] = useState(false);
+  const [nuevosRecurrentes, setNuevosRecurrentes] = useState(null);
+  const [loadingNuevosRecurrentes, setLoadingNuevosRecurrentes] = useState(false);
   const [txPage, setTxPage] = useState(1);
   const [error, setError] = useState(null);
 
@@ -62,20 +77,35 @@ export default function VentasDataProvider({ children }) {
       setLoadingProductos(false); setLoadingVendedores(false);
       return;
     }
+    // Reset secondary/lazy data so widgets re-fetch with the new filters
+    setClientes(null);
+    setComprobantes(null);
+    setTransacciones(null);
+    setDescuentos(null);
+    setAging(null);
+    setTicketDist(null);
+    setCohort(null);
+    setClientesRiesgo(null);
+    setDiaSemana(null);
+    setNuevosRecurrentes(null);
+    setTxPage(1);
+
     setLoadingKpis(true); setLoadingTemporal(true);
     setLoadingProductos(true); setLoadingVendedores(true);
     setError(null);
     try {
-      const [kR, tR, pR, vR] = await Promise.all([
+      const [kR, tR, pR, vR, rR] = await Promise.all([
         apiClient.get(`/analytics/ventas/kpis${qs}`),
         apiClient.get(`/analytics/ventas/temporal${appendQueryParams(qs, { granularidad })}`),
         apiClient.get(`/analytics/ventas/productos${qs}`),
         apiClient.get(`/analytics/ventas/por-vendedor${qs}`),
+        apiClient.get(`/analytics/resultado/kpis${qs}`).catch(() => ({ data: null })),
       ]);
       setKpis(kR.data);
       setTemporal(tR.data);
       setProductos(pR.data);
       setVendedores(vR.data);
+      setResultadoKpis(rR.data);
     } catch (err) {
       console.error(err);
       setError('No se pudo cargar el panel de ventas.');
@@ -94,23 +124,24 @@ export default function VentasDataProvider({ children }) {
     } catch (e) { console.error(e); } finally { setLoadingTemporal(false); }
   }, [qs, granularidad, canFetch]);
 
+  // Lazy fetches — no guard on existing data (reset happens in fetchPrimary)
   const fetchClientes = useCallback(async () => {
-    if (!canFetch || clientes) return;
+    if (!canFetch) return;
     setLoadingClientes(true);
     try {
       const r = await apiClient.get(`/analytics/ventas/por-cliente${qs}`);
       setClientes(r.data);
     } catch (e) { console.error(e); } finally { setLoadingClientes(false); }
-  }, [qs, canFetch, clientes]);
+  }, [qs, canFetch]);
 
   const fetchComprobantes = useCallback(async () => {
-    if (!canFetch || comprobantes) return;
+    if (!canFetch) return;
     setLoadingComprobantes(true);
     try {
       const r = await apiClient.get(`/analytics/ventas/por-comprobante${qs}`);
       setComprobantes(r.data);
     } catch (e) { console.error(e); } finally { setLoadingComprobantes(false); }
-  }, [qs, canFetch, comprobantes]);
+  }, [qs, canFetch]);
 
   const fetchTransacciones = useCallback(async (page = 1) => {
     if (!canFetch) return;
@@ -130,6 +161,69 @@ export default function VentasDataProvider({ children }) {
       setHeatmap(r.data);
     } catch (e) { console.error(e); } finally { setLoadingHeatmap(false); }
   }, [qs, canFetch, heatmap]);
+
+  const fetchDescuentos = useCallback(async () => {
+    if (!canFetch) return;
+    setLoadingDescuentos(true);
+    try {
+      const r = await apiClient.get(`/analytics/resultado/descuentos${qs}`);
+      setDescuentos(r.data);
+    } catch (e) { console.error(e); } finally { setLoadingDescuentos(false); }
+  }, [qs, canFetch]);
+
+  const fetchAging = useCallback(async () => {
+    if (!canFetch) return;
+    setLoadingAging(true);
+    try {
+      const r = await apiClient.get(`/analytics/ventas/aging${qs}`);
+      setAging(r.data);
+    } catch (e) { console.error(e); } finally { setLoadingAging(false); }
+  }, [qs, canFetch]);
+
+  const fetchTicketDist = useCallback(async () => {
+    if (!canFetch) return;
+    setLoadingTicketDist(true);
+    try {
+      const r = await apiClient.get(`/analytics/ventas/ticket-dist${qs}`);
+      setTicketDist(r.data);
+    } catch (e) { console.error(e); } finally { setLoadingTicketDist(false); }
+  }, [qs, canFetch]);
+
+  const fetchCohort = useCallback(async () => {
+    if (!canFetch) return;
+    setLoadingCohort(true);
+    try {
+      const r = await apiClient.get(`/analytics/ventas/cohort${qs}`);
+      setCohort(r.data);
+    } catch (e) { console.error(e); } finally { setLoadingCohort(false); }
+  }, [qs, canFetch]);
+
+  const fetchClientesRiesgo = useCallback(async () => {
+    if (!canFetch) return;
+    setLoadingClientesRiesgo(true);
+    try {
+      const r = await apiClient.get(`/analytics/ventas/clientes-riesgo${qs}`);
+      setClientesRiesgo(r.data);
+    } catch (e) { console.error(e); } finally { setLoadingClientesRiesgo(false); }
+  }, [qs, canFetch]);
+
+  const fetchDiaSemana = useCallback(async () => {
+    if (!canFetch) return;
+    setLoadingDiaSemana(true);
+    try {
+      const r = await apiClient.get(`/analytics/ventas/dia-semana${qs}`);
+      setDiaSemana(r.data);
+    } catch (e) { console.error(e); } finally { setLoadingDiaSemana(false); }
+  }, [qs, canFetch]);
+
+  const fetchNuevosRecurrentes = useCallback(async () => {
+    if (!canFetch) return;
+    setLoadingNuevosRecurrentes(true);
+    try {
+      const r = await apiClient.get(`/analytics/ventas/nuevos-recurrentes${appendQueryParams(qs, { granularidad })}`);
+      setNuevosRecurrentes(r.data);
+    } catch (e) { console.error(e); } finally { setLoadingNuevosRecurrentes(false); }
+  }, [qs, granularidad, canFetch]);
 
   const fetchYoy = useCallback(async () => {
     if (!canFetch || yoy) return;
@@ -158,23 +252,32 @@ export default function VentasDataProvider({ children }) {
   useEffect(() => { if (temporal) fetchTemporal(); }, [granularidad]);
 
   const value = useMemo(() => ({
-    kpis, temporal, productos, vendedores, clientes, comprobantes, transacciones,
-    heatmap, yoy,
+    kpis, resultadoKpis, temporal, productos, vendedores, clientes, comprobantes, transacciones,
+    heatmap, yoy, descuentos, aging, ticketDist, cohort,
+    clientesRiesgo, diaSemana, nuevosRecurrentes,
     granularidad, setGranularidad, comparar,
     loadingKpis, loadingTemporal, loadingProductos, loadingVendedores,
     loadingClientes, loadingComprobantes, loadingTransacciones, loadingHeatmap, loadingYoy,
+    loadingDescuentos, loadingAging, loadingTicketDist, loadingCohort,
+    loadingClientesRiesgo, loadingDiaSemana, loadingNuevosRecurrentes,
     txPage, error,
     fetchClientes, fetchComprobantes, fetchTransacciones, fetchHeatmap, fetchYoy,
+    fetchDescuentos, fetchAging, fetchTicketDist, fetchCohort,
+    fetchClientesRiesgo, fetchDiaSemana, fetchNuevosRecurrentes,
     refetch: fetchPrimary,
     user, activeCompany,
   }), [
-    kpis, temporal, productos, vendedores, clientes, comprobantes, transacciones,
-    heatmap, yoy,
+    kpis, resultadoKpis, temporal, productos, vendedores, clientes, comprobantes, transacciones,
+    heatmap, yoy, descuentos, aging, ticketDist, cohort,
+    clientesRiesgo, diaSemana, nuevosRecurrentes,
     granularidad, comparar,
     loadingKpis, loadingTemporal, loadingProductos, loadingVendedores,
     loadingClientes, loadingComprobantes, loadingTransacciones, loadingHeatmap, loadingYoy,
+    loadingDescuentos, loadingAging, loadingTicketDist, loadingCohort,
+    loadingClientesRiesgo, loadingDiaSemana, loadingNuevosRecurrentes,
     txPage, error, fetchPrimary, fetchClientes, fetchComprobantes, fetchTransacciones,
-    fetchHeatmap, fetchYoy,
+    fetchHeatmap, fetchYoy, fetchDescuentos, fetchAging, fetchTicketDist, fetchCohort,
+    fetchClientesRiesgo, fetchDiaSemana, fetchNuevosRecurrentes,
     user, activeCompany,
   ]);
 

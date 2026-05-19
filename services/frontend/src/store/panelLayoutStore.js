@@ -21,6 +21,17 @@ const usePanelLayoutStore = create(
           }));
           return;
         }
+
+        // Solo agregar widgets faltantes de los defaults — NO reordenar ni eliminar
+        // los que el usuario ya tiene (puede que los haya quitado deliberadamente).
+        // Excepción: si el panel se quedó vacío, restaurar defaults.
+        if (!current.widgets || current.widgets.length === 0) {
+          set((s) => ({
+            panels: { ...s.panels, [panelId]: defaults },
+          }));
+          return;
+        }
+
         const currentWidgetIds = new Set(current.widgets.map((widget) => widget.id));
         const missingWidgets = defaults.widgets.filter((widget) => !currentWidgetIds.has(widget.id));
         if (!missingWidgets.length) return;
@@ -138,7 +149,18 @@ const usePanelLayoutStore = create(
           },
         })),
     }),
-    { name: 'bi-panel-layouts', version: 1 }
+    {
+      name: 'bi-panel-layouts',
+      version: 2,
+      // v1 → v2: reset porque cambió el set de defaults del panel ventas (25 → 12 widgets curados).
+      // Los usuarios verán el layout limpio nuevo; sus customizaciones se pierden por única vez.
+      migrate: (persistedState, version) => {
+        if (version < 2) {
+          return { panels: {}, editing: {} };
+        }
+        return persistedState;
+      },
+    }
   )
 );
 

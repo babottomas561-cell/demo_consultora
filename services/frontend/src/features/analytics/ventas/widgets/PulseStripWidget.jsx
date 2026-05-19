@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import {
   DollarSign, ShoppingCart, Users, TrendingUp, Package, PercentIcon,
-  ArrowUpRight, ArrowDownRight,
+  ArrowUpRight, ArrowDownRight, Clock,
 } from 'lucide-react';
 import { useVentasData } from '../VentasDataContext';
 import { formatCurrency, formatNumber } from '../../analyticsUtils';
@@ -72,19 +72,23 @@ const KPIS = [
     sparkKey: 'tickets',
   },
   {
-    id: 'unidades',
-    label: 'Unidades',
-    icon: TrendingUp,
-    accent: '#0d9488',
-    iconBg: 'bg-teal-100',
-    iconColor: 'text-teal-600',
-    valueFmt: formatNumber,
+    id: 'dso_dias',
+    label: 'Días de cobro',
+    icon: Clock,
+    accent: '#dc2626',
+    iconBg: 'bg-red-100',
+    iconColor: 'text-red-600',
+    valueFmt: (v) => v != null ? `${Number(v).toFixed(0)} d` : '—',
     sparkKey: null,
+    getSeverity: (v) => v == null ? 'neutral' : v > 60 ? 'danger' : v > 30 ? 'warning' : 'success',
+    invertTrend: true,
   },
 ];
 
 const KpiCard = ({ kpi, raw, sparkData, comparar }) => {
-  const actual = Number(raw?.actual ?? raw ?? 0);
+  const rawActual = raw?.actual ?? raw;
+  const isNull = rawActual == null;
+  const actual = isNull ? null : Number(rawActual);
   const anterior = raw?.anterior != null ? Number(raw.anterior) : null;
 
   let delta = null;
@@ -110,7 +114,7 @@ const KpiCard = ({ kpi, raw, sparkData, comparar }) => {
         )}
       </div>
       <p className="text-[11px] font-medium text-slate-500 truncate leading-tight">{kpi.label}</p>
-      <p className="text-lg font-bold text-slate-900 tabular-nums leading-none truncate">{kpi.valueFmt(actual)}</p>
+      <p className="text-lg font-bold text-slate-900 tabular-nums leading-none truncate">{isNull ? '—' : kpi.valueFmt(actual)}</p>
       {sparkValues && sparkValues.length > 2 && (
         <div className="mt-0.5">
           <Sparkline
@@ -135,9 +139,12 @@ const KpiCard = ({ kpi, raw, sparkData, comparar }) => {
 
 export default function PulseStripWidget() {
   const {
-    kpis, temporal, loadingKpis, comparar,
+    kpis, resultadoKpis, temporal, loadingKpis, comparar,
     clientes, vendedores, productos,
   } = useVentasData();
+
+  const productosBajoCosto = resultadoKpis?.productos_bajo_costo?.actual ?? 0;
+  const coberturaCosto = resultadoKpis?.cobertura_costo_pct ?? null;
 
   const sparkData = useMemo(() => {
     const series = temporal?.series ?? [];
@@ -182,6 +189,17 @@ export default function PulseStripWidget() {
           />
         ))}
       </div>
+      {productosBajoCosto > 0 && (
+        <div className="shrink-0 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+          <span className="text-base leading-none">⚠</span>
+          <span>
+            <strong>{productosBajoCosto} producto{productosBajoCosto !== 1 ? 's' : ''}</strong> se vendieron por debajo del costo en este período.
+            {coberturaCosto != null && coberturaCosto < 60 && (
+              <span className="ml-1 text-red-500">(solo {coberturaCosto}% de líneas tienen costo cargado — el margen puede estar subestimado)</span>
+            )}
+          </span>
+        </div>
+      )}
       <NarrativeInsight
         rules={VENTAS_RULES}
         context={narrativeCtx}

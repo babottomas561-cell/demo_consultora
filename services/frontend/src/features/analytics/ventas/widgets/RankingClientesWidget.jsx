@@ -126,6 +126,7 @@ export default function RankingClientesWidget() {
   const { clientes: data, loadingClientes, fetchClientes } = useVentasData();
   const [selected, setSelected] = useState(null);
 
+  // Re-fetch when filters change (fetchClientes changes when qs changes)
   useEffect(() => { fetchClientes(); }, [fetchClientes]);
 
   if (loadingClientes) return <TableSkeleton />;

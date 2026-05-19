@@ -88,6 +88,9 @@ export default function YearOverYearWidget() {
   return (
     <div className="h-full w-full p-4 pt-2 flex flex-col gap-2">
       <p className="text-[11px] text-slate-500">Comparativa año a año — mismos meses, distintos años. Ideal para detectar estacionalidad.</p>
+      <div className="shrink-0 rounded-lg bg-amber-50 border border-amber-200 px-3 py-1.5 text-[10px] text-amber-700 font-medium">
+        ⚠ Valores nominales sin ajuste por inflación. Un crecimiento nominal no implica crecimiento real.
+      </div>
       <div className="flex-1 min-h-0">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={chartData} margin={{ left: 4, right: 8 }}>
