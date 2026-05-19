@@ -107,16 +107,37 @@ def _sync_clientes_maestro(cur, clientes_maestro: list[dict[str, Any]]) -> dict[
         lookup[cod] = nombre
         cur.execute(
             """
-            INSERT INTO clientes (external_id, nombre)
-            VALUES (%s, %s)
+            INSERT INTO clientes (
+              external_id, nombre, cuit, email, cod_vendedor, habilitado,
+              cod_zona, lista_precio, condicion_venta, cod_rubro_cliente
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (external_id) DO UPDATE SET
               nombre = CASE
                 WHEN EXCLUDED.nombre <> '' AND EXCLUDED.nombre NOT LIKE 'Cliente %%'
                 THEN EXCLUDED.nombre
                 ELSE clientes.nombre
-              END
+              END,
+              cuit              = COALESCE(EXCLUDED.cuit, clientes.cuit),
+              email             = COALESCE(EXCLUDED.email, clientes.email),
+              cod_vendedor      = COALESCE(EXCLUDED.cod_vendedor, clientes.cod_vendedor),
+              habilitado        = EXCLUDED.habilitado,
+              cod_zona          = COALESCE(EXCLUDED.cod_zona, clientes.cod_zona),
+              lista_precio      = COALESCE(EXCLUDED.lista_precio, clientes.lista_precio),
+              condicion_venta   = COALESCE(EXCLUDED.condicion_venta, clientes.condicion_venta),
+              cod_rubro_cliente = COALESCE(EXCLUDED.cod_rubro_cliente, clientes.cod_rubro_cliente)
             """,
-            (cod, nombre),
+            (
+                cod, nombre,
+                c.get("cuit") or None,
+                c.get("email") or None,
+                c.get("cod_vendedor"),
+                c.get("habilitado", True),
+                c.get("cod_zona"),
+                c.get("lista_precio"),
+                c.get("condicion_venta"),
+                c.get("cod_rubro_cliente"),
+            ),
         )
     return lookup
 
@@ -905,6 +926,20 @@ def _upsert_empresas(cur, rows: list[dict]) -> None:
         )
 
 
+def _upsert_cotizaciones(cur, im, fecha_desde, fecha_hasta) -> int:
+    rows = im.sync_cotizaciones(fecha_desde, fecha_hasta)
+    for r in rows:
+        cur.execute(
+            """
+            INSERT INTO cotizaciones (fecha, moneda, valor)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (fecha, moneda) DO UPDATE SET valor = EXCLUDED.valor
+            """,
+            (r["fecha"], r["moneda"], r["valor"]),
+        )
+    return len(rows)
+
+
 def _upsert_listas_precios(cur, rows: list[dict]) -> None:
     for r in rows:
         cur.execute(
@@ -1400,6 +1435,8 @@ def sync_incremental(tenant_schema: str, erp_config: dict, connector_id: int = N
             )
         counts["puntos_de_venta"] = 1
 
+        counts["cotizaciones"] = _upsert_cotizaciones(cur, im, desde_inc, hasta_inc)
+
         _upsert_listas_precios(cur, im.obtener_listas_precios())
         counts["listas_precios"] = 1
 
@@ -1509,6 +1546,8 @@ def sync_completo(tenant_schema: str, erp_config: dict, connector_id: int = None
                 pdv,
             )
         counts["puntos_de_venta"] = 1
+
+        counts["cotizaciones"] = _upsert_cotizaciones(cur, im, desde, hasta)
 
         listas = im.obtener_listas_precios()
         _upsert_listas_precios(cur, listas)

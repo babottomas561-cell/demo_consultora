@@ -434,6 +434,10 @@ class InfomanagerConnector:
                 "email": c.get("mail") or c.get("email") or "",
                 "cod_vendedor": _as_int(c.get("cod_vendedor")),
                 "habilitado": str(c.get("habilitado", "1")) not in ("0", "false", "False", "N"),
+                "cod_zona": _as_int(c.get("cod_zona")),
+                "lista_precio": _as_int(c.get("lista_precio")),
+                "condicion_venta": _as_int(c.get("condicion_venta")),
+                "cod_rubro_cliente": _as_int(c.get("cod_rubro_cliente")),
             }
             for c in data
         ]
@@ -933,6 +937,30 @@ class InfomanagerConnector:
 
     def obtener_vendedores(self) -> list[dict[str, Any]]:
         return self.fetch_paginated("/api/v1/vendedores", max_pages=1)
+
+    def sync_cotizaciones(self, fecha_desde, fecha_hasta) -> list[dict[str, Any]]:
+        """Fetch daily exchange rates for USD and EUR."""
+        results = []
+        for moneda in ("D", "E"):  # D=dólar, E=euro
+            try:
+                params = {
+                    "fechaDesde": fecha_desde.strftime("%Y%m%d"),
+                    "fechaHasta": fecha_hasta.strftime("%Y%m%d"),
+                    "moneda": moneda,
+                }
+                rows = self.fetch_paginated("/api/v1/cotizacion", params, max_pages=50)
+                for r in rows:
+                    fecha = r.get("fecha") or r.get("date")
+                    valor = r.get("cotizacion") or r.get("valor") or r.get("value")
+                    if fecha and valor:
+                        results.append({
+                            "fecha": str(fecha)[:10],
+                            "moneda": moneda,
+                            "valor": float(valor),
+                        })
+            except Exception:
+                pass
+        return results
 
     def sync_puntos_de_venta(self) -> list[dict[str, Any]]:
         data = self.fetch_paginated("/api/v1/puntos-de-venta", max_pages=1)

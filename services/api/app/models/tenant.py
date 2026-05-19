@@ -15,6 +15,14 @@ class Cliente(TenantBase):
     nombre = Column(String, nullable=False)
     segmento = Column(String, nullable=True)
     churn_risk = Column(Float, nullable=True)
+    cuit = Column(String, nullable=True)
+    email = Column(String, nullable=True)
+    cod_vendedor = Column(Integer, nullable=True)
+    habilitado = Column(Boolean, nullable=True)
+    cod_zona = Column(Integer, nullable=True)
+    lista_precio = Column(Integer, nullable=True)
+    condicion_venta = Column(Integer, nullable=True)
+    cod_rubro_cliente = Column(Integer, nullable=True)
 
 class Venta(TenantBase):
     __tablename__ = "ventas"

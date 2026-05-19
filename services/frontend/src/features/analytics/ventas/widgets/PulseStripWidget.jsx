@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import {
   DollarSign, ShoppingCart, Users, TrendingUp, Package, PercentIcon,
-  ArrowUpRight, ArrowDownRight, Clock,
+  ArrowUpRight, ArrowDownRight, Clock, CheckCircle,
 } from 'lucide-react';
 import { useVentasData } from '../VentasDataContext';
 import { formatCurrency, formatNumber } from '../../analyticsUtils';
@@ -70,6 +70,18 @@ const KPIS = [
     iconColor: 'text-violet-600',
     valueFmt: formatNumber,
     sparkKey: 'tickets',
+  },
+  {
+    id: 'tasa_conversion_presupuestos',
+    label: 'Conv. Presup.',
+    icon: CheckCircle,
+    accent: '#0891b2',
+    iconBg: 'bg-cyan-100',
+    iconColor: 'text-cyan-600',
+    valueFmt: (v) => (v != null && !Number.isNaN(Number(v))) ? `${Number(v).toFixed(1)}%` : '—',
+    sparkKey: null,
+    getSeverity: (v) => v == null ? 'neutral' : v > 60 ? 'success' : v > 30 ? 'warning' : 'danger',
+    tooltip: 'Presupuestos confirmados / emitidos en el período',
   },
   {
     id: 'dso_dias',

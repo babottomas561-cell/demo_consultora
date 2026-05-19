@@ -1816,6 +1816,25 @@ async def ventas_kpis(
     except Exception:
         dso = None
 
+    # Tasa de conversión presupuestos → facturas (global del período)
+    tasa_conversion_pres = None
+    try:
+        async with db.begin_nested():
+            pres_row = (await db.execute(text("""
+                SELECT
+                    COUNT(*) AS emitidos,
+                    COUNT(CASE WHEN confirmado THEN 1 END) AS confirmados
+                FROM presupuestos
+                WHERE fecha >= :desde AND fecha < :hasta
+                  AND (anulada IS NULL OR anulada <> 'S')
+            """), {"desde": params["desde"], "hasta": params["hasta"]})).mappings().one()
+            emitidos = int(pres_row["emitidos"] or 0)
+            confirmados = int(pres_row["confirmados"] or 0)
+            if emitidos > 0:
+                tasa_conversion_pres = round(confirmados / emitidos * 100, 1)
+    except Exception:
+        tasa_conversion_pres = None
+
     # previous period
     ant: dict[str, Optional[float]] = {}
     if filters.comparar_anterior:
@@ -1852,6 +1871,7 @@ async def ventas_kpis(
         "margen_bruto_pct": _kpi_obj(round(margen_pct, 2), ant.get("margen_bruto_pct")),
         "dso_dias": {"actual": dso} if dso is not None else {"actual": None},
         "cobertura_costo_pct": cobertura_costo_pct,
+        "tasa_conversion_presupuestos": tasa_conversion_pres,
     }
 
 
@@ -2289,6 +2309,20 @@ async def ventas_por_cliente(
     today = date.today()
     total_facturado = sum(money(r["facturado_neto"]) for r in rows) or 1
 
+    # Enrich with client master segmentation fields
+    client_ids = [r["cliente_id"] for r in rows]
+    cliente_master: dict = {}
+    try:
+        master_rows = (await db.execute(text("""
+            SELECT external_id, cod_zona, lista_precio, condicion_venta,
+                   cod_rubro_cliente, cod_vendedor, cuit, email
+            FROM clientes
+            WHERE external_id = ANY(:ids)
+        """), {"ids": client_ids})).mappings().all()
+        cliente_master = {r["external_id"]: dict(r) for r in master_rows}
+    except Exception:
+        pass
+
     # ABC classification
     total_ordenado = sorted(rows, key=lambda r: money(r["facturado_neto"]), reverse=True)
     acumulado = 0.0
@@ -2311,6 +2345,7 @@ async def ventas_por_cliente(
         md = money(d["margen_dolares"])
         ultima = d["ultima_compra"]
         dias_sin_comprar = (today - ultima.date()).days if ultima else None
+        master = cliente_master.get(d["cliente_id"], {})
 
         result.append({
             "cod_cliente": d["cliente_id"],
@@ -2326,6 +2361,12 @@ async def ventas_por_cliente(
             "dias_sin_comprar": dias_sin_comprar,
             "es_nuevo": d["cliente_id"] in nuevos_set,
             "segmento": abc_map.get(d["cliente_id"], "C"),
+            # Segmentation fields from client master
+            "cod_zona": master.get("cod_zona"),
+            "lista_precio": master.get("lista_precio"),
+            "condicion_venta_master": master.get("condicion_venta"),
+            "cod_rubro_cliente": master.get("cod_rubro_cliente"),
+            "cod_vendedor_asignado": master.get("cod_vendedor"),
         })
 
     # ABC summary

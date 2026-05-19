@@ -17,6 +17,7 @@ const fmtPct = (v) => `${Number(v ?? 0).toFixed(1)}%`;
 function Cliente360({ cliente, onClose }) {
   if (!cliente) return null;
   const seg = cliente.segmento ?? 'C';
+  const COND_LABEL = { 1: 'Efectivo', 2: 'Cta Cte', 3: 'Tarjeta', 4: 'Otros' };
   const stats = [
     { icon: DollarSign,  label: 'Facturado',       value: formatCurrency(cliente.facturado_neto),    color: 'text-indigo-600' },
     { icon: ShoppingCart, label: 'Tickets FA',      value: formatNumber(cliente.tickets),             color: 'text-cyan-600'   },
@@ -25,6 +26,12 @@ function Cliente360({ cliente, onClose }) {
     { icon: Calendar,    label: 'Días sin comprar', value: `${cliente.dias_sin_comprar ?? '—'} días`, color: cliente.dias_sin_comprar > 90 ? 'text-red-500' : 'text-amber-600' },
     { icon: TrendingUp,  label: 'Unidades',         value: formatNumber(cliente.unidades),            color: 'text-teal-600'   },
   ];
+  const segFields = [
+    cliente.cod_zona        && { label: 'Zona',           value: `Zona ${cliente.cod_zona}` },
+    cliente.lista_precio    && { label: 'Lista precios',  value: `Lista ${cliente.lista_precio}` },
+    cliente.condicion_venta_master && { label: 'Condición venta', value: COND_LABEL[cliente.condicion_venta_master] ?? `Cond. ${cliente.condicion_venta_master}` },
+    cliente.cod_rubro_cliente && { label: 'Rubro cliente', value: `Rubro ${cliente.cod_rubro_cliente}` },
+  ].filter(Boolean);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -63,6 +70,18 @@ function Cliente360({ cliente, onClose }) {
           })}
         </div>
 
+        {/* Segmentation fields */}
+        {segFields.length > 0 && (
+          <div className="px-4 pb-2 flex flex-wrap gap-1.5">
+            {segFields.map((f) => (
+              <span key={f.label} className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-600">
+                <span className="text-slate-400">{f.label}:</span>
+                <span className="font-semibold">{f.value}</span>
+              </span>
+            ))}
+          </div>
+        )}
+
         {/* Insight footer */}
         <div className="px-4 pb-4">
           {cliente.dias_sin_comprar > 90 && (
@@ -92,7 +111,14 @@ const columns = [
     key: 'cliente_nombre',
     label: 'Cliente',
     render: (r) => (
-      <span className="font-medium text-slate-800 truncate max-w-[180px] block">{r.cliente_nombre}</span>
+      <div className="flex flex-col min-w-0">
+        <span className="font-medium text-slate-800 truncate max-w-[180px]">{r.cliente_nombre}</span>
+        {(r.cod_zona || r.lista_precio) && (
+          <span className="text-[9px] text-slate-400 tabular-nums">
+            {r.cod_zona ? `Z${r.cod_zona}` : ''}{r.cod_zona && r.lista_precio ? ' · ' : ''}{r.lista_precio ? `L${r.lista_precio}` : ''}
+          </span>
+        )}
+      </div>
     ),
   },
   {
