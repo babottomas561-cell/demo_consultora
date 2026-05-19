@@ -201,7 +201,7 @@ def venta_iva_neto_expr(alias: str = "") -> str:
     total = _col(alias, "total")
     iva = _col(alias, "iva_importe")
     tipo = _col(alias, "tipo_comprobante")
-    base = f"COALESCE({iva}::float, 0)"
+    base = f"COALESCE(NULLIF({iva}, '')::float, 0)"
     return (
         f"CASE WHEN {tipo} IN ('FA','ND') THEN ABS({base}) "
         f"WHEN {tipo} = 'NC' THEN -ABS({base}) ELSE 0 END"
@@ -212,10 +212,12 @@ def venta_costo_neto_expr(alias: str = "") -> str:
     cantidad = _col(alias, "cantidad")
     costo = _col(alias, "precio_compra_actual")
     tipo = _col(alias, "tipo_comprobante")
-    base = f"ABS({cantidad}) * {costo}::float"
+    safe_costo = f"NULLIF({costo}, '')::float"
+    base = f"ABS({cantidad}) * {safe_costo}"
+    costo_valid = f"({costo} IS NOT NULL AND {costo} <> '')"
     return (
-        f"CASE WHEN {costo} IS NOT NULL AND {tipo} IN ('FA','ND') THEN {base} "
-        f"WHEN {costo} IS NOT NULL AND {tipo} = 'NC' THEN -{base} ELSE 0 END"
+        f"CASE WHEN {costo_valid} AND {tipo} IN ('FA','ND') THEN {base} "
+        f"WHEN {costo_valid} AND {tipo} = 'NC' THEN -{base} ELSE 0 END"
     )
 
 
@@ -241,7 +243,7 @@ async def _fetch_kpi_row(db: AsyncSession, where: str, params: dict) -> dict:
             COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN cantidad ELSE 0 END),0)         AS unidades,
             COALESCE(SUM({venta_importe_neto_expr()} - {venta_costo_neto_expr()}),0)           AS margen_dolares,
             COALESCE(SUM(
-              CASE WHEN precio_compra_actual IS NOT NULL THEN ABS(total) ELSE 0 END),0)             AS total_con_costo
+              CASE WHEN precio_compra_actual IS NOT NULL AND precio_compra_actual <> '' THEN ABS(total) ELSE 0 END),0) AS total_con_costo
         FROM ventas
         WHERE {where}
     """), params)).mappings().one()
@@ -1890,7 +1892,7 @@ async def ventas_productos(
             COUNT(DISTINCT CASE WHEN tipo_comprobante='FA' THEN cliente_id END)           AS clientes_unicos,
             COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END)                             AS tickets,
             COALESCE(SUM({venta_importe_neto_expr()} - {venta_costo_neto_expr()}), 0)      AS margen_dolares,
-            COALESCE(SUM(CASE WHEN precio_compra_actual IS NOT NULL THEN ABS(total) ELSE 0 END), 0) AS total_con_costo
+            COALESCE(SUM(CASE WHEN precio_compra_actual IS NOT NULL AND precio_compra_actual <> '' THEN ABS(total) ELSE 0 END), 0) AS total_con_costo
         FROM ventas
         WHERE {where}
         GROUP BY producto_id
@@ -1923,7 +1925,9 @@ async def ventas_productos(
                 CONCAT('Rubro ', v.cod_rubro)
             )                                                                         AS nombre,
             COALESCE(SUM({venta_importe_neto_expr('v')}), 0)                         AS facturado,
-            COUNT(CASE WHEN v.tipo_comprobante='FA' THEN 1 END)                      AS tickets
+            COUNT(CASE WHEN v.tipo_comprobante='FA' THEN 1 END)                      AS tickets,
+            COALESCE(SUM({venta_importe_neto_expr('v')} - {venta_costo_neto_expr('v')}), 0) AS margen_abs,
+            COALESCE(SUM(CASE WHEN v.precio_compra_actual IS NOT NULL AND v.precio_compra_actual <> '' THEN ABS(v.total) ELSE 0 END), 0) AS total_con_costo
         FROM ventas v
         LEFT JOIN (
             SELECT DISTINCT ON (cod_articulo) cod_articulo, rubro
@@ -1975,7 +1979,14 @@ async def ventas_productos(
         subrubros.append(d)
 
     pareto = [
-        {"producto": r["nombre"], "facturado": r["facturado"], "acumulado_pct": r["acumulado_pct"]}
+        {
+            "producto_id": r["producto_id"],
+            "producto": r["nombre"],
+            "facturado": r["facturado"],
+            "pct": r["pct_total"],
+            "acumulado_pct": r["acumulado_pct"],
+            "unidades": r["unidades"],
+        }
         for r in ranking[:20]
     ]
 
@@ -2097,7 +2108,7 @@ async def ventas_por_vendedor(
             COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END)                                  AS tickets,
             COUNT(DISTINCT CASE WHEN tipo_comprobante='FA' THEN cliente_id END)               AS clientes_unicos,
             COALESCE(SUM({venta_importe_neto_expr()} - {venta_costo_neto_expr()}), 0)          AS margen_dolares,
-            COALESCE(SUM(CASE WHEN precio_compra_actual IS NOT NULL THEN ABS(total) ELSE 0 END), 0) AS total_con_costo
+            COALESCE(SUM(CASE WHEN precio_compra_actual IS NOT NULL AND precio_compra_actual <> '' THEN ABS(total) ELSE 0 END), 0) AS total_con_costo
         FROM ventas
         WHERE {where} AND cod_vendedor IS NOT NULL
         GROUP BY cod_vendedor
