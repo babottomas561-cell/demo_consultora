@@ -128,6 +128,7 @@ const VENTAS_WIDGET_CATALOG = [
     component: EvolucionTemporalWidget,
     defaultSize: { w: 8, h: 5 },
     category: 'chart',
+    selfChrome: true,
   },
   {
     type: 'ventas-devoluciones',
