@@ -135,9 +135,12 @@ const KpiCard = ({ kpi, raw, sparkData, comparar }) => {
 
 export default function PulseStripWidget() {
   const {
-    kpis, temporal, loadingKpis, comparar,
+    kpis, resultadoKpis, temporal, loadingKpis, comparar,
     clientes, vendedores, productos,
   } = useVentasData();
+
+  const productosBajoCosto = resultadoKpis?.productos_bajo_costo?.actual ?? 0;
+  const coberturaCosto = resultadoKpis?.cobertura_costo_pct ?? null;
 
   const sparkData = useMemo(() => {
     const series = temporal?.series ?? [];
@@ -182,6 +185,17 @@ export default function PulseStripWidget() {
           />
         ))}
       </div>
+      {productosBajoCosto > 0 && (
+        <div className="shrink-0 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+          <span className="text-base leading-none">⚠</span>
+          <span>
+            <strong>{productosBajoCosto} producto{productosBajoCosto !== 1 ? 's' : ''}</strong> se vendieron por debajo del costo en este período.
+            {coberturaCosto != null && coberturaCosto < 60 && (
+              <span className="ml-1 text-red-500">(solo {coberturaCosto}% de líneas tienen costo cargado — el margen puede estar subestimado)</span>
+            )}
+          </span>
+        </div>
+      )}
       <NarrativeInsight
         rules={VENTAS_RULES}
         context={narrativeCtx}

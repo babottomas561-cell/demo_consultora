@@ -90,8 +90,9 @@ const linearForecast = (series, key, steps = 3) => {
 
 const WIDGET_ID = 'ventas-evolucion';
 
-function EvolucionChart({ series, chartType, comparar, showForecast }) {
+function EvolucionChart({ series, chartType, comparar, showForecast, showMargen }) {
   const hasFaBruto = series.some((r) => r.fa_bruto !== undefined);
+  const hasMargen = showMargen && series.some((r) => r.margen_pct != null);
   const data = hasFaBruto
     ? series.map((r) => ({ ...r, nc_neg: -(Number(r.devoluciones ?? 0)) }))
     : series;
@@ -115,7 +116,8 @@ function EvolucionChart({ series, chartType, comparar, showForecast }) {
   );
   const yAxisRight = (
     <YAxis yAxisId="right" orientation="right" axisLine={false} tickLine={false}
-      tick={{ fill: '#cbd5e1', fontSize: 11 }} />
+      tick={{ fill: hasMargen ? '#059669' : '#cbd5e1', fontSize: 11 }}
+      tickFormatter={hasMargen ? (v) => `${v}%` : undefined} />
   );
   const grid = <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />;
   const tooltip = <Tooltip content={<CustomTooltip />} />;
@@ -173,7 +175,8 @@ function EvolucionChart({ series, chartType, comparar, showForecast }) {
         {hasFaBruto && <Bar yAxisId="left" dataKey="fa_bruto" name="FA bruto" fill="#818cf8" radius={[3,3,0,0]} opacity={0.55} />}
         {hasFaBruto && <Bar yAxisId="left" dataKey="nc_neg" name="NC / Devol." fill="#f87171" radius={[0,0,3,3]} opacity={0.8} />}
         <Line yAxisId="left" type="monotone" dataKey="facturado" name="Neto facturado" stroke="#4f46e5" strokeWidth={2.5} dot={{ r: 3, fill: '#4f46e5', strokeWidth: 0 }} activeDot={{ r: 5 }} />
-        <Line yAxisId="right" type="monotone" dataKey="tickets" name="Tickets" stroke="#f97316" strokeWidth={1.5} strokeDasharray="4 2" dot={false} />
+        {!hasMargen && <Line yAxisId="right" type="monotone" dataKey="tickets" name="Tickets" stroke="#f97316" strokeWidth={1.5} strokeDasharray="4 2" dot={false} />}
+        {hasMargen && <Line yAxisId="right" type="monotone" dataKey="margen_pct" name="Margen%" stroke="#059669" strokeWidth={2} dot={{ r: 3, fill: '#059669', strokeWidth: 0 }} activeDot={{ r: 5 }} />}
         {showForecast && <Line yAxisId="left" type="monotone" dataKey="forecast" name="Pronóstico" stroke="#4f46e5" strokeWidth={1.5} strokeDasharray="5 3" dot={false} />}
       </ComposedChart>
     </ResponsiveContainer>
@@ -184,6 +187,7 @@ export default function EvolucionTemporalWidget() {
   const { temporal, loadingTemporal, granularidad, setGranularidad, comparar } = useVentasData();
   const setting = useWidgetSetting(WIDGET_ID);
   const [showForecast, setShowForecast] = useState(false);
+  const [showMargen, setShowMargen] = useState(false);
 
   const chartType = setting.chartType || 'composed';
   const activeGran = setting.granularity || granularidad || 'mes';
@@ -223,14 +227,25 @@ export default function EvolucionTemporalWidget() {
         { key: 'Tickets', label: 'Tickets' },
       ]}
       customSettingsFields={
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-slate-700">Mostrar pronóstico lineal</span>
-          <button
-            onClick={() => setShowForecast((v) => !v)}
-            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${showForecast ? 'bg-indigo-600' : 'bg-slate-200'}`}
-          >
-            <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${showForecast ? 'translate-x-4' : 'translate-x-1'}`} />
-          </button>
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-slate-700">Mostrar margen bruto%</span>
+            <button
+              onClick={() => setShowMargen((v) => !v)}
+              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${showMargen ? 'bg-emerald-600' : 'bg-slate-200'}`}
+            >
+              <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${showMargen ? 'translate-x-4' : 'translate-x-1'}`} />
+            </button>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-slate-700">Mostrar pronóstico lineal</span>
+            <button
+              onClick={() => setShowForecast((v) => !v)}
+              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${showForecast ? 'bg-indigo-600' : 'bg-slate-200'}`}
+            >
+              <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${showForecast ? 'translate-x-4' : 'translate-x-1'}`} />
+            </button>
+          </div>
         </div>
       }
       rightExtras={
@@ -247,6 +262,7 @@ export default function EvolucionTemporalWidget() {
           chartType={chartType}
           comparar={comparar}
           showForecast={showForecast}
+          showMargen={showMargen}
         />
       </div>
     </SmartWidget>

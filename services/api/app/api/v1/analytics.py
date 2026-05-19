@@ -1820,18 +1820,26 @@ async def ventas_temporal(
 
     series = (await db.execute(text(f"""
         SELECT
-            to_char(date_trunc('{trunc}', fecha), 'YYYY-MM-DD') AS periodo,
-            COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN ABS(total) ELSE 0 END),0)              AS fa_bruto,
-            COALESCE(SUM(CASE WHEN tipo_comprobante='NC' THEN ABS(total) ELSE 0 END),0)              AS devoluciones,
-            COALESCE(SUM({venta_importe_neto_expr()}),0)                                             AS facturado,
-            COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END)                                         AS tickets
+            to_char(date_trunc('{trunc}', fecha), 'YYYY-MM-DD')                                       AS periodo,
+            COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN ABS(total) ELSE 0 END),0)               AS fa_bruto,
+            COALESCE(SUM(CASE WHEN tipo_comprobante='NC' THEN ABS(total) ELSE 0 END),0)               AS devoluciones,
+            COALESCE(SUM({venta_importe_neto_expr()}),0)                                              AS facturado,
+            COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END)                                          AS tickets,
+            COALESCE(SUM({venta_importe_neto_expr()} - {venta_costo_neto_expr()}),0)                  AS margen_abs,
+            COALESCE(SUM(CASE WHEN precio_compra_actual IS NOT NULL THEN ABS(total) ELSE 0 END),0)    AS total_con_costo
         FROM ventas
         WHERE {where}
         GROUP BY 1
         ORDER BY 1
     """), params)).mappings().all()
 
-    result = [dict(r) for r in series]
+    result = []
+    for r in series:
+        d = dict(r)
+        tc = float(d.pop("total_con_costo") or 0)
+        ma = float(d["margen_abs"] or 0)
+        d["margen_pct"] = round(ma / tc * 100, 1) if tc else None
+        result.append(d)
 
     if filters.comparar_anterior:
         prev_desde, prev_hasta = _prev_period(filters)
@@ -1840,23 +1848,31 @@ async def ventas_temporal(
         prev_params["hasta"] = prev_hasta
         prev_series = (await db.execute(text(f"""
             SELECT
-                to_char(date_trunc('{trunc}', fecha), 'YYYY-MM-DD') AS periodo,
-                COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN ABS(total) ELSE 0 END),0)              AS fa_bruto,
-                COALESCE(SUM(CASE WHEN tipo_comprobante='NC' THEN ABS(total) ELSE 0 END),0)              AS devoluciones,
-                COALESCE(SUM({venta_importe_neto_expr()}),0)                                             AS facturado,
-                COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END) AS tickets
+                to_char(date_trunc('{trunc}', fecha), 'YYYY-MM-DD')                                       AS periodo,
+                COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN ABS(total) ELSE 0 END),0)               AS fa_bruto,
+                COALESCE(SUM(CASE WHEN tipo_comprobante='NC' THEN ABS(total) ELSE 0 END),0)               AS devoluciones,
+                COALESCE(SUM({venta_importe_neto_expr()}),0)                                              AS facturado,
+                COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END)                                          AS tickets,
+                COALESCE(SUM({venta_importe_neto_expr()} - {venta_costo_neto_expr()}),0)                  AS margen_abs,
+                COALESCE(SUM(CASE WHEN precio_compra_actual IS NOT NULL THEN ABS(total) ELSE 0 END),0)    AS total_con_costo
             FROM ventas
             WHERE {where}
             GROUP BY 1
             ORDER BY 1
         """), prev_params)).mappings().all()
-        prev_map = {r["periodo"]: dict(r) for r in prev_series}
+        prev_map = {}
+        for r in prev_series:
+            d = dict(r)
+            tc = float(d.pop("total_con_costo") or 0)
+            ma = float(d["margen_abs"] or 0)
+            d["margen_pct"] = round(ma / tc * 100, 1) if tc else None
+            prev_map[d["periodo"]] = d
+        prev_vals = list(prev_map.values())
         for i, row in enumerate(result):
-            # Align by index (same position in period)
-            prev_vals = list(prev_map.values())
             if i < len(prev_vals):
                 row["facturado_anterior"] = prev_vals[i]["facturado"]
                 row["tickets_anterior"] = prev_vals[i]["tickets"]
+                row["margen_pct_anterior"] = prev_vals[i].get("margen_pct")
 
     return {"series": result}
 
@@ -2459,24 +2475,67 @@ async def ventas_ticket_dist(
     params = filters.sql_params()
     where = _ventas_base_where(filters)
 
+    # Calcular percentiles del período para definir buckets dinámicamente
+    stats_row = (await db.execute(text(f"""
+        SELECT
+            PERCENTILE_CONT(0.10) WITHIN GROUP (ORDER BY ABS(total)) AS p10,
+            PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY ABS(total)) AS p25,
+            PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY ABS(total)) AS p50,
+            PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY ABS(total)) AS p75,
+            PERCENTILE_CONT(0.90) WITHIN GROUP (ORDER BY ABS(total)) AS p90,
+            MAX(ABS(total)) AS max_val,
+            AVG(ABS(total)) AS avg_val
+        FROM ventas
+        WHERE tipo_comprobante = 'FA' AND {where}
+    """), params)).mappings().one()
+
+    def nice_round(v: float) -> int:
+        """Round to a visually clean number for bucket boundaries."""
+        if v <= 0:
+            return 0
+        magnitude = 10 ** (len(str(int(v))) - 1)
+        return int((v // magnitude + 1) * magnitude)
+
+    p10 = float(stats_row["p10"] or 0)
+    p25 = float(stats_row["p25"] or 0)
+    p50 = float(stats_row["p50"] or 0)
+    p75 = float(stats_row["p75"] or 0)
+    p90 = float(stats_row["p90"] or 0)
+
+    # Generar 6 cortes dinámicos redondeados
+    raw_cuts = [p10, p25, p50, p75, p90]
+    cuts = sorted(set(nice_round(c) for c in raw_cuts if c > 0))
+    # Deduplicate and ensure at least 3 cuts
+    if len(cuts) < 3:
+        avg = float(stats_row["avg_val"] or 1)
+        cuts = [nice_round(avg * 0.25), nice_round(avg * 0.5), nice_round(avg), nice_round(avg * 2)]
+        cuts = sorted(set(c for c in cuts if c > 0))
+
+    def fmt_bucket_label(lo: int, hi: int | None) -> str:
+        def fmt(v: int) -> str:
+            if v >= 1_000_000_000: return f"${v//1_000_000_000}B"
+            if v >= 1_000_000:     return f"${v//1_000_000}M"
+            if v >= 1_000:         return f"${v//1_000}K"
+            return f"${v}"
+        return f">{fmt(lo)}" if hi is None else (f"<{fmt(hi)}" if lo == 0 else f"{fmt(lo)}-{fmt(hi)}")
+
+    # Build CASE expression dynamically
+    when_clauses_ord = []
+    when_clauses_label = []
+    for i, cut in enumerate(cuts, start=1):
+        when_clauses_ord.append(f"WHEN ABS(total) < {cut} THEN {i}")
+        lo = cuts[i - 2] if i > 1 else 0
+        when_clauses_label.append(f"WHEN ABS(total) < {cut} THEN '{fmt_bucket_label(lo, cut)}'")
+    last_lo = cuts[-1]
+    max_ord = len(cuts) + 1
+
+    case_ord   = "CASE " + " ".join(when_clauses_ord)   + f" ELSE {max_ord} END"
+    case_label = "CASE " + " ".join(when_clauses_label) + f" ELSE '{fmt_bucket_label(last_lo, None)}' END"
+
     rows = (await db.execute(text(f"""
         SELECT
-            CASE
-                WHEN ABS(total) < 10000       THEN 1
-                WHEN ABS(total) < 50000       THEN 2
-                WHEN ABS(total) < 100000      THEN 3
-                WHEN ABS(total) < 500000      THEN 4
-                WHEN ABS(total) < 1000000     THEN 5
-                ELSE 6
-            END AS bucket_ord,
-            CASE
-                WHEN ABS(total) < 10000       THEN '<$10K'
-                WHEN ABS(total) < 50000       THEN '$10K-$50K'
-                WHEN ABS(total) < 100000      THEN '$50K-$100K'
-                WHEN ABS(total) < 500000      THEN '$100K-$500K'
-                WHEN ABS(total) < 1000000     THEN '$500K-$1M'
-                ELSE '>$1M'
-            END AS bucket,
+            {case_ord}   AS bucket_ord,
+            {case_label} AS bucket,
             COUNT(*)          AS cantidad,
             SUM(ABS(total))   AS facturado,
             AVG(ABS(total))   AS ticket_promedio
@@ -2505,7 +2564,12 @@ async def ventas_ticket_dist(
             p50_idx = i
             break
 
-    return {'distribucion': data, 'total_tickets': total_tickets, 'p50_bucket': data[p50_idx]['bucket'] if data else None}
+    return {
+        'distribucion': data,
+        'total_tickets': total_tickets,
+        'p50_bucket': data[p50_idx]['bucket'] if data else None,
+        'ticket_promedio_global': round(money(stats_row["avg_val"]), 2) if stats_row["avg_val"] else 0,
+    }
 
 
 @router.get("/ventas/cohort")

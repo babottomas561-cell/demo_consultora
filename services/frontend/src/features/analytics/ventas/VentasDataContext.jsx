@@ -34,6 +34,7 @@ export default function VentasDataProvider({ children }) {
   const canFetch = user?.company_id || (user?.is_admin && activeCompany);
 
   const [kpis, setKpis] = useState(null);
+  const [resultadoKpis, setResultadoKpis] = useState(null);
   const [temporal, setTemporal] = useState(null);
   const [productos, setProductos] = useState(null);
   const [vendedores, setVendedores] = useState(null);
@@ -84,16 +85,18 @@ export default function VentasDataProvider({ children }) {
     setLoadingProductos(true); setLoadingVendedores(true);
     setError(null);
     try {
-      const [kR, tR, pR, vR] = await Promise.all([
+      const [kR, tR, pR, vR, rR] = await Promise.all([
         apiClient.get(`/analytics/ventas/kpis${qs}`),
         apiClient.get(`/analytics/ventas/temporal${appendQueryParams(qs, { granularidad })}`),
         apiClient.get(`/analytics/ventas/productos${qs}`),
         apiClient.get(`/analytics/ventas/por-vendedor${qs}`),
+        apiClient.get(`/analytics/resultado/kpis${qs}`).catch(() => ({ data: null })),
       ]);
       setKpis(kR.data);
       setTemporal(tR.data);
       setProductos(pR.data);
       setVendedores(vR.data);
+      setResultadoKpis(rR.data);
     } catch (err) {
       console.error(err);
       setError('No se pudo cargar el panel de ventas.');
@@ -213,7 +216,7 @@ export default function VentasDataProvider({ children }) {
   useEffect(() => { if (temporal) fetchTemporal(); }, [granularidad]);
 
   const value = useMemo(() => ({
-    kpis, temporal, productos, vendedores, clientes, comprobantes, transacciones,
+    kpis, resultadoKpis, temporal, productos, vendedores, clientes, comprobantes, transacciones,
     heatmap, yoy, descuentos, aging, ticketDist, cohort,
     granularidad, setGranularidad, comparar,
     loadingKpis, loadingTemporal, loadingProductos, loadingVendedores,
@@ -225,7 +228,7 @@ export default function VentasDataProvider({ children }) {
     refetch: fetchPrimary,
     user, activeCompany,
   }), [
-    kpis, temporal, productos, vendedores, clientes, comprobantes, transacciones,
+    kpis, resultadoKpis, temporal, productos, vendedores, clientes, comprobantes, transacciones,
     heatmap, yoy, descuentos, aging, ticketDist, cohort,
     granularidad, comparar,
     loadingKpis, loadingTemporal, loadingProductos, loadingVendedores,

@@ -36,7 +36,7 @@ export default function CohortRetencionWidget() {
     </div>
   );
 
-  const offsets = Array.from({ length: Math.min(maxOffset + 1, 7) }, (_, i) => i);
+  const offsets = Array.from({ length: Math.min(maxOffset + 1, 12) }, (_, i) => i);
 
   return (
     <div className="h-full flex flex-col px-3 py-2 gap-2">

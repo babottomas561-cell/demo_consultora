@@ -57,6 +57,10 @@ export default function AgingCobranzaWidget() {
 
   return (
     <div className="h-full flex flex-col px-3 py-2 gap-2">
+      {/* Nota aclaratoria */}
+      <p className="text-[9px] text-slate-400 shrink-0 -mb-1">
+        Snapshot al día de hoy — independiente del período filtrado
+      </p>
       {/* KPI */}
       <div className="flex items-center gap-3 shrink-0">
         <div className="rounded-xl bg-red-50 border border-red-100 px-3 py-2 flex-1">
