@@ -372,6 +372,14 @@ class InfomanagerConnector:
                 params=request_params,
                 timeout=60,
             )
+            if resp.status_code == 401:
+                self.authenticate()
+                resp = requests.get(
+                    f"{self.base_url}{endpoint}",
+                    headers=self.headers(),
+                    params=request_params,
+                    timeout=60,
+                )
             resp.raise_for_status()
             items = self._extract_items(resp.json())
             if not items:
@@ -514,9 +522,25 @@ class InfomanagerConnector:
             if _as_int(d.get("cod_deposito"))
         ]
 
-    def sync_ventas(self, fecha_desde, fecha_hasta) -> list[dict[str, Any]]:
-        # Items endpoint lacks header fields (fecha, cod_cliente, etc.) — must join.
-        # Headers are indexed by id; items reference them via id_comprobante.
+    def sync_ventas(
+        self,
+        fecha_desde,
+        fecha_hasta,
+        articulo_rubro_lookup: dict[str, int] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Sync sales lines joining headers + items.
+
+        B1 — importe fallback: ventas/items.importe is correct per API docs but can
+             be 0 in edge cases; fall back to cantidad × precio.
+        B2 — multi-moneda: if header.moneda == 'D', multiply all monetary amounts
+             by cotizacion to convert USD → ARS before storing.
+        B3 — cod_rubro: ventas/items has NO cod_rubro field. Caller should pass
+             articulo_rubro_lookup {cod_articulo_str: cod_rubro} built from the
+             articulos master to enrich each line.
+        D6 — IVA discriminado: pull importe_iva_10_5 and importe_iva_27 from the
+             sales header and store them on each line (proportional split not needed
+             — the widget will sum at header level via SUM in SQL).
+        """
         params = {
             "fechaDesde": fecha_desde.strftime("%Y%m%d"),
             "fechaHasta": fecha_hasta.strftime("%Y%m%d"),
@@ -530,9 +554,7 @@ class InfomanagerConnector:
 
         items_raw = self.fetch_paginated("/api/v1/ventas/items", params)
 
-        # Valid tipos for the ventas analytics table — the items endpoint returns documents
-        # from ALL modules (presupuestos→PR, recibos→RE, interdepósito→IR, etc.).
-        # Only FA/NC/ND belong in ventas; the rest would corrupt KPIs.
+        # Only FA/NC/ND belong in ventas analytics table
         _VALID_TIPOS = {"FA", "NC", "ND"}
 
         ventas: list[dict[str, Any]] = []
@@ -541,23 +563,45 @@ class InfomanagerConnector:
             if not cab:
                 continue
             tipo = _normalize_tipo_comprobante(cab.get("tipo_comprobante"))
-
-            # Skip non-sales document types contaminating the items endpoint
             if tipo not in _VALID_TIPOS:
                 continue
 
-            # Normalize sign: Infomanager may return negative importe for FA (debit convention).
-            # Store all amounts as absolute values; tipo_comprobante carries the semantic sign.
+            # B2 — multi-moneda conversion
+            moneda = str(cab.get("moneda") or "P").upper()
+            cotizacion = _as_float(cab.get("cotizacion"), 1.0)
+            factor = cotizacion if moneda == "D" and cotizacion > 0 else 1.0
+
+            # B1 — importe fallback
+            _qty = abs(_as_float(item.get("cantidad")))
+            _precio_raw = abs(_as_float(item.get("precio")))
+            _importe_raw = abs(_as_float(item.get("importe")))
+            total_ars = (_importe_raw if _importe_raw > 0 else (_qty * _precio_raw)) * factor
+
+            precio_unitario_ars = _precio_raw * factor
+            neto_ars = abs(_as_float(cab.get("neto"))) * factor
+            iva_total_ars = abs(_as_float(cab.get("iva_importe"))) * factor
+
+            # D6 — IVA discriminado por alícuota
+            iva_10_5_ars = abs(_as_float(cab.get("importe_iva_10_5"))) * factor
+            iva_27_ars = abs(_as_float(cab.get("importe_iva_27"))) * factor
+
+            # B3 — cod_rubro desde lookup de artículos (ventas/items no tiene este campo)
+            cod_articulo_str = str(item.get("cod_articulo") or "")
+            cod_rubro = (
+                (articulo_rubro_lookup or {}).get(cod_articulo_str)
+                or (_as_int(item.get("cod_rubro")) if item.get("cod_rubro") is not None else None)
+            )
+
             ventas.append(
                 {
                     "fecha": cab.get("fecha"),
                     "cliente_id": str(cab.get("cod_cliente") or 0),
                     "cliente_nombre": cab.get("cliente_nombre") or cab.get("razon_social") or "",
-                    "producto_id": str(item.get("cod_articulo") or ""),
+                    "producto_id": cod_articulo_str,
                     "producto_nombre": item.get("detalle") or item.get("descripcion") or "",
-                    "cantidad": abs(_as_float(item.get("cantidad"))),
-                    "precio_unitario": abs(_as_float(item.get("precio"))),
-                    "total": abs(_as_float(item.get("importe"))),
+                    "cantidad": _qty,
+                    "precio_unitario": precio_unitario_ars,
+                    "total": total_ars,
                     "tipo_comprobante": tipo,
                     "tipo_factura": cab.get("tipo_factura"),
                     "punto_de_venta": _as_int(cab.get("punto_de_venta")),
@@ -565,14 +609,20 @@ class InfomanagerConnector:
                     "cod_empresa": _as_int(cab.get("cod_empresa"), 1),
                     "tag": cab.get("tag", "S"),
                     "condicion_venta_tipo": _as_int(cab.get("condicion_venta_tipo"), 1),
-                    "neto": abs(_as_float(cab.get("neto"))),
-                    "iva_importe": abs(_as_float(cab.get("iva_importe"))),
+                    "neto": neto_ars,
+                    "iva_importe": iva_total_ars,
                     "anulada": cab.get("anulada", "N"),
                     "cod_deposito": _as_int(cab.get("cod_deposito"), 1),
-                    "cod_rubro": _as_int(item.get("cod_rubro")) if item.get("cod_rubro") is not None else None,
+                    "cod_rubro": cod_rubro,
                     "cod_lista_precios": _as_int(item.get("cod_lista_precios")) if item.get("cod_lista_precios") is not None else None,
                     "precio_compra_actual": _as_float(item.get("precio_compra_actual")),
                     "descuento_porc": _as_float(item.get("descuento_porc") or item.get("descuento")),
+                    # D6 — IVA discriminado
+                    "iva_10_5": iva_10_5_ars if iva_10_5_ars > 0 else None,
+                    "iva_27": iva_27_ars if iva_27_ars > 0 else None,
+                    # B2 — metadata de moneda
+                    "moneda": moneda,
+                    "cotizacion": cotizacion if moneda == "D" else None,
                 }
             )
         return ventas
@@ -653,7 +703,12 @@ class InfomanagerConnector:
         return compras
 
     def sync_saldos_clientes(self) -> list[dict[str, Any]]:
-        # Returns one summary row per client: {cod_cliente, nombre, tot_saldo, tot_entrada, tot_salida, dias_deuda}
+        """Fetch client balance summary.
+
+        D1/D2 — now includes tot_saldo, color (semáforo de InfoManager) and
+                 dias_deuda so the frontend can show cartera total KPI and
+                 traffic-light client risk widget.
+        """
         data = self.fetch_paginated(
             "/api/v1/reportes/saldos_clientes",
             {"TAG": "T", "codcliente": 0, "codEmpresa": 0},
@@ -671,6 +726,10 @@ class InfomanagerConnector:
                 "importe": tot_saldo,
                 "saldo_acumulado": tot_saldo,
                 "fecha_vencimiento": None,
+                # D1/D2 — campos nuevos del semáforo
+                "tot_saldo": tot_saldo,
+                "color": row.get("color") or None,
+                "dias_deuda": _as_int(row.get("dias_deuda")) if row.get("dias_deuda") is not None else None,
             })
         return results
 
@@ -886,8 +945,11 @@ class InfomanagerConnector:
         return sorted(result, key=lambda item: (item["periodo"], item["cod_vendedor"]))
 
     def sync_presupuestos(self, fecha_desde, fecha_hasta) -> list[dict[str, Any]]:
-        # API has /confirmados and /no_confirmados — no base /presupuestos endpoint.
-        # Confirmed ones return {"venta": {...}} since they converted to sales.
+        """Fetch confirmed and pending quotes.
+
+        D5 — now includes origen_sistema to track conversion by channel
+             ("App de pedidos" vs "IM4" vs otros).
+        """
         params = {
             "fechaDesde": fecha_desde.strftime("%Y%m%d"),
             "fechaHasta": fecha_hasta.strftime("%Y%m%d"),
@@ -913,6 +975,8 @@ class InfomanagerConnector:
                 "confirmado": confirmado,
                 "fecha_conversion": cab.get("fecha_conversion") or (cab.get("fecha") if confirmado else None),
                 "venta_id": _as_int(cab.get("venta_id") or (cab.get("id") if confirmado else None)) or None,
+                # D5 — canal de origen
+                "origen_sistema": cab.get("origen_sistema") or cab.get("cod_origen_sistema") or None,
             }
 
         for p in confirmados:
@@ -1048,6 +1112,14 @@ class InfomanagerConnector:
                 params=request_params,
                 timeout=60,
             )
+            if resp.status_code == 401:
+                self.authenticate()
+                resp = requests.get(
+                    f"{self.base_url}/api/v1/articulos/movimientos-por-articulo",
+                    headers=self.headers(),
+                    params=request_params,
+                    timeout=60,
+                )
             if resp.status_code == 404:
                 break
             resp.raise_for_status()
@@ -1085,6 +1157,71 @@ class InfomanagerConnector:
     def obtener_presupuestos_no_confirmados(self) -> list[dict[str, Any]]:
         raw = self.fetch_paginated("/api/v1/presupuestos/no_confirmados", max_pages=100)
         return [r.get("venta") or r for r in raw]
+
+    def sync_saldos_proveedores_full(self, fecha_desde, fecha_hasta) -> list[dict[str, Any]]:
+        """Fetch supplier invoice balances from /reportes/facturas_compras.
+        This is the only endpoint that returns saldo_fa and op_imp_pagado.
+        """
+        params = {
+            "fechaDesde": fecha_desde.strftime("%Y%m%d"),
+            "fechaHasta": fecha_hasta.strftime("%Y%m%d"),
+            "tag": "T",
+            "codEmpresa": 0,
+            "codProveedor": 0,
+        }
+        rows = self.fetch_paginated("/api/v1/reportes/facturas_compras", params, max_pages=200)
+        result = []
+        for r in rows:
+            fa_id = _as_int(r.get("fa_id") or r.get("id"))
+            if not fa_id:
+                continue
+            result.append({
+                "fa_id":           fa_id,
+                "fa_fecha":        r.get("fa_fecha"),
+                "fa_pto_vta":      _as_int(r.get("fa_pto_vta")),
+                "fa_nro":          _as_int(r.get("fa_nro")),
+                "fa_cod_empresa":  _as_int(r.get("fa_cod_empresa") or r.get("cod_empresa")),
+                "moneda":          r.get("moneda") or "P",
+                "cod_proveedor":   _as_int(r.get("cod_proveedor")),
+                "nombre":          r.get("nombre") or r.get("proveedor_nombre") or "",
+                "fa_total":        _as_float(r.get("fa_total")),
+                "op_imp_pagado":   _as_float(r.get("op_imp_pagado")),
+                "saldo_fa":        _as_float(r.get("saldo_fa")),
+                "nro_ultima_op":   str(r.get("nro_ultima_OP") or r.get("nro_ultima_op") or ""),
+                "primer_fec_vto":  r.get("primer_fec_vto"),
+                "ult_fec_vto":     r.get("ult_fec_vto"),
+                "vto_cant_cuotas": _as_int(r.get("vto_cant_cuotas")),
+                "vto_importe":     _as_float(r.get("vto_importe")),
+            })
+        return result
+
+    def sync_interdepositos(self, fecha_desde, fecha_hasta) -> list[dict[str, Any]]:
+        """Fetch inter-deposit movements from /api/v1/interdeposito."""
+        params = {
+            "fechaDesde": fecha_desde.strftime("%Y%m%d"),
+            "fechaHasta": fecha_hasta.strftime("%Y%m%d"),
+        }
+        rows = self.fetch_paginated("/api/v1/interdeposito", params, max_pages=200)
+        result = []
+        for r in rows:
+            rid = _as_int(r.get("id"))
+            if not rid:
+                continue
+            result.append({
+                "id":               rid,
+                "fecha":            r.get("fecha"),
+                "cod_articulo":     _as_int(r.get("cod_articulo")),
+                "descripcion":      r.get("descripcion") or r.get("articulo") or "",
+                "cantidad":         _as_float(r.get("cantidad")),
+                "precio":           _as_float(r.get("precio")),
+                "total":            _as_float(r.get("total") or r.get("importe")),
+                "deposito_origen":  _as_int(r.get("cod_deposito_origen") or r.get("deposito_origen") or r.get("cod_deposito")),
+                "deposito_destino": _as_int(r.get("cod_deposito_destino") or r.get("deposito_destino")),
+                "cod_empresa":      _as_int(r.get("cod_empresa")),
+                "estado":           r.get("estado") or r.get("status") or "",
+                "observacion":      r.get("observacion") or r.get("obs") or "",
+            })
+        return result
 
     # ── End new methods ──────────────────────────────────────────────────────
 

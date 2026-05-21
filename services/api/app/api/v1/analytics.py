@@ -1858,6 +1858,19 @@ async def ventas_kpis(
         ant_facturado_total = money(prev_row["facturado_total"])
         ant["margen_bruto_pct"] = (ant_margen_d / ant_facturado_total * 100) if ant_facturado_total else 0
 
+    # D1 — Cartera total pendiente de clientes (tot_saldo > 0)
+    cartera_pendiente: Optional[float] = None
+    try:
+        async with db.begin_nested():
+            cart_row = (await db.execute(text("""
+                SELECT COALESCE(SUM(tot_saldo), 0) AS cartera_pendiente
+                FROM cuentas_corrientes_clientes
+                WHERE tot_saldo > 0
+            """))).mappings().one()
+            cartera_pendiente = money(cart_row["cartera_pendiente"])
+    except Exception:
+        cartera_pendiente = None
+
     return {
         "facturado_total": _kpi_obj(facturado_total, ant.get("facturado_total")),
         "facturado_neto": _kpi_obj(facturado_total, ant.get("facturado_total")),  # backward compat alias
@@ -1873,6 +1886,223 @@ async def ventas_kpis(
         "dso_dias": {"actual": dso} if dso is not None else {"actual": None},
         "cobertura_costo_pct": cobertura_costo_pct,
         "tasa_conversion_presupuestos": tasa_conversion_pres,
+        # D1 — nuevo
+        "cartera_pendiente": {"actual": cartera_pendiente},
+    }
+
+
+
+# ── Nuevos endpoints de datos D2/D3/D5/D6 ────────────────────────────────────
+
+@router.get("/ventas/semaforo-cartera")
+async def ventas_semaforo_cartera(
+    company_id: int = None,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """D2 — Distribución de clientes por semáforo de riesgo crediticio (InfoManager color field)."""
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+    rows = (await db.execute(text("""
+        SELECT
+            COALESCE(color, 'sin_dato') AS color,
+            COUNT(DISTINCT cliente_id)  AS clientes,
+            COALESCE(SUM(CASE WHEN tot_saldo > 0 THEN tot_saldo ELSE 0 END), 0) AS saldo_deudor,
+            COALESCE(SUM(CASE WHEN tot_saldo < 0 THEN ABS(tot_saldo) ELSE 0 END), 0) AS saldo_a_favor
+        FROM cuentas_corrientes_clientes
+        GROUP BY COALESCE(color, 'sin_dato')
+        ORDER BY
+            CASE COALESCE(color, 'sin_dato')
+                WHEN 'rojo'     THEN 1
+                WHEN 'amarillo' THEN 2
+                WHEN 'verde'    THEN 3
+                ELSE 4
+            END
+    """))).mappings().all()
+    total_saldo = sum(money(r["saldo_deudor"]) for r in rows)
+    result = []
+    for r in rows:
+        saldo_d = money(r["saldo_deudor"])
+        result.append({
+            "color": r["color"],
+            "clientes": int(r["clientes"] or 0),
+            "saldo_deudor": round(saldo_d, 2),
+            "saldo_a_favor": round(money(r["saldo_a_favor"]), 2),
+            "pct_cartera": round(saldo_d / total_saldo * 100, 1) if total_saldo else 0,
+        })
+    return {"semaforo": result, "total_cartera": round(total_saldo, 2)}
+
+
+@router.get("/ventas/medios-pago")
+async def ventas_medios_pago(
+    company_id: int = None,
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """D3 — Distribución de cobros por forma de pago: efectivo (EF), cheque (CH), tarjeta (TC)."""
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+    params = {"desde": filters.desde, "hasta": filters.hasta_exclusive}
+    rows = (await db.execute(text("""
+        SELECT
+            COALESCE(NULLIF(forma_pago, ''), 'otro') AS forma_pago,
+            COUNT(*)                                  AS operaciones,
+            COALESCE(SUM(importe), 0)                 AS total
+        FROM pagos_clientes
+        WHERE fecha >= :desde AND fecha < :hasta
+        GROUP BY COALESCE(NULLIF(forma_pago, ''), 'otro')
+        ORDER BY total DESC
+    """), params)).mappings().all()
+    total = sum(money(r["total"]) for r in rows)
+    return {
+        "medios": [
+            {
+                "forma_pago": r["forma_pago"],
+                "label": {"EF": "Efectivo", "CH": "Cheque", "TC": "Tarjeta"}.get(str(r["forma_pago"]).upper(), str(r["forma_pago"])),
+                "operaciones": int(r["operaciones"] or 0),
+                "total": round(money(r["total"]), 2),
+                "pct": round(money(r["total"]) / total * 100, 1) if total else 0,
+            }
+            for r in rows
+        ],
+        "total_cobrado": round(total, 2),
+    }
+
+
+@router.get("/ventas/conversion-presupuestos")
+async def ventas_conversion_presupuestos(
+    company_id: int = None,
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """D5 — Tasa de conversión de presupuestos, desglosada por vendedor y canal de origen."""
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+    params = {"desde": filters.desde, "hasta": filters.hasta_exclusive}
+
+    totals = (await db.execute(text("""
+        SELECT
+            COUNT(*)                                        AS total,
+            COUNT(CASE WHEN confirmado THEN 1 END)          AS confirmados,
+            COALESCE(SUM(total), 0)                         AS monto_total,
+            COALESCE(SUM(CASE WHEN confirmado THEN total ELSE 0 END), 0) AS monto_confirmado
+        FROM presupuestos
+        WHERE fecha >= :desde AND fecha < :hasta
+    """), params)).mappings().one()
+
+    por_vendedor = (await db.execute(text("""
+        SELECT
+            p.cod_vendedor,
+            COALESCE(MAX(v.nombre), CONCAT('Vendedor ', p.cod_vendedor)) AS vendedor_nombre,
+            COUNT(*)                                       AS total,
+            COUNT(CASE WHEN p.confirmado THEN 1 END)       AS confirmados,
+            COALESCE(SUM(p.total), 0)                      AS monto_total,
+            COALESCE(SUM(CASE WHEN p.confirmado THEN p.total ELSE 0 END), 0) AS monto_confirmado
+        FROM presupuestos p
+        LEFT JOIN vendedores v ON v.cod_vendedor = p.cod_vendedor
+        WHERE p.fecha >= :desde AND p.fecha < :hasta
+        GROUP BY p.cod_vendedor
+        ORDER BY total DESC
+        LIMIT 20
+    """), params)).mappings().all()
+
+    por_canal = (await db.execute(text("""
+        SELECT
+            COALESCE(NULLIF(origen_sistema, ''), 'sin_dato') AS canal,
+            COUNT(*)                                         AS total,
+            COUNT(CASE WHEN confirmado THEN 1 END)           AS confirmados
+        FROM presupuestos
+        WHERE fecha >= :desde AND fecha < :hasta
+        GROUP BY COALESCE(NULLIF(origen_sistema, ''), 'sin_dato')
+        ORDER BY total DESC
+    """), params)).mappings().all()
+
+    total_n = int(totals["total"] or 0)
+    conf_n = int(totals["confirmados"] or 0)
+    return {
+        "total": total_n,
+        "confirmados": conf_n,
+        "no_confirmados": total_n - conf_n,
+        "tasa_conversion_pct": round(conf_n / total_n * 100, 1) if total_n else 0,
+        "monto_total": round(money(totals["monto_total"]), 2),
+        "monto_confirmado": round(money(totals["monto_confirmado"]), 2),
+        "por_vendedor": [
+            {
+                "cod_vendedor": r["cod_vendedor"],
+                "vendedor_nombre": r["vendedor_nombre"],
+                "total": int(r["total"] or 0),
+                "confirmados": int(r["confirmados"] or 0),
+                "tasa_pct": round(int(r["confirmados"] or 0) / int(r["total"]) * 100, 1) if int(r["total"] or 0) else 0,
+                "monto_total": round(money(r["monto_total"]), 2),
+                "monto_confirmado": round(money(r["monto_confirmado"]), 2),
+            }
+            for r in por_vendedor
+        ],
+        "por_canal": [
+            {
+                "canal": r["canal"],
+                "total": int(r["total"] or 0),
+                "confirmados": int(r["confirmados"] or 0),
+                "tasa_pct": round(int(r["confirmados"] or 0) / int(r["total"]) * 100, 1) if int(r["total"] or 0) else 0,
+            }
+            for r in por_canal
+        ],
+    }
+
+
+@router.get("/ventas/iva-discriminado")
+async def ventas_iva_discriminado(
+    company_id: int = None,
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """D6 — IVA ventas discriminado por alícuota (21%, 10.5%, 27%) agrupado por mes.
+    Sirve para armar el libro IVA ventas mensual del CPN.
+    """
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+    params = filters.sql_params()
+    where = _ventas_base_where(filters)
+    rows = (await db.execute(text(f"""
+        SELECT
+            to_char(date_trunc('month', fecha), 'YYYY-MM')          AS periodo,
+            -- Base neta
+            COALESCE(SUM(neto), 0)                                   AS base_neta,
+            -- IVA 21% estimado (total IVA menos las otras alícuotas)
+            COALESCE(SUM(
+                iva_importe
+                - COALESCE(iva_10_5, 0)
+                - COALESCE(iva_27, 0)
+            ), 0) AS iva_21,
+            COALESCE(SUM(COALESCE(iva_10_5, 0)), 0)                 AS iva_10_5,
+            COALESCE(SUM(COALESCE(iva_27, 0)), 0)                   AS iva_27,
+            COALESCE(SUM(iva_importe), 0)                            AS iva_total,
+            -- Facturado bruto
+            COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN ABS(total) ELSE 0 END), 0) AS facturado_bruto,
+            COUNT(DISTINCT CASE WHEN tipo_comprobante='FA'
+                THEN to_char(fecha,'YYYYMMDD') || '-' || COALESCE(cliente_id,'x') END) AS facturas
+        FROM ventas
+        WHERE {where} AND tipo_comprobante IN ('FA', 'ND')
+        GROUP BY 1
+        ORDER BY 1
+    """), params)).mappings().all()
+    return {
+        "periodos": [
+            {
+                "periodo": r["periodo"],
+                "base_neta": round(money(r["base_neta"]), 2),
+                "iva_21": round(money(r["iva_21"]), 2),
+                "iva_10_5": round(money(r["iva_10_5"]), 2),
+                "iva_27": round(money(r["iva_27"]), 2),
+                "iva_total": round(money(r["iva_total"]), 2),
+                "facturado_bruto": round(money(r["facturado_bruto"]), 2),
+                "facturas": int(r["facturas"] or 0),
+            }
+            for r in rows
+        ]
     }
 
 
@@ -6627,4 +6857,510 @@ async def get_caja_egresos(
             for r in rows
         ],
         "total": len(rows),
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# ESTADO DE RESULTADOS REAL (desde mayor contable)
+# ═══════════════════════════════════════════════════════════════════════════
+
+@router.get("/resultado/estado-resultados")
+async def get_estado_resultados(
+    company_id: int = None,
+    cod_empresa: Optional[int] = None,
+    desde: Optional[str] = None,
+    hasta: Optional[str] = None,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Estado de Resultados real desde el libro mayor + derivado desde ventas/compras."""
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+
+    d, h = resolve_dates(desde, hasta)
+    params: dict = {"desde": d, "hasta": h}
+    cond = "fecha >= :desde AND fecha < :hasta"
+    if cod_empresa:
+        cond += " AND cod_empresa = :cod_empresa"
+        params["cod_empresa"] = cod_empresa
+
+    # From mayor contable — group by account prefix to classify INGRESOS vs EGRESOS
+    mayor_rows = (await db.execute(text(f"""
+        SELECT
+            cuenta,
+            MAX(plan_descripcion) AS descripcion,
+            COALESCE(SUM(debe), 0)  AS total_debe,
+            COALESCE(SUM(haber), 0) AS total_haber,
+            COALESCE(SUM(haber) - SUM(debe), 0) AS saldo
+        FROM movimientos_contables
+        WHERE {cond}
+        GROUP BY cuenta
+        ORDER BY cuenta
+    """), params)).mappings().all()
+
+    # Classify into ER sections by account code prefix (Argentine standard plan)
+    ingresos_ventas, ingresos_otros = 0.0, 0.0
+    cogs, gastos_estructura, gastos_financieros, impuestos = 0.0, 0.0, 0.0, 0.0
+    detalle_ingresos, detalle_egresos = [], []
+
+    for r in mayor_rows:
+        cuenta_str = str(r["cuenta"] or "")
+        saldo = float(r["saldo"] or 0)
+        debe = float(r["total_debe"] or 0)
+        haber = float(r["total_haber"] or 0)
+        desc = r["descripcion"] or f"Cuenta {cuenta_str}"
+
+        # Ingresos: accounts starting with 4 (INGRESOS)
+        if cuenta_str.startswith("4"):
+            neto = haber - debe
+            if "venta" in desc.lower() or "ingreso" in desc.lower():
+                ingresos_ventas += neto
+            else:
+                ingresos_otros += neto
+            detalle_ingresos.append({"cuenta": cuenta_str, "descripcion": desc, "saldo": round(neto, 2)})
+
+        # Egresos: accounts starting with 5 (EGRESOS)
+        elif cuenta_str.startswith("5"):
+            neto = debe - haber
+            desc_low = desc.lower()
+            if "costo" in desc_low or "mercaderia" in desc_low:
+                cogs += neto
+            elif "interes" in desc_low or "banco" in desc_low or "financ" in desc_low or "cambi" in desc_low:
+                gastos_financieros += neto
+            elif "impuest" in desc_low or "gananc" in desc_low or "ingreso brut" in desc_low:
+                impuestos += neto
+            else:
+                gastos_estructura += neto
+            detalle_egresos.append({"cuenta": cuenta_str, "descripcion": desc, "saldo": round(neto, 2)})
+
+    tiene_mayor = bool(mayor_rows)
+
+    # Fallback from ventas/compras tables if mayor has no data
+    if not tiene_mayor:
+        ventas_where = f"fecha >= :desde AND fecha < :hasta AND tipo_comprobante IN ('FA','ND','NC') AND COALESCE(anulada,'N') <> 'S'"
+        if cod_empresa:
+            ventas_where += " AND cod_empresa = :cod_empresa"
+
+        vtotals = (await db.execute(text(f"""
+            SELECT
+                COALESCE(SUM(CASE WHEN tipo_comprobante IN ('FA','ND') THEN ABS(total) ELSE 0 END)
+                       - SUM(CASE WHEN tipo_comprobante='NC' THEN ABS(total) ELSE 0 END), 0) AS facturado_neto,
+                COALESCE(SUM(CASE WHEN tipo_comprobante IN ('FA','ND') THEN ABS(precio_compra_actual * cantidad) ELSE 0 END), 0) AS cogs_est
+            FROM ventas WHERE {ventas_where}
+        """), params)).mappings().one()
+
+        ingresos_ventas = float(vtotals["facturado_neto"] or 0)
+        cogs            = float(vtotals["cogs_est"] or 0)
+
+    total_ingresos  = ingresos_ventas + ingresos_otros
+    total_egresos   = cogs + gastos_estructura + gastos_financieros + impuestos
+    margen_bruto    = ingresos_ventas - cogs
+    ebitda          = margen_bruto - gastos_estructura
+    resultado_neto  = total_ingresos - total_egresos
+    margen_pct      = (margen_bruto / ingresos_ventas * 100) if ingresos_ventas else 0
+
+    return {
+        "fuente": "mayor_contable" if tiene_mayor else "derivado_ventas_compras",
+        "desde": str(d),
+        "hasta": str(h),
+        "resumen": {
+            "ingresos_ventas":    round(ingresos_ventas, 2),
+            "ingresos_otros":     round(ingresos_otros, 2),
+            "total_ingresos":     round(total_ingresos, 2),
+            "cogs":               round(cogs, 2),
+            "margen_bruto":       round(margen_bruto, 2),
+            "margen_pct":         round(margen_pct, 2),
+            "gastos_estructura":  round(gastos_estructura, 2),
+            "ebitda":             round(ebitda, 2),
+            "gastos_financieros": round(gastos_financieros, 2),
+            "impuestos":          round(impuestos, 2),
+            "total_egresos":      round(total_egresos, 2),
+            "resultado_neto":     round(resultado_neto, 2),
+        },
+        "detalle_ingresos": sorted(detalle_ingresos, key=lambda x: -x["saldo"]),
+        "detalle_egresos":  sorted(detalle_egresos,  key=lambda x: -x["saldo"]),
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# LIBRO IVA COMPLETO (ventas + compras)
+# ═══════════════════════════════════════════════════════════════════════════
+
+@router.get("/resultado/libro-iva-completo")
+async def get_libro_iva_completo(
+    company_id: int = None,
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Libro IVA ventas + compras discriminado por alícuota y período mensual."""
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+    params = filters.sql_params()
+    where_v = _ventas_base_where(filters)
+
+    ventas_rows = (await db.execute(text(f"""
+        SELECT
+            to_char(date_trunc('month', fecha), 'YYYY-MM') AS periodo,
+            COALESCE(SUM(neto), 0) AS base_neta,
+            COALESCE(SUM(iva_importe - COALESCE(iva_10_5,0) - COALESCE(iva_27,0)), 0) AS iva_21,
+            COALESCE(SUM(COALESCE(iva_10_5,0)), 0) AS iva_10_5,
+            COALESCE(SUM(COALESCE(iva_27,0)), 0)   AS iva_27,
+            COALESCE(SUM(iva_importe), 0)            AS iva_total,
+            COUNT(DISTINCT CASE WHEN tipo_comprobante='FA'
+                THEN to_char(fecha,'YYYYMMDD')||'-'||COALESCE(cliente_id,'x') END) AS comprobantes
+        FROM ventas
+        WHERE {where_v} AND tipo_comprobante IN ('FA','ND')
+        GROUP BY 1 ORDER BY 1
+    """), params)).mappings().all()
+
+    compras_where = compra_filters_clause(filters)
+    compras_params = compra_params(filters)
+    compras_rows = (await db.execute(text(f"""
+        SELECT
+            to_char(date_trunc('month', fecha), 'YYYY-MM') AS periodo,
+            COALESCE(SUM({compra_importe_neto_expr()}), 0) AS base_neta,
+            COALESCE(SUM(iva_importe), 0) AS iva_credito,
+            COUNT(*) AS comprobantes
+        FROM compras
+        WHERE {compras_where}
+        GROUP BY 1 ORDER BY 1
+    """), compras_params)).mappings().all()
+
+    compras_by_periodo = {r["periodo"]: dict(r) for r in compras_rows}
+
+    periodos = []
+    for r in ventas_rows:
+        periodo = r["periodo"]
+        iva_debito  = float(r["iva_total"] or 0)
+        iva_credito = float((compras_by_periodo.get(periodo) or {}).get("iva_credito") or 0)
+        periodos.append({
+            "periodo":          periodo,
+            "ventas_base_neta": round(float(r["base_neta"] or 0), 2),
+            "iva_ventas_21":    round(float(r["iva_21"]   or 0), 2),
+            "iva_ventas_10_5":  round(float(r["iva_10_5"] or 0), 2),
+            "iva_ventas_27":    round(float(r["iva_27"]   or 0), 2),
+            "iva_debito":       round(iva_debito, 2),
+            "compras_base_neta":round(float((compras_by_periodo.get(periodo) or {}).get("base_neta") or 0), 2),
+            "iva_credito":      round(iva_credito, 2),
+            "saldo_iva":        round(iva_debito - iva_credito, 2),  # positivo = a pagar
+            "comprobantes_v":   int(r["comprobantes"] or 0),
+            "comprobantes_c":   int((compras_by_periodo.get(periodo) or {}).get("comprobantes") or 0),
+        })
+
+    return {"periodos": periodos}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# CUENTA CORRIENTE PROVEEDORES (saldos pendientes con aging)
+# ═══════════════════════════════════════════════════════════════════════════
+
+@router.get("/proveedores/cuenta-corriente")
+async def get_cuenta_corriente_proveedores(
+    company_id: int = None,
+    cod_empresa: Optional[int] = None,
+    solo_con_saldo: bool = True,
+    page: int = 1,
+    limit: int = 100,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Cuenta corriente de proveedores: facturas pendientes con aging y resumen por proveedor."""
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+
+    cond_parts = ["1=1"]
+    params: dict = {"offset": (page - 1) * limit, "limit": limit}
+    if cod_empresa:
+        cond_parts.append("sp.fa_cod_empresa = :cod_empresa")
+        params["cod_empresa"] = cod_empresa
+    if solo_con_saldo:
+        cond_parts.append("sp.saldo_fa > 0")
+
+    where = " AND ".join(cond_parts)
+    today_expr = "CURRENT_DATE"
+
+    # Aging tramos by proveedor
+    aging_rows = (await db.execute(text(f"""
+        SELECT
+            sp.cod_proveedor,
+            COALESCE(p.nombre, sp.nombre, 'Proveedor '||sp.cod_proveedor::text) AS nombre,
+            COUNT(*) AS facturas_pendientes,
+            COALESCE(SUM(sp.saldo_fa), 0) AS saldo_total,
+            COALESCE(SUM(CASE WHEN sp.ult_fec_vto >= {today_expr} THEN sp.saldo_fa ELSE 0 END), 0) AS corriente,
+            COALESCE(SUM(CASE WHEN sp.ult_fec_vto < {today_expr}
+                              AND sp.ult_fec_vto >= {today_expr} - INTERVAL '30 days'
+                         THEN sp.saldo_fa ELSE 0 END), 0) AS vencido_0_30,
+            COALESCE(SUM(CASE WHEN sp.ult_fec_vto < {today_expr} - INTERVAL '30 days'
+                              AND sp.ult_fec_vto >= {today_expr} - INTERVAL '60 days'
+                         THEN sp.saldo_fa ELSE 0 END), 0) AS vencido_31_60,
+            COALESCE(SUM(CASE WHEN sp.ult_fec_vto < {today_expr} - INTERVAL '60 days'
+                              AND sp.ult_fec_vto >= {today_expr} - INTERVAL '90 days'
+                         THEN sp.saldo_fa ELSE 0 END), 0) AS vencido_61_90,
+            COALESCE(SUM(CASE WHEN sp.ult_fec_vto < {today_expr} - INTERVAL '90 days'
+                         THEN sp.saldo_fa ELSE 0 END), 0) AS vencido_90_plus,
+            MIN(sp.ult_fec_vto) AS proximo_vencimiento
+        FROM saldos_proveedores sp
+        LEFT JOIN proveedores p ON p.external_id = sp.cod_proveedor::text
+        WHERE {where}
+        GROUP BY sp.cod_proveedor, p.nombre, sp.nombre
+        ORDER BY saldo_total DESC
+        LIMIT :limit OFFSET :offset
+    """), params)).mappings().all()
+
+    count_params = {k: v for k, v in params.items() if k not in ("offset", "limit")}
+    total = (await db.execute(text(f"""
+        SELECT COUNT(DISTINCT sp.cod_proveedor)
+        FROM saldos_proveedores sp
+        WHERE {where.replace('LIMIT :limit OFFSET :offset', '')}
+    """), count_params)).scalar()
+
+    total_deuda = sum(float(r["saldo_total"] or 0) for r in aging_rows)
+    total_vencido = sum(
+        float(r["vencido_0_30"] or 0) + float(r["vencido_31_60"] or 0) +
+        float(r["vencido_61_90"] or 0) + float(r["vencido_90_plus"] or 0)
+        for r in aging_rows
+    )
+
+    return {
+        "total_proveedores": int(total or 0),
+        "total_deuda": round(total_deuda, 2),
+        "total_vencido": round(total_vencido, 2),
+        "page": page,
+        "limit": limit,
+        "proveedores": [
+            {
+                "cod_proveedor":      r["cod_proveedor"],
+                "nombre":             r["nombre"],
+                "facturas_pendientes":int(r["facturas_pendientes"] or 0),
+                "saldo_total":        round(float(r["saldo_total"] or 0), 2),
+                "corriente":          round(float(r["corriente"] or 0), 2),
+                "vencido_0_30":       round(float(r["vencido_0_30"] or 0), 2),
+                "vencido_31_60":      round(float(r["vencido_31_60"] or 0), 2),
+                "vencido_61_90":      round(float(r["vencido_61_90"] or 0), 2),
+                "vencido_90_plus":    round(float(r["vencido_90_plus"] or 0), 2),
+                "proximo_vencimiento":str(r["proximo_vencimiento"]) if r["proximo_vencimiento"] else None,
+            }
+            for r in aging_rows
+        ],
+    }
+
+
+@router.get("/proveedores/facturas-pendientes")
+async def get_facturas_pendientes_proveedor(
+    company_id: int = None,
+    cod_proveedor: Optional[int] = None,
+    cod_empresa: Optional[int] = None,
+    solo_con_saldo: bool = True,
+    page: int = 1,
+    limit: int = 50,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Detalle de facturas pendientes de un proveedor específico."""
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+
+    cond_parts = ["1=1"]
+    params: dict = {"offset": (page - 1) * limit, "limit": limit}
+    if cod_proveedor:
+        cond_parts.append("sp.cod_proveedor = :cod_proveedor")
+        params["cod_proveedor"] = cod_proveedor
+    if cod_empresa:
+        cond_parts.append("sp.fa_cod_empresa = :cod_empresa")
+        params["cod_empresa"] = cod_empresa
+    if solo_con_saldo:
+        cond_parts.append("sp.saldo_fa > 0")
+
+    where = " AND ".join(cond_parts)
+
+    count_params = {k: v for k, v in params.items() if k not in ("offset", "limit")}
+    total = (await db.execute(text(f"SELECT COUNT(*) FROM saldos_proveedores sp WHERE {where}"), count_params)).scalar()
+    rows = (await db.execute(text(f"""
+        SELECT sp.fa_id, sp.fa_fecha, sp.fa_pto_vta, sp.fa_nro, sp.fa_cod_empresa,
+               sp.moneda, sp.cod_proveedor,
+               COALESCE(p.nombre, sp.nombre) AS nombre,
+               sp.fa_total, sp.op_imp_pagado, sp.saldo_fa,
+               sp.primer_fec_vto, sp.ult_fec_vto, sp.vto_cant_cuotas,
+               CURRENT_DATE - sp.ult_fec_vto AS dias_vencido
+        FROM saldos_proveedores sp
+        LEFT JOIN proveedores p ON p.external_id = sp.cod_proveedor::text
+        WHERE {where}
+        ORDER BY sp.ult_fec_vto ASC NULLS LAST
+        LIMIT :limit OFFSET :offset
+    """), params)).mappings().all()
+
+    return {
+        "total": int(total or 0),
+        "page": page,
+        "limit": limit,
+        "facturas": [
+            {
+                **dict(r),
+                "fa_total":      round(float(r["fa_total"] or 0), 2),
+                "op_imp_pagado": round(float(r["op_imp_pagado"] or 0), 2),
+                "saldo_fa":      round(float(r["saldo_fa"] or 0), 2),
+                "dias_vencido":  int(r["dias_vencido"] or 0),
+                "fa_fecha":      str(r["fa_fecha"]) if r["fa_fecha"] else None,
+                "ult_fec_vto":   str(r["ult_fec_vto"]) if r["ult_fec_vto"] else None,
+            }
+            for r in rows
+        ],
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# CAJA Y BANCOS (saldo real por cuenta desde el mayor contable)
+# ═══════════════════════════════════════════════════════════════════════════
+
+@router.get("/caja/saldo-por-cuenta")
+async def get_saldo_por_cuenta(
+    company_id: int = None,
+    cod_empresa: Optional[int] = None,
+    hasta: Optional[str] = None,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Saldo de cuentas de caja y bancos desde el mayor contable.
+    Filtra cuentas cuyo código comienza con 111 (CAJAS) o 112 (BANCOS).
+    """
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+
+    params: dict = {}
+    cond_parts = ["(cuenta::text LIKE '111%' OR cuenta::text LIKE '112%')"]
+    if cod_empresa:
+        cond_parts.append("cod_empresa = :cod_empresa")
+        params["cod_empresa"] = cod_empresa
+    if hasta:
+        cond_parts.append("fecha <= :hasta")
+        params["hasta"] = date.fromisoformat(hasta)
+
+    where = " AND ".join(cond_parts)
+
+    cuentas = (await db.execute(text(f"""
+        SELECT
+            cuenta,
+            MAX(plan_descripcion) AS descripcion,
+            COALESCE(SUM(debe), 0)  AS total_debe,
+            COALESCE(SUM(haber), 0) AS total_haber,
+            COALESCE(SUM(debe) - SUM(haber), 0) AS saldo
+        FROM movimientos_contables
+        WHERE {where}
+        GROUP BY cuenta
+        ORDER BY cuenta
+    """), params)).mappings().all()
+
+    tiene_datos = bool(cuentas)
+    total_caja   = sum(float(r["saldo"]) for r in cuentas if str(r["cuenta"] or "").startswith("111"))
+    total_bancos = sum(float(r["saldo"]) for r in cuentas if str(r["cuenta"] or "").startswith("112"))
+
+    return {
+        "tiene_datos": tiene_datos,
+        "total_disponible": round(total_caja + total_bancos, 2),
+        "total_caja":   round(total_caja, 2),
+        "total_bancos": round(total_bancos, 2),
+        "cuentas": [
+            {
+                "cuenta":      str(r["cuenta"]),
+                "descripcion": r["descripcion"] or f"Cuenta {r['cuenta']}",
+                "total_debe":  round(float(r["total_debe"] or 0), 2),
+                "total_haber": round(float(r["total_haber"] or 0), 2),
+                "saldo":       round(float(r["saldo"] or 0), 2),
+                "tipo":        "caja" if str(r["cuenta"] or "").startswith("111") else "banco",
+            }
+            for r in cuentas
+        ],
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# INTERDEPOSITO — Movimientos entre depósitos
+# ═══════════════════════════════════════════════════════════════════════════
+
+@router.get("/stock/interdepositos-detalle")
+async def get_interdepositos_detalle(
+    company_id: int = None,
+    desde: Optional[str] = None,
+    hasta: Optional[str] = None,
+    cod_articulo: Optional[int] = None,
+    deposito: Optional[int] = None,
+    page: int = 1,
+    limit: int = 100,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Movimientos de stock entre depósitos (interdeposito)."""
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+
+    cond_parts = ["1=1"]
+    params: dict = {"offset": (page - 1) * limit, "limit": limit}
+    if desde:
+        cond_parts.append("id.fecha >= :desde")
+        params["desde"] = date.fromisoformat(desde)
+    if hasta:
+        cond_parts.append("id.fecha <= :hasta")
+        params["hasta"] = date.fromisoformat(hasta)
+    if cod_articulo:
+        cond_parts.append("id.cod_articulo = :cod_articulo")
+        params["cod_articulo"] = cod_articulo
+    if deposito:
+        cond_parts.append("(id.deposito_origen = :deposito OR id.deposito_destino = :deposito)")
+        params["deposito"] = deposito
+
+    where = " AND ".join(cond_parts)
+    count_params = {k: v for k, v in params.items() if k not in ("offset", "limit")}
+
+    total = (await db.execute(text(f"SELECT COUNT(*) FROM interdepositos id WHERE {where}"), count_params)).scalar()
+    rows = (await db.execute(text(f"""
+        SELECT id.id, id.fecha, id.cod_articulo, id.descripcion,
+               id.cantidad, id.precio, id.total,
+               id.deposito_origen, id.deposito_destino,
+               do_.nombre AS nombre_origen,
+               dd_.nombre AS nombre_destino,
+               id.estado, id.observacion
+        FROM interdepositos id
+        LEFT JOIN depositos do_ ON do_.cod_deposito = id.deposito_origen
+        LEFT JOIN depositos dd_ ON dd_.cod_deposito = id.deposito_destino
+        WHERE {where}
+        ORDER BY id.fecha DESC, id.id DESC
+        LIMIT :limit OFFSET :offset
+    """), params)).mappings().all()
+
+    # Summary by article
+    resumen_rows = (await db.execute(text(f"""
+        SELECT cod_articulo, MAX(descripcion) AS descripcion,
+               SUM(cantidad) AS cantidad_total,
+               COUNT(*) AS movimientos
+        FROM interdepositos id
+        WHERE {where.replace('id.', '').replace('deposito_origen','deposito_origen').replace('deposito_destino','deposito_destino')}
+        GROUP BY cod_articulo
+        ORDER BY cantidad_total DESC
+        LIMIT 20
+    """), count_params)).mappings().all()
+
+    return {
+        "total": int(total or 0),
+        "page": page,
+        "limit": limit,
+        "movimientos": [
+            {
+                **dict(r),
+                "cantidad": float(r["cantidad"] or 0),
+                "precio":   round(float(r["precio"] or 0), 2),
+                "total":    round(float(r["total"] or 0), 2),
+                "fecha":    str(r["fecha"]) if r["fecha"] else None,
+            }
+            for r in rows
+        ],
+        "top_articulos": [
+            {
+                "cod_articulo":   r["cod_articulo"],
+                "descripcion":    r["descripcion"],
+                "cantidad_total": float(r["cantidad_total"] or 0),
+                "movimientos":    int(r["movimientos"] or 0),
+            }
+            for r in resumen_rows
+        ],
     }

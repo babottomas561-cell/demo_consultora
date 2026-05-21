@@ -1,14 +1,15 @@
 import {
   TrendingUp, TrendingDown, DollarSign, RefreshCw,
   ArrowUpCircle, ArrowDownCircle, Activity, BarChart2,
-  PieChart, List, Receipt, BookOpen,
+  PieChart, List, Receipt, BookOpen, Landmark,
 } from 'lucide-react';
 import { createCajaKpiWidget } from './CajaKpiWidget';
-import FlujoWidget     from './FlujoWidget';
-import PorTipoWidget   from './PorTipoWidget';
-import MovimientosWidget from './MovimientosWidget';
-import RecibosDelPeriodoWidget from '../../infomanager/widgets/RecibosDelPeriodoWidget';
-import FlujoCajaContableWidget from '../../infomanager/widgets/FlujoCajaContableWidget';
+import FlujoWidget            from './FlujoWidget';
+import PorTipoWidget          from './PorTipoWidget';
+import MovimientosWidget      from './MovimientosWidget';
+import RecibosDelPeriodoWidget   from '../../infomanager/widgets/RecibosDelPeriodoWidget';
+import FlujoCajaContableWidget   from '../../infomanager/widgets/FlujoCajaContableWidget';
+import CajaYBancosWidget         from './CajaYBancosWidget';
 
 const CAJA_WIDGET_CATALOG = [
   // ── KPIs ──
@@ -25,7 +26,8 @@ const CAJA_WIDGET_CATALOG = [
   { type: 'caja-por-tipo',    name: 'Por tipo',         description: 'Distribución de ingresos y egresos por tipo de movimiento',   icon: PieChart,  component: PorTipoWidget,           defaultSize: { w: 8,  h: 9  }, category: 'chart' },
   { type: 'caja-movimientos', name: 'Movimientos',      description: 'Listado paginado de movimientos de caja',                     icon: List,      component: MovimientosWidget,       defaultSize: { w: 12, h: 10 }, category: 'table' },
   { type: 'caja-recibos-im',  name: 'Recibos (IM)',     description: 'Recibos sincronizados desde InfoManager con total cobrado',   icon: Receipt,   component: RecibosDelPeriodoWidget, defaultSize: { w: 12, h: 7  }, category: 'table' },
-  { type: 'caja-flujo-contable', name: 'Flujo Contable (IM)', description: 'Flujo de caja desde movimientos contables sincronizados de InfoManager', icon: BookOpen, component: FlujoCajaContableWidget, defaultSize: { w: 12, h: 8 }, category: 'table' },
+  { type: 'caja-flujo-contable', name: 'Flujo Contable (IM)', description: 'Flujo de caja desde movimientos contables sincronizados de InfoManager', icon: BookOpen,  component: FlujoCajaContableWidget, defaultSize: { w: 12, h: 8 }, category: 'table' },
+  { type: 'caja-saldo-cuentas',  name: 'Caja y Bancos',       description: 'Saldo real de cuentas de caja y bancos desde el mayor contable',       icon: Landmark, component: CajaYBancosWidget,       defaultSize: { w: 6,  h: 9 }, category: 'kpi'   },
 ];
 
 export default CAJA_WIDGET_CATALOG;
@@ -43,11 +45,12 @@ export const CAJA_DEFAULT_WIDGETS = [
   { id: 'cj-6',  type: 'caja-kpi-mayor-ingreso' },
   { id: 'cj-7',  type: 'caja-kpi-mayor-egreso'  },
   { id: 'cj-8',  type: 'caja-kpi-ratio'         },
+  { id: 'cj-14', type: 'caja-saldo-cuentas'     },
   { id: 'cj-9',  type: 'caja-flujo'             },
   { id: 'cj-10', type: 'caja-por-tipo'          },
   { id: 'cj-11', type: 'caja-movimientos'       },
   { id: 'cj-12', type: 'caja-recibos-im'        },
-  { id: 'cj-13', type: 'caja-flujo-contable' },
+  { id: 'cj-13', type: 'caja-flujo-contable'    },
 ];
 
 export const CAJA_DEFAULT_LAYOUTS = {
@@ -60,7 +63,8 @@ export const CAJA_DEFAULT_LAYOUTS = {
     { i: 'cj-6',  x: 3,  y: 2,  w: 3,  h: 2,  minW: 2, minH: 2 },
     { i: 'cj-7',  x: 6,  y: 2,  w: 3,  h: 2,  minW: 2, minH: 2 },
     { i: 'cj-8',  x: 9,  y: 2,  w: 3,  h: 2,  minW: 2, minH: 2 },
-    { i: 'cj-9',  x: 0,  y: 4,  w: 12, h: 9,  minW: 6, minH: 6 },
+    { i: 'cj-14', x: 0,  y: 4,  w: 6,  h: 9,  minW: 4, minH: 6 },
+    { i: 'cj-9',  x: 6,  y: 4,  w: 6,  h: 9,  minW: 4, minH: 6 },
     { i: 'cj-10', x: 0,  y: 13, w: 8,  h: 9,  minW: 4, minH: 6 },
     { i: 'cj-11', x: 0,  y: 22, w: 12, h: 10, minW: 6, minH: 6 },
     { i: 'cj-12', x: 0,  y: 32, w: 12, h: 7,  minW: 6, minH: 4 },

@@ -2,6 +2,7 @@ import {
   DollarSign, Package, TrendingUp, Percent, ShoppingCart,
   AlertTriangle, Tag, TrendingDown,
   BarChart3, LineChart, Users, UserCheck, Scissors, BookOpen,
+  FileSpreadsheet, Receipt,
 } from 'lucide-react';
 import { createResultadoKpiWidget }   from './ResultadoKpiWidget';
 import TemporalResultadoWidget        from './TemporalResultadoWidget';
@@ -11,6 +12,8 @@ import ClientesResultadoWidget        from './ClientesResultadoWidget';
 import DescuentosResultadoWidget      from './DescuentosResultadoWidget';
 import LibroMayorWidget               from '../../infomanager/widgets/LibroMayorWidget';
 import MargenPorListaWidget           from '../../infomanager/widgets/MargenPorListaWidget';
+import EstadoResultadosRealWidget     from './EstadoResultadosRealWidget';
+import LibroIVACompletaWidget         from './LibroIVACompletaWidget';
 
 const RESULTADO_WIDGET_CATALOG = [
   // ── KPIs ──
@@ -23,13 +26,16 @@ const RESULTADO_WIDGET_CATALOG = [
   { type: 'r-kpi-descuento-total',name: 'Descuento total',     description: 'Total descontado en el período',                     icon: Tag,          component: createResultadoKpiWidget('r-kpi-descuento-total'),defaultSize: { w: 3, h: 2 }, category: 'kpi' },
   { type: 'r-kpi-descuento-pct',  name: 'Descuento prom. %',   description: 'Porcentaje de descuento promedio',                   icon: TrendingDown, component: createResultadoKpiWidget('r-kpi-descuento-pct'),  defaultSize: { w: 3, h: 2 }, category: 'kpi' },
   // ── Charts & Analysis ──
-  { type: 'r-temporal',    name: 'Evolución temporal',   description: 'Facturación, COGS, margen $ y % por período con selector de granularidad', icon: LineChart,  component: TemporalResultadoWidget,   defaultSize: { w: 12, h: 8 }, category: 'chart' },
-  { type: 'r-productos',   name: 'Análisis productos',   description: 'Cuadrante scatter (facturado vs margen) + ranking',                        icon: BarChart3,  component: ProductosResultadoWidget,  defaultSize: { w: 8,  h: 8 }, category: 'chart' },
-  { type: 'r-vendedores',  name: 'Resultado vendedores', description: 'Margen y descuentos por vendedor con alertas de exceso',                    icon: Users,     component: VendedoresResultadoWidget, defaultSize: { w: 6,  h: 8 }, category: 'chart' },
-  { type: 'r-clientes',    name: 'Resultado clientes',   description: 'Scatter clientes: facturación vs margen, alertas de bajo margen',            icon: UserCheck,  component: ClientesResultadoWidget,  defaultSize: { w: 6,  h: 8 }, category: 'chart' },
-  { type: 'r-descuentos',  name: 'Análisis descuentos',  description: 'Resumen de descuentos: monto, % y mayores individuales',                    icon: Scissors,   component: DescuentosResultadoWidget, defaultSize: { w: 12, h: 7 }, category: 'table' },
-  { type: 'r-libro-mayor', name: 'Libro Mayor (IM)',     description: 'Movimientos contables sincronizados desde InfoManager',                      icon: BookOpen,   component: LibroMayorWidget,          defaultSize: { w: 12, h: 7 }, category: 'table' },
-  { type: 'r-margen-lista', name: 'Margen por Lista (IM)', description: 'Rentabilidad por lista de precios y artículo',                            icon: Tag,        component: MargenPorListaWidget,      defaultSize: { w: 12, h: 7 }, category: 'table' },
+  { type: 'r-temporal',    name: 'Evolución temporal',     description: 'Facturación, COGS, margen $ y % por período con selector de granularidad', icon: LineChart,       component: TemporalResultadoWidget,       defaultSize: { w: 12, h: 8 }, category: 'chart' },
+  { type: 'r-productos',   name: 'Análisis productos',     description: 'Cuadrante scatter (facturado vs margen) + ranking',                        icon: BarChart3,       component: ProductosResultadoWidget,      defaultSize: { w: 8,  h: 8 }, category: 'chart' },
+  { type: 'r-vendedores',  name: 'Resultado vendedores',   description: 'Margen y descuentos por vendedor con alertas de exceso',                    icon: Users,           component: VendedoresResultadoWidget,     defaultSize: { w: 6,  h: 8 }, category: 'chart' },
+  { type: 'r-clientes',    name: 'Resultado clientes',     description: 'Scatter clientes: facturación vs margen, alertas de bajo margen',            icon: UserCheck,       component: ClientesResultadoWidget,       defaultSize: { w: 6,  h: 8 }, category: 'chart' },
+  { type: 'r-descuentos',  name: 'Análisis descuentos',    description: 'Resumen de descuentos: monto, % y mayores individuales',                    icon: Scissors,        component: DescuentosResultadoWidget,     defaultSize: { w: 12, h: 7 }, category: 'table' },
+  { type: 'r-libro-mayor', name: 'Libro Mayor (IM)',       description: 'Movimientos contables sincronizados desde InfoManager',                      icon: BookOpen,        component: LibroMayorWidget,              defaultSize: { w: 12, h: 7 }, category: 'table' },
+  { type: 'r-margen-lista',name: 'Margen por Lista (IM)',  description: 'Rentabilidad por lista de precios y artículo',                               icon: Tag,             component: MargenPorListaWidget,          defaultSize: { w: 12, h: 7 }, category: 'table' },
+  // ── Nuevos widgets contables ──
+  { type: 'r-estado-resultados',  name: 'Estado de Resultados', description: 'ER real desde mayor contable: Ingresos → COGS → Gastos → Resultado neto', icon: FileSpreadsheet, component: EstadoResultadosRealWidget, defaultSize: { w: 5, h: 9 }, category: 'kpi' },
+  { type: 'r-libro-iva-completo', name: 'Libro IVA Ventas+Compras', description: 'IVA débito (ventas) vs crédito (compras) por período y saldo a pagar', icon: Receipt,         component: LibroIVACompletaWidget,    defaultSize: { w: 7, h: 9 }, category: 'table' },
 ];
 
 export default RESULTADO_WIDGET_CATALOG;
@@ -47,6 +53,8 @@ export const RESULTADO_DEFAULT_WIDGETS = [
   { id: 'r-6',  type: 'r-kpi-bajo-costo'      },
   { id: 'r-7',  type: 'r-kpi-descuento-total' },
   { id: 'r-8',  type: 'r-kpi-descuento-pct'   },
+  { id: 'r-16', type: 'r-estado-resultados'   },
+  { id: 'r-17', type: 'r-libro-iva-completo'  },
   { id: 'r-9',  type: 'r-temporal'            },
   { id: 'r-10', type: 'r-productos'           },
   { id: 'r-11', type: 'r-vendedores'          },
@@ -66,13 +74,15 @@ export const RESULTADO_DEFAULT_LAYOUTS = {
     { i: 'r-6',  x: 3,  y: 2,  w: 3,  h: 2, minW: 2, minH: 2 },
     { i: 'r-7',  x: 6,  y: 2,  w: 3,  h: 2, minW: 2, minH: 2 },
     { i: 'r-8',  x: 9,  y: 2,  w: 3,  h: 2, minW: 2, minH: 2 },
-    { i: 'r-9',  x: 0,  y: 4,  w: 12, h: 8, minW: 6, minH: 5 },
-    { i: 'r-10', x: 0,  y: 12, w: 8,  h: 8, minW: 4, minH: 5 },
-    { i: 'r-11', x: 0,  y: 20, w: 6,  h: 8, minW: 3, minH: 5 },
-    { i: 'r-12', x: 6,  y: 20, w: 6,  h: 8, minW: 3, minH: 5 },
-    { i: 'r-13', x: 0,  y: 28, w: 12, h: 7, minW: 6, minH: 4 },
-    { i: 'r-14', x: 0,  y: 35, w: 12, h: 7, minW: 6, minH: 4 },
-    { i: 'r-15', x: 0,  y: 42, w: 12, h: 7, minW: 6, minH: 4 },
+    { i: 'r-16', x: 0,  y: 4,  w: 5,  h: 9, minW: 4, minH: 6 },
+    { i: 'r-17', x: 5,  y: 4,  w: 7,  h: 9, minW: 5, minH: 6 },
+    { i: 'r-9',  x: 0,  y: 13, w: 12, h: 8, minW: 6, minH: 5 },
+    { i: 'r-10', x: 0,  y: 21, w: 8,  h: 8, minW: 4, minH: 5 },
+    { i: 'r-11', x: 0,  y: 29, w: 6,  h: 8, minW: 3, minH: 5 },
+    { i: 'r-12', x: 6,  y: 29, w: 6,  h: 8, minW: 3, minH: 5 },
+    { i: 'r-13', x: 0,  y: 37, w: 12, h: 7, minW: 6, minH: 4 },
+    { i: 'r-14', x: 0,  y: 44, w: 12, h: 7, minW: 6, minH: 4 },
+    { i: 'r-15', x: 0,  y: 51, w: 12, h: 7, minW: 6, minH: 4 },
   ],
   md: [
     { i: 'r-1',  x: 0,  y: 0,  w: 3,  h: 2, minW: 2, minH: 2 },

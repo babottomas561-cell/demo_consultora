@@ -9,8 +9,9 @@ from connectors.infomanager import InfomanagerConnector
 
 
 class FakeResponse:
-    def __init__(self, payload):
+    def __init__(self, payload, status_code=200):
         self.payload = payload
+        self.status_code = status_code
 
     def raise_for_status(self):
         return None
@@ -126,8 +127,13 @@ def test_infomanager_connector_maps_ventas_items_to_tenant_rows(monkeypatch):
             "anulada": "N",
             "cod_deposito": 5,
             "cod_rubro": 9,
+            "cod_lista_precios": None,
             "precio_compra_actual": 40.0,
             "descuento_porc": 5.0,
+            "iva_10_5": None,
+            "iva_27": None,
+            "moneda": "P",
+            "cotizacion": None,
         }
     ]
 
@@ -436,3 +442,94 @@ def test_infomanager_fetch_report_rows_builds_compras_por_factura_params(monkeyp
     assert params["fecha_hasta"] == "2026-05-10"
     assert params["cod_proveedor"] == 0
     assert params["centro_de_costo"] == "T"
+
+
+def test_infomanager_connector_reauthenticates_on_401(monkeypatch):
+    from datetime import datetime, timezone, timedelta
+
+    class MockResponse:
+        def __init__(self, json_data, status_code):
+            self.json_data = json_data
+            self.status_code = status_code
+
+        def json(self):
+            return self.json_data
+
+        def raise_for_status(self):
+            if self.status_code >= 400:
+                raise Exception(f"HTTP Error {self.status_code}")
+
+    post_calls = []
+    get_calls = []
+
+    def fake_post(url, json, timeout):
+        post_calls.append((url, json))
+        token = f"token-{len(post_calls)}"
+        return MockResponse({"access_token": token}, 200)
+
+    def fake_get(url, headers, params, timeout):
+        get_calls.append((url, headers.get("Authorization"), params))
+        if len(get_calls) == 1:
+            return MockResponse({}, 401)
+        else:
+            return MockResponse([{"id": 1}], 200)
+
+    monkeypatch.setattr("connectors.infomanager.requests.post", fake_post)
+    monkeypatch.setattr("connectors.infomanager.requests.get", fake_get)
+
+    connector = InfomanagerConnector("client", "secret", "https://example.test")
+    connector.token = "old-token"
+    connector.token_expires = datetime.now(timezone.utc) + timedelta(hours=1)
+
+    result = connector.fetch_paginated("/api/v1/some-endpoint", max_pages=1)
+
+    assert result == [{"id": 1}]
+    assert len(post_calls) == 1
+    assert get_calls[0][1] == "Bearer old-token"
+    assert get_calls[1][1] == "Bearer token-1"
+
+
+def test_infomanager_connector_obtener_movimientos_stock_reauthenticates_on_401(monkeypatch):
+    from datetime import datetime, timezone, timedelta
+
+    class MockResponse:
+        def __init__(self, json_data, status_code):
+            self.json_data = json_data
+            self.status_code = status_code
+
+        def json(self):
+            return self.json_data
+
+        def raise_for_status(self):
+            if self.status_code >= 400:
+                raise Exception(f"HTTP Error {self.status_code}")
+
+    post_calls = []
+    get_calls = []
+
+    def fake_post(url, json, timeout):
+        post_calls.append((url, json))
+        token = f"token-{len(post_calls)}"
+        return MockResponse({"access_token": token}, 200)
+
+    def fake_get(url, headers, params, timeout):
+        get_calls.append((url, headers.get("Authorization"), params))
+        if len(get_calls) == 1:
+            return MockResponse({}, 401)
+        else:
+            return MockResponse([{"articulo": 1}], 200)
+
+    monkeypatch.setattr("connectors.infomanager.requests.post", fake_post)
+    monkeypatch.setattr("connectors.infomanager.requests.get", fake_get)
+
+    connector = InfomanagerConnector("client", "secret", "https://example.test")
+    connector.token = "old-token"
+    connector.token_expires = datetime.now(timezone.utc) + timedelta(hours=1)
+
+    result = connector.obtener_movimientos_stock(1001, 1, date(2026, 5, 1), date(2026, 5, 10))
+
+    assert result == [{"articulo": 1}]
+    assert len(post_calls) == 1
+    assert get_calls[0][1] == "Bearer old-token"
+    assert get_calls[1][1] == "Bearer token-1"
+

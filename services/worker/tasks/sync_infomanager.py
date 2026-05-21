@@ -229,6 +229,10 @@ def _map_saldo_cliente(row: dict[str, Any], index: int) -> dict[str, Any]:
         "importe": importe,
         "saldo_acumulado": _as_float(row.get("saldo_acumulado") or row.get("saldo"), importe),
         "fecha_vencimiento": row.get("fecha_vencimiento") or row.get("vencimiento"),
+        # D1/D2 — campos de semáforo de InfoManager
+        "color": row.get("color"),
+        "dias_deuda": row.get("dias_deuda"),
+        "tot_saldo": row.get("tot_saldo"),
     }
 
 
@@ -447,7 +451,15 @@ def sync_company(self, company_id: int, connector_id: int):
         desde = HISTORICAL_START
         hasta = date.today()
 
-        ventas = im.sync_ventas(desde, hasta)
+        # B3 — Build articulo → cod_rubro lookup from the master already synced above.
+        # ventas/items has NO cod_rubro field; we must inject it here.
+        articulo_rubro_lookup: dict[str, int] = {
+            str(a["cod_articulo"]): a["cod_rubro"]
+            for a in articulos
+            if a.get("cod_rubro")
+        }
+
+        ventas = im.sync_ventas(desde, hasta, articulo_rubro_lookup=articulo_rubro_lookup)
 
         # Delete-then-insert for the sync window: avoids stale/corrupted rows from
         # previous syncs (e.g. FA records that were overwritten as NC due to old constraint).
@@ -463,7 +475,8 @@ def sync_company(self, company_id: int, connector_id: int):
                   cantidad, precio_unitario, total, tipo_comprobante, tipo_factura,
                   punto_de_venta, cod_vendedor, cod_empresa, tag,
                   condicion_venta_tipo, neto, iva_importe, anulada,
-                  cod_deposito, cod_rubro, cod_lista_precios, precio_compra_actual, descuento_porc
+                  cod_deposito, cod_rubro, cod_lista_precios, precio_compra_actual, descuento_porc,
+                  moneda, cotizacion, iva_10_5, iva_27
                 )
                 VALUES (
                   %(fecha)s, %(cliente_id)s, %(cliente_nombre)s, %(producto_id)s,
@@ -472,7 +485,8 @@ def sync_company(self, company_id: int, connector_id: int):
                   %(cod_vendedor)s, %(cod_empresa)s, %(tag)s,
                   %(condicion_venta_tipo)s, %(neto)s, %(iva_importe)s,
                   %(anulada)s, %(cod_deposito)s, %(cod_rubro)s, %(cod_lista_precios)s,
-                  %(precio_compra_actual)s, %(descuento_porc)s
+                  %(precio_compra_actual)s, %(descuento_porc)s,
+                  %(moneda)s, %(cotizacion)s, %(iva_10_5)s, %(iva_27)s
                 )
                 ON CONFLICT (fecha, cliente_id, producto_id, tipo_comprobante) DO UPDATE SET
                   cliente_nombre=EXCLUDED.cliente_nombre,
@@ -482,9 +496,14 @@ def sync_company(self, company_id: int, connector_id: int):
                   precio_unitario=EXCLUDED.precio_unitario,
                   neto=EXCLUDED.neto,
                   iva_importe=EXCLUDED.iva_importe,
+                  cod_rubro=COALESCE(EXCLUDED.cod_rubro, ventas.cod_rubro),
                   cod_lista_precios=EXCLUDED.cod_lista_precios,
                   precio_compra_actual=EXCLUDED.precio_compra_actual,
-                  descuento_porc=EXCLUDED.descuento_porc
+                  descuento_porc=EXCLUDED.descuento_porc,
+                  moneda=EXCLUDED.moneda,
+                  cotizacion=EXCLUDED.cotizacion,
+                  iva_10_5=EXCLUDED.iva_10_5,
+                  iva_27=EXCLUDED.iva_27
                 """,
                 venta,
             )
@@ -534,18 +553,23 @@ def sync_company(self, company_id: int, connector_id: int):
                 """
                 INSERT INTO cuentas_corrientes_clientes (
                   cliente_id, cliente_nombre, comprobante_id, tipo, fecha,
-                  importe, saldo_acumulado, fecha_vencimiento
+                  importe, saldo_acumulado, fecha_vencimiento,
+                  color, dias_deuda, tot_saldo
                 )
                 VALUES (
                   %(cliente_id)s, %(cliente_nombre)s, %(comprobante_id)s,
                   %(tipo)s, %(fecha)s, %(importe)s, %(saldo_acumulado)s,
-                  %(fecha_vencimiento)s
+                  %(fecha_vencimiento)s,
+                  %(color)s, %(dias_deuda)s, %(tot_saldo)s
                 )
                 ON CONFLICT (comprobante_id, tipo) DO UPDATE SET
                   cliente_nombre=EXCLUDED.cliente_nombre,
                   importe=EXCLUDED.importe,
                   saldo_acumulado=EXCLUDED.saldo_acumulado,
-                  fecha_vencimiento=EXCLUDED.fecha_vencimiento
+                  fecha_vencimiento=EXCLUDED.fecha_vencimiento,
+                  color=EXCLUDED.color,
+                  dias_deuda=EXCLUDED.dias_deuda,
+                  tot_saldo=EXCLUDED.tot_saldo
                 """,
                 _map_saldo_cliente(saldo, index),
             )
@@ -732,12 +756,12 @@ def sync_company(self, company_id: int, connector_id: int):
                 """
                 INSERT INTO presupuestos (
                   id, fecha, cod_cliente, cliente_nombre, cod_vendedor,
-                  total, confirmado, fecha_conversion, venta_id
+                  total, confirmado, fecha_conversion, venta_id, origen_sistema
                 )
                 VALUES (
                   %(id)s, %(fecha)s, %(cod_cliente)s, %(cliente_nombre)s,
                   %(cod_vendedor)s, %(total)s, %(confirmado)s,
-                  %(fecha_conversion)s, %(venta_id)s
+                  %(fecha_conversion)s, %(venta_id)s, %(origen_sistema)s
                 )
                 ON CONFLICT (id) DO UPDATE SET
                   fecha=EXCLUDED.fecha,
@@ -747,7 +771,8 @@ def sync_company(self, company_id: int, connector_id: int):
                   total=EXCLUDED.total,
                   confirmado=EXCLUDED.confirmado,
                   fecha_conversion=EXCLUDED.fecha_conversion,
-                  venta_id=EXCLUDED.venta_id
+                  venta_id=EXCLUDED.venta_id,
+                  origen_sistema=COALESCE(EXCLUDED.origen_sistema, presupuestos.origen_sistema)
                 """,
                 presupuesto,
             )
@@ -1364,6 +1389,99 @@ def _upsert_movimientos_contables(cur, rows: list[dict]) -> int:
     return len(values)
 
 
+def _upsert_saldos_proveedores(cur, rows: list[dict]) -> int:
+    from psycopg2.extras import execute_values
+    values = []
+    seen: set = set()
+    for r in rows:
+        fa_id = _as_int(r.get("fa_id"))
+        if not fa_id or fa_id in seen:
+            continue
+        seen.add(fa_id)
+        values.append((
+            fa_id,
+            r.get("fa_fecha"),
+            _as_int(r.get("fa_pto_vta")) or None,
+            _as_int(r.get("fa_nro")) or None,
+            _as_int(r.get("fa_cod_empresa")) or None,
+            r.get("moneda") or "P",
+            _as_int(r.get("cod_proveedor")) or None,
+            r.get("nombre") or "",
+            _as_float(r.get("fa_total")),
+            _as_float(r.get("op_imp_pagado")),
+            _as_float(r.get("saldo_fa")),
+            str(r.get("nro_ultima_op") or ""),
+            r.get("primer_fec_vto") or None,
+            r.get("ult_fec_vto") or None,
+            _as_int(r.get("vto_cant_cuotas")) or None,
+            _as_float(r.get("vto_importe")),
+        ))
+    if not values:
+        return 0
+    execute_values(
+        cur,
+        """
+        INSERT INTO saldos_proveedores (
+          fa_id, fa_fecha, fa_pto_vta, fa_nro, fa_cod_empresa,
+          moneda, cod_proveedor, nombre, fa_total, op_imp_pagado,
+          saldo_fa, nro_ultima_op, primer_fec_vto, ult_fec_vto,
+          vto_cant_cuotas, vto_importe, synced_at
+        ) VALUES %s
+        ON CONFLICT (fa_id) DO UPDATE SET
+          saldo_fa=EXCLUDED.saldo_fa,
+          op_imp_pagado=EXCLUDED.op_imp_pagado,
+          nombre=EXCLUDED.nombre,
+          synced_at=NOW()
+        """,
+        values,
+        template="(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())",
+        page_size=500,
+    )
+    return len(values)
+
+
+def _upsert_interdepositos(cur, rows: list[dict]) -> int:
+    from psycopg2.extras import execute_values
+    values = []
+    seen: set = set()
+    for r in rows:
+        rid = _as_int(r.get("id"))
+        if not rid or rid in seen:
+            continue
+        seen.add(rid)
+        values.append((
+            rid,
+            r.get("fecha"),
+            _as_int(r.get("cod_articulo")) or None,
+            r.get("descripcion") or "",
+            _as_float(r.get("cantidad")),
+            _as_float(r.get("precio")),
+            _as_float(r.get("total")),
+            _as_int(r.get("deposito_origen")) or None,
+            _as_int(r.get("deposito_destino")) or None,
+            _as_int(r.get("cod_empresa")) or None,
+            r.get("estado") or "",
+            r.get("observacion") or "",
+        ))
+    if not values:
+        return 0
+    execute_values(
+        cur,
+        """
+        INSERT INTO interdepositos (
+          id, fecha, cod_articulo, descripcion, cantidad, precio, total,
+          deposito_origen, deposito_destino, cod_empresa, estado, observacion, synced_at
+        ) VALUES %s
+        ON CONFLICT (id) DO UPDATE SET
+          cantidad=EXCLUDED.cantidad, estado=EXCLUDED.estado, synced_at=NOW()
+        """,
+        values,
+        template="(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())",
+        page_size=500,
+    )
+    return len(values)
+
+
 @celery_app.task(name="tasks.sync_infomanager.sync_incremental")
 def sync_incremental(tenant_schema: str, erp_config: dict, connector_id: int = None) -> dict:
     """Fast incremental sync (~30 s): last 2 days of invoices + full snapshots."""
@@ -1449,6 +1567,14 @@ def sync_incremental(tenant_schema: str, erp_config: dict, connector_id: int = N
 
         fcr = im.obtener_facturas_con_recibos(desde_inc, hasta_inc)
         counts["facturas_con_recibos"] = _upsert_facturas_con_recibos(cur, fcr)
+
+        # Supplier balances and interdeposits (full snapshot for saldos)
+        sp = im.sync_saldos_proveedores_full(desde_inc, hasta_inc)
+        cur.execute("TRUNCATE TABLE saldos_proveedores")
+        counts["saldos_proveedores"] = _upsert_saldos_proveedores(cur, sp)
+
+        interdep = im.sync_interdepositos(desde_inc, hasta_inc)
+        counts["interdepositos"] = _upsert_interdepositos(cur, interdep)
 
         # Full snapshots — truncate + insert
         saldos = im.obtener_saldos_clientes()
@@ -1576,6 +1702,13 @@ def sync_completo(tenant_schema: str, erp_config: dict, connector_id: int = None
 
         mc = im.obtener_movimientos_contables(desde, hasta, "0", 0)
         counts["movimientos_contables"] = _upsert_movimientos_contables(cur, mc)
+
+        sp = im.sync_saldos_proveedores_full(desde, hasta)
+        cur.execute("TRUNCATE TABLE saldos_proveedores")
+        counts["saldos_proveedores"] = _upsert_saldos_proveedores(cur, sp)
+
+        interdep = im.sync_interdepositos(desde, hasta)
+        counts["interdepositos"] = _upsert_interdepositos(cur, interdep)
 
         saldos = im.obtener_saldos_clientes()
         cur.execute("TRUNCATE TABLE saldos_clientes")

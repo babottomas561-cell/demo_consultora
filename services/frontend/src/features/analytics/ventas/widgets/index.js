@@ -34,6 +34,11 @@ import ClientesRiesgoWidget from './ClientesRiesgoWidget';
 import DiaSemanaWidget from './DiaSemanaWidget';
 import NuevosRecurrentesWidget from './NuevosRecurrentesWidget';
 import EstadoResultadosWidget from './EstadoResultadosWidget';
+// Nuevos widgets InfoManager (D2/D3/D5/D6)
+import SemaforoCarteraWidget from './SemaforoCarteraWidget';
+import MediosPagoWidget from './MediosPagoWidget';
+import ConversionWidget from './ConversionWidget';
+import LibroIVAWidget from './LibroIVAWidget';
 
 const VENTAS_WIDGET_CATALOG = [
   // ── Pulse Strip (mega-KPI row) ──
@@ -377,6 +382,47 @@ const VENTAS_WIDGET_CATALOG = [
     component: EstadoResultadosWidget,
     defaultSize: { w: 5, h: 5 },
     category: 'kpi',
+  },
+  // ── Nuevos widgets InfoManager ──
+  {
+    type: 'ventas-semaforo-cartera',
+    name: 'Semáforo de Cartera',
+    description: 'Clientes por riesgo crediticio: verde / amarillo / rojo (InfoManager)',
+    icon: AlertTriangle,
+    component: SemaforoCarteraWidget,
+    defaultSize: { w: 4, h: 5 },
+    category: 'chart',
+    fetchOnMount: 'fetchSemaforoCartera',
+  },
+  {
+    type: 'ventas-medios-pago',
+    name: 'Medios de Cobro',
+    description: 'Distribución de cobros: Efectivo / Cheque / Tarjeta',
+    icon: Receipt,
+    component: MediosPagoWidget,
+    defaultSize: { w: 4, h: 5 },
+    category: 'chart',
+    fetchOnMount: 'fetchMediosPago',
+  },
+  {
+    type: 'ventas-conversion',
+    name: 'Conversión Presupuestos',
+    description: 'Tasa de conversión de presupuestos a ventas por vendedor y canal',
+    icon: GitFork,
+    component: ConversionWidget,
+    defaultSize: { w: 6, h: 6 },
+    category: 'chart',
+    fetchOnMount: 'fetchConversion',
+  },
+  {
+    type: 'ventas-libro-iva',
+    name: 'Libro IVA Ventas',
+    description: 'IVA débito fiscal discriminado por alícuota: 21% / 10,5% / 27%',
+    icon: FileSpreadsheet,
+    component: LibroIVAWidget,
+    defaultSize: { w: 8, h: 7 },
+    category: 'table',
+    fetchOnMount: 'fetchIvaDiscriminado',
   },
 ];
 

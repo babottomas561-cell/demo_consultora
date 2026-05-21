@@ -68,6 +68,15 @@ export default function VentasDataProvider({ children }) {
   const [loadingDiaSemana, setLoadingDiaSemana] = useState(false);
   const [nuevosRecurrentes, setNuevosRecurrentes] = useState(null);
   const [loadingNuevosRecurrentes, setLoadingNuevosRecurrentes] = useState(false);
+  // D2/D3/D5/D6 — nuevos endpoints InfoManager
+  const [semaforoCartera, setSemaforoCartera] = useState(null);
+  const [semaforoCarteraLoading, setSemaforoCarteraLoading] = useState(false);
+  const [mediosPago, setMediosPago] = useState(null);
+  const [mediosPagoLoading, setMediosPagoLoading] = useState(false);
+  const [conversion, setConversion] = useState(null);
+  const [conversionLoading, setConversionLoading] = useState(false);
+  const [ivaDiscriminado, setIvaDiscriminado] = useState(null);
+  const [ivaDiscriminadoLoading, setIvaDiscriminadoLoading] = useState(false);
   const [txPage, setTxPage] = useState(1);
   const [error, setError] = useState(null);
 
@@ -88,6 +97,11 @@ export default function VentasDataProvider({ children }) {
     setClientesRiesgo(null);
     setDiaSemana(null);
     setNuevosRecurrentes(null);
+    // Reset nuevos datos InfoManager
+    setSemaforoCartera(null);
+    setMediosPago(null);
+    setConversion(null);
+    setIvaDiscriminado(null);
     setTxPage(1);
 
     setLoadingKpis(true); setLoadingTemporal(true);
@@ -248,6 +262,46 @@ export default function VentasDataProvider({ children }) {
     } catch (e) { console.error(e); } finally { setLoadingYoy(false); }
   }, [qs, canFetch, yoy, filters, user, activeCompany]);
 
+  // D2 — Semáforo de cartera (lazy)
+  const fetchSemaforoCartera = useCallback(async () => {
+    if (!canFetch) return;
+    setSemaforoCarteraLoading(true);
+    try {
+      const r = await apiClient.get(`/analytics/ventas/semaforo-cartera${qs}`);
+      setSemaforoCartera(r.data);
+    } catch (e) { console.error(e); } finally { setSemaforoCarteraLoading(false); }
+  }, [qs, canFetch]);
+
+  // D3 — Medios de pago (lazy)
+  const fetchMediosPago = useCallback(async () => {
+    if (!canFetch) return;
+    setMediosPagoLoading(true);
+    try {
+      const r = await apiClient.get(`/analytics/ventas/medios-pago${qs}`);
+      setMediosPago(r.data);
+    } catch (e) { console.error(e); } finally { setMediosPagoLoading(false); }
+  }, [qs, canFetch]);
+
+  // D5 — Conversión presupuestos (lazy)
+  const fetchConversion = useCallback(async () => {
+    if (!canFetch) return;
+    setConversionLoading(true);
+    try {
+      const r = await apiClient.get(`/analytics/ventas/conversion-presupuestos${qs}`);
+      setConversion(r.data);
+    } catch (e) { console.error(e); } finally { setConversionLoading(false); }
+  }, [qs, canFetch]);
+
+  // D6 — IVA discriminado (lazy)
+  const fetchIvaDiscriminado = useCallback(async () => {
+    if (!canFetch) return;
+    setIvaDiscriminadoLoading(true);
+    try {
+      const r = await apiClient.get(`/analytics/ventas/iva-discriminado${qs}`);
+      setIvaDiscriminado(r.data);
+    } catch (e) { console.error(e); } finally { setIvaDiscriminadoLoading(false); }
+  }, [qs, canFetch]);
+
   useEffect(() => { fetchPrimary(); }, [fetchPrimary]);
   useEffect(() => { if (temporal) fetchTemporal(); }, [granularidad]);
 
@@ -255,6 +309,11 @@ export default function VentasDataProvider({ children }) {
     kpis, resultadoKpis, temporal, productos, vendedores, clientes, comprobantes, transacciones,
     heatmap, yoy, descuentos, aging, ticketDist, cohort,
     clientesRiesgo, diaSemana, nuevosRecurrentes,
+    // D2/D3/D5/D6
+    semaforoCartera, semaforoCarteraLoading,
+    mediosPago, mediosPagoLoading,
+    conversion, conversionLoading,
+    ivaDiscriminado, ivaDiscriminadoLoading,
     granularidad, setGranularidad, comparar,
     loadingKpis, loadingTemporal, loadingProductos, loadingVendedores,
     loadingClientes, loadingComprobantes, loadingTransacciones, loadingHeatmap, loadingYoy,
@@ -264,12 +323,17 @@ export default function VentasDataProvider({ children }) {
     fetchClientes, fetchComprobantes, fetchTransacciones, fetchHeatmap, fetchYoy,
     fetchDescuentos, fetchAging, fetchTicketDist, fetchCohort,
     fetchClientesRiesgo, fetchDiaSemana, fetchNuevosRecurrentes,
+    fetchSemaforoCartera, fetchMediosPago, fetchConversion, fetchIvaDiscriminado,
     refetch: fetchPrimary,
     user, activeCompany,
   }), [
     kpis, resultadoKpis, temporal, productos, vendedores, clientes, comprobantes, transacciones,
     heatmap, yoy, descuentos, aging, ticketDist, cohort,
     clientesRiesgo, diaSemana, nuevosRecurrentes,
+    semaforoCartera, semaforoCarteraLoading,
+    mediosPago, mediosPagoLoading,
+    conversion, conversionLoading,
+    ivaDiscriminado, ivaDiscriminadoLoading,
     granularidad, comparar,
     loadingKpis, loadingTemporal, loadingProductos, loadingVendedores,
     loadingClientes, loadingComprobantes, loadingTransacciones, loadingHeatmap, loadingYoy,
@@ -278,6 +342,7 @@ export default function VentasDataProvider({ children }) {
     txPage, error, fetchPrimary, fetchClientes, fetchComprobantes, fetchTransacciones,
     fetchHeatmap, fetchYoy, fetchDescuentos, fetchAging, fetchTicketDist, fetchCohort,
     fetchClientesRiesgo, fetchDiaSemana, fetchNuevosRecurrentes,
+    fetchSemaforoCartera, fetchMediosPago, fetchConversion, fetchIvaDiscriminado,
     user, activeCompany,
   ]);
 

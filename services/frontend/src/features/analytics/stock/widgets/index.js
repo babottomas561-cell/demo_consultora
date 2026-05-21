@@ -1,14 +1,15 @@
 import {
   Package, TrendingUp, TrendingDown, AlertTriangle, Archive,
-  BarChart3, List, ShoppingBag, Activity,
+  BarChart3, List, ShoppingBag, Activity, ArrowRightLeft,
 } from 'lucide-react';
 import { createStockKpiWidget } from './StockKpiWidget';
-import InventarioWidget from './InventarioWidget';
-import AlertasStockWidget from './AlertasStockWidget';
-import ReposicionWidget from './ReposicionWidget';
-import RotacionAbcWidget from './RotacionAbcWidget';
-import StockDisponibleWidget from '../../infomanager/widgets/StockDisponibleWidget';
-import MovimientosStockWidget from '../../infomanager/widgets/MovimientosStockWidget';
+import InventarioWidget         from './InventarioWidget';
+import AlertasStockWidget       from './AlertasStockWidget';
+import ReposicionWidget         from './ReposicionWidget';
+import RotacionAbcWidget        from './RotacionAbcWidget';
+import StockDisponibleWidget    from '../../infomanager/widgets/StockDisponibleWidget';
+import MovimientosStockWidget   from '../../infomanager/widgets/MovimientosStockWidget';
+import InterDepositoWidget      from './InterDepositoWidget';
 
 const STOCK_WIDGET_CATALOG = [
   // ── KPIs ──
@@ -26,7 +27,8 @@ const STOCK_WIDGET_CATALOG = [
   { type: 'stock-alertas', name: 'Alertas de stock', description: 'Alertas críticas, advertencias e informativas', icon: AlertTriangle, component: AlertasStockWidget, defaultSize: { w: 5, h: 6 }, category: 'chart' },
   { type: 'stock-reposicion', name: 'Reposición', description: 'Sugerencias de compra con costo estimado', icon: ShoppingBag, component: ReposicionWidget, defaultSize: { w: 12, h: 5 }, category: 'table' },
   { type: 'stock-disponible-im', name: 'Stock Disponible (IM)', description: 'Stock sincronizado desde InfoManager con alertas de reposición', icon: Package, component: StockDisponibleWidget, defaultSize: { w: 12, h: 6 }, category: 'table' },
-  { type: 'stock-movimientos-im', name: 'Movimientos de Stock (IM)', description: 'Entradas y salidas sincronizadas desde InfoManager', icon: Activity, component: MovimientosStockWidget, defaultSize: { w: 12, h: 6 }, category: 'table' },
+  { type: 'stock-movimientos-im',  name: 'Movimientos de Stock (IM)', description: 'Entradas y salidas sincronizadas desde InfoManager',      icon: Activity,       component: MovimientosStockWidget, defaultSize: { w: 12, h: 6 }, category: 'table' },
+  { type: 'stock-interdeposito',   name: 'Interdeposito',             description: 'Movimientos de mercadería entre depósitos (IM)',           icon: ArrowRightLeft, component: InterDepositoWidget,    defaultSize: { w: 12, h: 8 }, category: 'table' },
 ];
 
 export default STOCK_WIDGET_CATALOG;
@@ -50,6 +52,7 @@ export const STOCK_DEFAULT_WIDGETS = [
   { id: 's-12', type: 'stock-reposicion' },
   { id: 's-13', type: 'stock-disponible-im' },
   { id: 's-14', type: 'stock-movimientos-im' },
+  { id: 's-15', type: 'stock-interdeposito'  },
 ];
 
 export const STOCK_DEFAULT_LAYOUTS = {
