@@ -13,3 +13,4 @@ redis>=5.0.0
 greenlet>=3.0.3
 email-validator
 openpyxl
+requests>=2.31.0

@@ -1223,7 +1223,318 @@ class InfomanagerConnector:
             })
         return result
 
-    # ── End new methods ──────────────────────────────────────────────────────
+    # ════════════════════════════════════════════════════════════════════════
+    # OPERACIONES DE ESCRITURA (POST / PUT) — según guía funcional de la API
+    # ════════════════════════════════════════════════════════════════════════
+
+    def _post(self, endpoint: str, body: dict) -> dict[str, Any]:
+        """Generic authenticated POST. Raises ValueError with API message on 4xx."""
+        self.ensure_token()
+        resp = requests.post(
+            f"{self.base_url}{endpoint}",
+            headers={**self.headers(), "Content-Type": "application/json"},
+            json=body,
+            timeout=30,
+        )
+        if resp.status_code == 401:
+            self.authenticate()
+            resp = requests.post(
+                f"{self.base_url}{endpoint}",
+                headers={**self.headers(), "Content-Type": "application/json"},
+                json=body,
+                timeout=30,
+            )
+        if not resp.ok:
+            try:
+                detail = resp.json()
+            except Exception:
+                detail = resp.text[:300]
+            raise ValueError(f"InfoManager {resp.status_code}: {detail}")
+        try:
+            return resp.json()
+        except Exception:
+            return {"ok": True, "status": resp.status_code}
+
+    def _put(self, endpoint: str, body: dict) -> dict[str, Any]:
+        """Generic authenticated PUT."""
+        self.ensure_token()
+        resp = requests.put(
+            f"{self.base_url}{endpoint}",
+            headers={**self.headers(), "Content-Type": "application/json"},
+            json=body,
+            timeout=30,
+        )
+        if resp.status_code == 401:
+            self.authenticate()
+            resp = requests.put(
+                f"{self.base_url}{endpoint}",
+                headers={**self.headers(), "Content-Type": "application/json"},
+                json=body,
+                timeout=30,
+            )
+        if not resp.ok:
+            try:
+                detail = resp.json()
+            except Exception:
+                detail = resp.text[:300]
+            raise ValueError(f"InfoManager {resp.status_code}: {detail}")
+        try:
+            return resp.json()
+        except Exception:
+            return {"ok": True, "status": resp.status_code}
+
+    # ── Clientes ─────────────────────────────────────────────────────────────
+
+    def consultar_afip(self, identificador: str) -> dict[str, Any]:
+        """GET /api/v1/clientes/GetDatosArca/{identificador}
+        Consulta datos del contribuyente en ARCA/AFIP.
+        Solo números, sin guiones. CUIT/CUIL: 11 dígitos, DNI: 7 u 8 dígitos.
+        """
+        self.ensure_token()
+        clean = str(identificador).replace("-", "").replace(" ", "")
+        resp = requests.get(
+            f"{self.base_url}/api/v1/clientes/GetDatosArca/{clean}",
+            headers=self.headers(),
+            timeout=20,
+        )
+        if resp.status_code == 401:
+            self.authenticate()
+            resp = requests.get(
+                f"{self.base_url}/api/v1/clientes/GetDatosArca/{clean}",
+                headers=self.headers(),
+                timeout=20,
+            )
+        if resp.status_code == 502:
+            raise ValueError("El identificador no existe en AFIP/ARCA")
+        if not resp.ok:
+            raise ValueError(f"AFIP lookup error {resp.status_code}: {resp.text[:200]}")
+        return resp.json()
+
+    def crear_cliente(self, datos: dict) -> dict[str, Any]:
+        """POST /api/v1/clientes — Dar de alta un cliente nuevo.
+        Campos obligatorios: nombre, categoria_iva, cod_tipo_doc, numero_doc,
+        cuit (##-########-#), habilitado (S/N), fecha_alta (AAAA-MM-DD),
+        fecha_estado (AAAA-MM-DD), email, cod_vendedor, lista_precio,
+        domicilio, condicion_venta (1-4), cod_compatibilidad (único).
+        """
+        return self._post("/api/v1/clientes", datos)
+
+    def crear_clientes_batch(self, lista: list[dict]) -> list[dict[str, Any]]:
+        """POST /api/v1/clientes/batch — Alta masiva de clientes."""
+        return self._post("/api/v1/clientes/batch", lista)  # type: ignore[return-value]
+
+    def editar_cliente(self, cod_cliente: int, datos: dict) -> dict[str, Any]:
+        """PUT /api/v1/clientes/{cod_cliente}
+        Campos editables: nombre, categoria_iva, cod_tipo_doc, numero_doc, cuit, cod_cuenta.
+        """
+        return self._put(f"/api/v1/clientes/{cod_cliente}", datos)
+
+    def cambiar_estado_cliente(self, cod_cliente: int, habilitado: str, fecha_estado: str) -> dict[str, Any]:
+        """PUT /api/v1/clientes/estado/{cod_cliente}
+        habilitado: 'S' (activo) o 'N' (inactivo).
+        fecha_estado: AAAA-MM-DD.
+        """
+        return self._put(f"/api/v1/clientes/estado/{cod_cliente}", {
+            "habilitado": habilitado,
+            "fecha_estado": fecha_estado,
+        })
+
+    def obtener_cliente_detallado(self, cod_cliente: int) -> dict[str, Any]:
+        """GET /api/v1/clientes/detallado/{cod_cliente}
+        Datos completos: domicilio, observaciones, crédito, vendedor, lista de precios.
+        """
+        self.ensure_token()
+        resp = requests.get(
+            f"{self.base_url}/api/v1/clientes/detallado/{cod_cliente}",
+            headers=self.headers(),
+            timeout=15,
+        )
+        if resp.ok and resp.content:
+            return resp.json()
+        return {}
+
+    # ── Ventas ────────────────────────────────────────────────────────────────
+
+    def crear_venta(self, cabecera: dict, items: list[dict]) -> dict[str, Any]:
+        """POST /api/v1/ventas — Registrar una factura de venta.
+
+        Cabecera mínima obligatoria (según guía):
+          fecha (AAAA-MM-DD), tipo_comprobante (FA/NC/ND/PR/RE),
+          tipo_factura (A/B/C/E/M), numero (0=auto), punto_de_venta,
+          moneda (P/D), cotizacion (1 para pesos), id_destino (2/3/11),
+          cod_cliente, cod_empresa, tag (S=CC1/N=CC2),
+          condicion_venta_tipo (1-4), usuario.
+
+        Cada ítem: cod_articulo (0=libre), cantidad, cod_lista_precios,
+          descuento_porc, cod_unidad_negocio, detalle.
+
+        ⚠️ numero=0 genera el número automáticamente.
+        ⚠️ id_destino: 2=Electrónica interna, 3=Controlador fiscal, 11=Mostrador CC2.
+        """
+        body = {**cabecera, "items": items}
+        return self._post("/api/v1/ventas", body)
+
+    # ── Recibos ───────────────────────────────────────────────────────────────
+
+    def crear_recibo(
+        self,
+        cabecera: dict,
+        pagos: list[dict],
+        comprobantes: list[dict],
+    ) -> dict[str, Any]:
+        """POST /api/v1/Recibo — Registrar un cobro a un cliente.
+
+        Cabecera: cod_empresa, fecha (AAAA-MM-DD), centro_costo (S=CC1/N=CC2),
+          cod_cliente, usuario, moneda (P/D), cotizacion, detalle.
+
+        Cada pago: forma_pago (EF=efectivo/TJ=tarjeta), importe,
+          cod_cuenta (cuenta contable del medio de pago),
+          tarjeta_numero y tarjeta_numero_cupon si forma_pago=TJ.
+
+        Cada comprobante: id (ID interno de la factura), importe_a_pagar.
+
+        ⚠️ La suma de los pagos debe coincidir con la suma de importe_a_pagar.
+        ⚠️ centro_costo en recibos: S=CC1, N=CC2 (NO invertido como el libro mayor).
+        """
+        body = {
+            **cabecera,
+            "pagos": pagos,
+            "comprobantes": comprobantes,
+        }
+        return self._post("/api/v1/Recibo", body)
+
+    # ── Presupuestos ──────────────────────────────────────────────────────────
+
+    def crear_presupuesto(self, cabecera: dict, items: list[dict]) -> dict[str, Any]:
+        """POST /api/v1/presupuestos — Crear un presupuesto.
+
+        Diferencias clave vs venta:
+          tipo_comprobante = 'PR', tipo_factura = 'X'
+          tipo_presupuesto: 'NC'=no confirmado, 'C'=confirmado
+          id_destino: 1=Manual CC1, 11=Mostrador CC2
+          talonario_manual = 'N', tipo_recibo = 'L'
+          mueve_stock: 'S'=reserva stock, 'N'=no reserva
+        """
+        body = {**cabecera, "items": items}
+        return self._post("/api/v1/presupuestos", body)
+
+    def obtener_facturas_de_presupuesto(self, id_presupuesto: int) -> list[dict[str, Any]]:
+        """GET /api/v1/presupuestos/obtener_facturas/{id_presupuesto}
+        Trazabilidad presupuesto → factura. Devuelve las facturas generadas.
+        """
+        self.ensure_token()
+        resp = requests.get(
+            f"{self.base_url}/api/v1/presupuestos/obtener_facturas/{id_presupuesto}",
+            headers=self.headers(),
+            timeout=15,
+        )
+        if resp.ok and resp.content:
+            data = resp.json()
+            return data if isinstance(data, list) else [data]
+        return []
+
+    # ── Compras ───────────────────────────────────────────────────────────────
+
+    def crear_orden_compra(self, cabecera: dict, items: list[dict]) -> dict[str, Any]:
+        """POST /api/v1/compras/ordendecompra — Crear orden de compra.
+
+        Cabecera: tipo_pago (P=proveedor/C=cuenta contable), cod_proveedor o cod_cuenta,
+          fecha (AAAA-MM-DD), cod_empresa, moneda (P/D), cotizacion,
+          tag (S=CC1/N=CC2), detalle, cod_deposito, condicion_de_pago.
+
+        Cada ítem: cod_articulo, cantidad, precio, descuento, iva.
+        """
+        body = {**cabecera, "items": items}
+        return self._post("/api/v1/compras/ordendecompra", body)
+
+    # ── Artículos ─────────────────────────────────────────────────────────────
+
+    def crear_articulo(self, datos: dict) -> dict[str, Any]:
+        """POST /api/v1/articulos — Dar de alta un artículo nuevo.
+
+        Campos obligatorios: descripcion, cod_afip_concepto (1/2/3),
+          cod_cuenta_venta, habilitado (1/2), iva (0/10.5/21/27),
+          moneda (P/D), precio_compra, precio_compra_dolar,
+          precio_venta, precio_venta_dolar, tipo_movimiento (V/C/A).
+        """
+        return self._post("/api/v1/articulos", datos)
+
+    # ── Rubros y Subrubros ────────────────────────────────────────────────────
+
+    def crear_rubro(self, descripcion: str, tipo_rubro: str = "", cod_compatibilidad: str = "") -> dict[str, Any]:
+        """POST /api/v1/rubros — Crear rubro nuevo."""
+        return self._post("/api/v1/rubros", {
+            "descripcion": descripcion,
+            "tipo_rubro": tipo_rubro,
+            "cod_compatibilidad": cod_compatibilidad,
+        })
+
+    def crear_subrubro(self, cod_rubro: int, descripcion: str) -> dict[str, Any]:
+        """POST /api/v1/subrubros — Crear subrubro nuevo.
+        cod_rubro obligatorio — el subrubro debe pertenecer a un rubro existente.
+        """
+        return self._post("/api/v1/subrubros", {
+            "cod_rubro": cod_rubro,
+            "descripcion": descripcion,
+        })
+
+    # ── Proveedores ───────────────────────────────────────────────────────────
+
+    def crear_proveedor(self, datos: dict) -> dict[str, Any]:
+        """POST /api/v1/proveedores — Dar de alta un proveedor.
+
+        Campos obligatorios: nombre, cuit (##-########-#, 13 chars con guiones),
+          numero_cai, vencimiento_cai (AAAA-MM-DD, no acepta fechas pasadas).
+        Opcionales: telefono, domicilio, email, categoria_iva, cod_cuenta,
+          moneda, observaciones (máx. 113 chars).
+        """
+        return self._post("/api/v1/proveedores", datos)
+
+    # ── Consultas de libro mayor por grupo de cuentas ────────────────────────
+
+    def obtener_mayor_por_rango_cuenta(
+        self,
+        desde,
+        hasta,
+        prefijo_cuenta: str,
+        cod_empresa: int = 1,
+        tag: str = "N",
+        saldo_anterior: str = "S",
+    ) -> list[dict[str, Any]]:
+        """GET /api/v1/planes/mayor filtrado por prefijo de cuenta.
+
+        Según la guía: tag en libro mayor está INVERTIDO:
+          S = CC2, N = CC1
+        Usar saldo_anterior='S' para incluir el saldo previo al período.
+
+        Prefijos típicos (plan de cuentas estándar):
+          '111' → Caja y Bancos (ACTIVO corriente)
+          '112' → Bancos cuentas corrientes
+          '4'   → Ingresos / Ventas
+          '5'   → Costos y Gastos
+          '21'  → Proveedores (PASIVO corriente)
+        """
+        all_rows = []
+        for t in ("S", "N") if tag == "T" else [tag]:
+            params = {
+                "fechaDesde": desde.strftime("%Y%m%d"),
+                "fechaHasta": hasta.strftime("%Y%m%d"),
+                "tag": t,
+                "saldoAnterior": saldo_anterior,
+                "codEmpresa": cod_empresa,
+                "codCuenta": 0,
+                "page": 1,
+                "limit": 500,
+            }
+            rows = self.fetch_paginated("/api/v1/planes/mayor", params, max_pages=200)
+            filtered = [
+                r for r in rows
+                if str(r.get("cuenta") or "").startswith(prefijo_cuenta)
+            ]
+            all_rows.extend(filtered)
+        return all_rows
+
+    # ── End write methods ────────────────────────────────────────────────────
 
     def sync_recibos(self, fecha_desde, fecha_hasta) -> list[dict[str, Any]]:
         data = self.fetch_paginated(

@@ -490,3 +490,61 @@ cod_origen_sistema, origen_sistema  ← "App de pedidos", "IM4", etc.
 | `GET /api/v1/depositos/stock_por_deposito/{id}` | 500 | `articulos/stock` tiene `cod_deposito` |
 ## LO QUE LA API DIRECTAMENTE NO TIENE
 Cheques en cartera, anticipos, conciliación proveedor-cliente, saldos por cuenta contable, IVA período cerrado, balances. No hay endpoint. No buscar.
+
+---
+## OPERACIONES DE ESCRITURA (POST / PUT) — según guía funcional oficial
+
+### CENTROS DE COSTO — Tabla unificada definitiva
+| Endpoint | Parámetro | S | N | T disponible |
+|---|---|---|---|---|
+| Ventas POST/GET | `tag` | CC1 | CC2 | No |
+| Compras | `tag` | CC1 | CC2 | No |
+| Compras por factura | `centro_costo` | CC1 | CC2 | T=ambos |
+| Recibos | `centro_costo` | CC1 | CC2 | No |
+| Presupuestos | `tag` | CC1 | CC2 | No |
+| **Libro mayor** | `tag` | **CC2 ⚠️** | **CC1 ⚠️** | No |
+| Reportes facturas | `tag` | CC1 | CC2 | No |
+| Saldos clientes | `TAG` (mayúsc.) | CC2 | CC1 | T=ambos |
+| Comprobantes pendientes | `TAG` (mayúsc.) | CC2 | CC1 | T=ambos |
+
+### id_destino para ventas
+| ID | Destino |
+|---|---|
+| 1 | Manual |
+| 2 | Comprobante Electrónico Interno |
+| 3 | Controlador Fiscal |
+| 4 | Comprobante Electrónico Exterior |
+| 5 | Preimpreso |
+| 10 | Comprobante en línea PyME |
+| 11 | Mostrador CC2 |
+
+### Estructura Plan de Cuentas (para Caja y ER)
+```
+1xxxxxxx → ACTIVO
+  111xxxx → Caja y Bancos (para widget CajaYBancos)
+  112xxxx → Bancos CC
+2xxxxxxx → PASIVO
+  21xxxxx → Proveedores (cod ~2121001)
+3xxxxxxx → PATRIMONIO NETO
+4xxxxxxx → INGRESOS / Ventas (para Estado de Resultados)
+5xxxxxxx → COSTOS y GASTOS (para Estado de Resultados)
+```
+
+### POST /api/v1/ventas — campos clave
+- `numero=0` → genera automáticamente
+- `fac_electronica`: 0=No electrónica, 1=CAE ya obtenido, 2=Pendiente (sistema pide)
+- Consultar `/api/v1/puntos-de-venta` antes de crear para saber punto + id_destino
+
+### POST /api/v1/Recibo (capital R) — campos clave
+- `centro_costo` (no `tag`) en recibos: S=CC1, N=CC2 (NO invertido)
+- `pagos`: array de medios de pago (EF=efectivo, TJ=tarjeta)
+- `comprobantes`: array de facturas a cobrar con su importe
+- La suma de pagos debe coincidir con suma de comprobantes
+
+### GET /api/v1/clientes/GetDatosArca/{identificador}
+- Solo números sin guiones: CUIT/CUIL 11 dígitos, DNI 7 u 8
+- 200: datos encontrados. 400: formato incorrecto. 502: no existe en AFIP
+
+### artículos/stock — campo para stock mínimo
+- Campo correcto: `pto_de_reposicion` (NO `stock_minimo` ni `punto_pedido`)
+- `existencia` = stock actual (NO `cantidad`)
