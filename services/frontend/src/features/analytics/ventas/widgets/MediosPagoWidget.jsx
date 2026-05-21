@@ -1,7 +1,7 @@
 import React from 'react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { useVentasData } from '../VentasDataContext';
-import { formatCurrency } from '../../../../utils/formatters';
+import { formatCurrency } from '../../analyticsUtils';
 
 const COLORS = {
   EF: '#22c55e',

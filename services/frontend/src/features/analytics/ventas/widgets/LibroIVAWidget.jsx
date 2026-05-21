@@ -3,7 +3,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
 import { useVentasData } from '../VentasDataContext';
-import { formatCurrency } from '../../../../utils/formatters';
+import { formatCurrency } from '../../analyticsUtils';
 
 const IVA_COLORS = {
   iva_21:   '#6366f1',

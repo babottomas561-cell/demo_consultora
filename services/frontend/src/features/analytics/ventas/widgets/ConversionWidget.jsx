@@ -3,7 +3,8 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts';
 import { useVentasData } from '../VentasDataContext';
-import { formatCurrency, formatPct } from '../../../../utils/formatters';
+import { formatCurrency } from '../../analyticsUtils';
+const formatPct = (v) => `${Number(v ?? 0).toFixed(1)}%`;
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;

@@ -1,6 +1,6 @@
 import React from 'react';
 import { useVentasData } from '../VentasDataContext';
-import { formatCurrency } from '../../../../utils/formatters';
+import { formatCurrency } from '../../analyticsUtils';
 
 const COLOR_CONFIG = {
   verde:    { bg: 'rgba(34,197,94,0.12)',  border: '#22c55e', dot: '#22c55e',  label: 'Al día' },
