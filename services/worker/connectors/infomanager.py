@@ -480,7 +480,10 @@ class InfomanagerConnector:
                     "cod_rubro": cod_rubro,
                     "cod_subrubro": cod_subrubro,
                     "precio_compra": _as_float(a.get("precio_compra")),
+                    "precio_compra_dolar": _as_float(a.get("precio_compra_dolar")),
                     "precio_venta": _as_float(a.get("precio_venta")),
+                    "precio_venta_dolar": _as_float(a.get("precio_venta_dolar")),
+                    "moneda": str(a.get("moneda") or "P").upper(),
                     "iva": _as_float(a.get("iva"), 21.0),
                     "habilitado": str(a.get("habilitado", "1")) == "1",
                 }
@@ -637,7 +640,12 @@ class InfomanagerConnector:
             )
         return ventas
 
-    def sync_compras(self, fecha_desde, fecha_hasta) -> list[dict[str, Any]]:
+    def sync_compras(
+        self,
+        fecha_desde,
+        fecha_hasta,
+        articulo_rubro_lookup: dict[str, int] | None = None,
+    ) -> list[dict[str, Any]]:
         # Items endpoint lacks header fields (fecha, cod_proveedor) — must join.
         params = {
             "fechaDesde": fecha_desde.strftime("%Y%m%d"),
@@ -700,6 +708,14 @@ class InfomanagerConnector:
 
             tipo_raw = _first_present(cab, "tipo_comprobante", "tipo_comp", "tipo")
             tipo = _normalize_tipo_comprobante(tipo_raw) if tipo_raw else "FC"
+
+            # Enrich cod_rubro from artículos master (compras/items has no rubro field)
+            cod_articulo_str = str(item.get("cod_articulo") or "")
+            cod_rubro = (
+                (articulo_rubro_lookup or {}).get(cod_articulo_str)
+                or (_as_int(item.get("cod_rubro")) if item.get("cod_rubro") is not None else None)
+            )
+
             compras.append(
                 {
                     "fecha": cab.get("fecha"),
@@ -711,7 +727,7 @@ class InfomanagerConnector:
                         "nombre_proveedor",
                         "razon_social",
                     ) or "",
-                    "producto_id": str(item.get("cod_articulo") or ""),
+                    "producto_id": cod_articulo_str,
                     "producto_nombre": item.get("detalle") or item.get("descripcion") or "",
                     "cantidad": abs(_as_float(item.get("cantidad"))),
                     "precio_unitario": abs(_as_float(item.get("precio"))) * factor,
@@ -728,6 +744,7 @@ class InfomanagerConnector:
                     "iva_27": iva_27_ars if iva_27_ars > 0 else None,
                     "moneda": moneda,
                     "cotizacion": cotizacion if moneda == "D" else None,
+                    "cod_rubro": cod_rubro,
                 }
             )
         return compras

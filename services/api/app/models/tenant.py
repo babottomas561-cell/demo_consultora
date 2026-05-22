@@ -99,6 +99,9 @@ class Compra(TenantBase):
     cod_deposito = Column(Integer, nullable=True)
     iva_10_5 = Column(Numeric, nullable=True)
     iva_27 = Column(Numeric, nullable=True)
+    moneda = Column(String, nullable=True)
+    cotizacion = Column(Numeric, nullable=True)
+    cod_rubro = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=func.now(), server_default=func.now(), nullable=False)
 
 class CuentaCorrienteCliente(TenantBase):
@@ -310,6 +313,22 @@ class InfomanagerReportRow(TenantBase):
     fecha_hasta = Column(Date, nullable=True)
     payload = Column(JSONB, nullable=False)
     synced_at = Column(DateTime, default=func.now(), server_default=func.now(), nullable=False)
+
+class Articulo(TenantBase):
+    __tablename__ = "articulos"
+
+    cod_articulo = Column(String, primary_key=True)
+    descripcion = Column(String, nullable=False)
+    cod_rubro = Column(Integer, nullable=True)
+    cod_subrubro = Column(Integer, nullable=True)
+    precio_compra = Column(Numeric, nullable=True)
+    precio_compra_dolar = Column(Numeric, nullable=True)
+    precio_venta = Column(Numeric, nullable=True)
+    precio_venta_dolar = Column(Numeric, nullable=True)
+    moneda = Column(String, nullable=True)  # P=Pesos, D=Dólar
+    iva = Column(Numeric, nullable=True)
+    habilitado = Column(Boolean, default=True, server_default='true')
+    synced_at = Column(DateTime, default=func.now(), server_default=func.now())
 
 class Stock(TenantBase):
     __tablename__ = "stock"

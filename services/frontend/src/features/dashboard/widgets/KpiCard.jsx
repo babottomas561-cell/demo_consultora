@@ -40,8 +40,10 @@ const CONFIGS = {
     getValue: (k) => {
       const actual = k?.total_ventas_mes || 0;
       const anterior = k?.total_ventas_mes_anterior || 0;
-      if (!anterior) return '+∞%';
+      if (!anterior && !actual) return 'Sin datos';
+      if (!anterior) return 'Nuevo';
       const pct = ((actual - anterior) / Math.abs(anterior)) * 100;
+      if (!isFinite(pct)) return '—';
       return `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%`;
     },
     getIcon: (k) => {

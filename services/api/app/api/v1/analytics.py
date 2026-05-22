@@ -1869,8 +1869,8 @@ async def ventas_kpis(
         ant["tasa_devolucion"] = min((ant_nc / ant_fa * 100) if ant_fa else 0, 100.0)
         ant["clientes_unicos"] = int(prev_row["clientes_unicos"] or 0)
         ant_margen_d = money(prev_row["margen_dolares"])
-        ant_facturado_total = money(prev_row["facturado_total"])
-        ant["margen_bruto_pct"] = (ant_margen_d / ant_facturado_total * 100) if ant_facturado_total else 0
+        ant_facturado_neto_si = money(prev_row["facturado_neto_sin_iva"])
+        ant["margen_bruto_pct"] = (ant_margen_d / ant_facturado_neto_si * 100) if ant_facturado_neto_si else 0
 
     # D1 — Cartera total pendiente de clientes (tot_saldo > 0)
     cartera_pendiente: Optional[float] = None
@@ -3352,7 +3352,7 @@ async def resultado_kpis(
 
     row = (await db.execute(text(f"""
         SELECT
-            COALESCE(SUM({venta_importe_neto_expr()}), 0) AS facturado_neto,
+            COALESCE(SUM({venta_neto_sin_iva_expr()}), 0) AS facturado_neto,
             COALESCE(SUM({venta_costo_neto_expr()}), 0) AS cogs,
             COALESCE(SUM(CASE WHEN precio_compra_actual IS NOT NULL THEN ABS(total) ELSE 0 END), 0) AS total_con_costo,
             COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END) AS tickets_fa,
@@ -3392,7 +3392,7 @@ async def resultado_kpis(
         pp = dict(params); pp["desde"] = prev_desde; pp["hasta"] = prev_hasta
         prev = (await db.execute(text(f"""
             SELECT
-                COALESCE(SUM({venta_importe_neto_expr()}), 0) AS facturado_neto,
+                COALESCE(SUM({venta_neto_sin_iva_expr()}), 0) AS facturado_neto,
                 COALESCE(SUM({venta_costo_neto_expr()}), 0) AS cogs,
                 COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END) AS tickets_fa,
                 COALESCE(SUM(
@@ -3927,14 +3927,14 @@ async def stock_kpis(
             COUNT(DISTINCT CASE WHEN cantidad <= 0 THEN cod_articulo END) AS sin_stock,
             COUNT(DISTINCT CASE WHEN cantidad > 0 AND COALESCE(stock_minimo, 0) > 0 AND cantidad < stock_minimo
                                 THEN cod_articulo END)              AS stock_bajo,
-            COALESCE(SUM(cantidad * COALESCE(precio_compra_actual, 0)), 0)  AS valor_costo,
+            COALESCE(SUM(GREATEST(cantidad, 0) * COALESCE(precio_compra_actual, 0)), 0)  AS valor_costo,
             COALESCE(SUM(cantidad), 0)                             AS total_unidades
         FROM stock
     """))).mappings().one()
 
     # Valor inventario a precio de venta (avg precio_unitario from ventas por producto)
     val_pv_row = (await db.execute(text(f"""
-        SELECT COALESCE(SUM(s.cantidad * COALESCE(pv.avg_precio, 0)), 0) AS valor_precio_venta
+        SELECT COALESCE(SUM(GREATEST(s.cantidad, 0) * COALESCE(pv.avg_precio, 0)), 0) AS valor_precio_venta
         FROM stock s
         LEFT JOIN (
             SELECT am.cod_articulo, AVG(v.precio_unitario) AS avg_precio
@@ -7452,9 +7452,9 @@ async def get_resumen_ejecutivo(
     facturacion = float(ventas_row["facturacion"] or 0)
     neto = float(ventas_row["neto"] or 0)
     costo = float(ventas_row["costo"] or 0)
-    # Margen = facturación (con IVA) - COGS, consistent with resultado/kpis
-    margen = facturacion - costo
-    margen_pct = (margen / facturacion * 100) if facturacion > 0 else 0
+    # Margen = neto sin IVA - COGS (correct base for profitability)
+    margen = neto - costo
+    margen_pct = (margen / neto * 100) if neto > 0 else 0
     total_compras = float(compras_row["total_compras"] or 0)
     ingresos_caja = float(caja_row["ingresos_caja"] or 0)
     egresos_caja = float(caja_row["egresos_caja"] or 0)
