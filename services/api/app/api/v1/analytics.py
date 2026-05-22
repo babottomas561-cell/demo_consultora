@@ -7020,11 +7020,15 @@ async def get_libro_iva_completo(
     ventas_rows = (await db.execute(text(f"""
         SELECT
             to_char(date_trunc('month', fecha), 'YYYY-MM') AS periodo,
-            COALESCE(SUM(neto), 0) AS base_neta,
-            COALESCE(SUM(iva_importe - COALESCE(iva_10_5,0) - COALESCE(iva_27,0)), 0) AS iva_21,
-            COALESCE(SUM(COALESCE(iva_10_5,0)), 0) AS iva_10_5,
-            COALESCE(SUM(COALESCE(iva_27,0)), 0)   AS iva_27,
-            COALESCE(SUM(iva_importe), 0)            AS iva_total,
+            COALESCE(SUM(COALESCE(NULLIF(neto::text,'')::float, 0)), 0) AS base_neta,
+            COALESCE(SUM(
+                COALESCE(NULLIF(iva_importe::text,'')::float, 0)
+                - COALESCE(NULLIF(iva_10_5::text,'')::float, 0)
+                - COALESCE(NULLIF(iva_27::text,'')::float, 0)
+            ), 0) AS iva_21,
+            COALESCE(SUM(COALESCE(NULLIF(iva_10_5::text,'')::float, 0)), 0) AS iva_10_5,
+            COALESCE(SUM(COALESCE(NULLIF(iva_27::text,'')::float, 0)), 0)   AS iva_27,
+            COALESCE(SUM(COALESCE(NULLIF(iva_importe::text,'')::float, 0)), 0) AS iva_total,
             COUNT(DISTINCT CASE WHEN tipo_comprobante='FA'
                 THEN to_char(fecha,'YYYYMMDD')||'-'||COALESCE(cliente_id,'x') END) AS comprobantes
         FROM ventas
@@ -7038,10 +7042,14 @@ async def get_libro_iva_completo(
         SELECT
             to_char(date_trunc('month', fecha), 'YYYY-MM') AS periodo,
             COALESCE(SUM({compra_importe_neto_expr()}), 0) AS base_neta,
-            COALESCE(SUM(iva_importe - COALESCE(iva_10_5,0) - COALESCE(iva_27,0)), 0) AS iva_21,
-            COALESCE(SUM(COALESCE(iva_10_5,0)), 0) AS iva_10_5,
-            COALESCE(SUM(COALESCE(iva_27,0)), 0)   AS iva_27,
-            COALESCE(SUM(iva_importe), 0) AS iva_credito,
+            COALESCE(SUM(
+                COALESCE(NULLIF(iva_importe::text,'')::float, 0)
+                - COALESCE(NULLIF(iva_10_5::text,'')::float, 0)
+                - COALESCE(NULLIF(iva_27::text,'')::float, 0)
+            ), 0) AS iva_21,
+            COALESCE(SUM(COALESCE(NULLIF(iva_10_5::text,'')::float, 0)), 0) AS iva_10_5,
+            COALESCE(SUM(COALESCE(NULLIF(iva_27::text,'')::float, 0)), 0)   AS iva_27,
+            COALESCE(SUM(COALESCE(NULLIF(iva_importe::text,'')::float, 0)), 0) AS iva_credito,
             COUNT(*) AS comprobantes
         FROM compras
         WHERE {compras_where}
@@ -7110,39 +7118,44 @@ async def get_cuenta_corriente_proveedores(
     where = " AND ".join(cond_parts)
     today_expr = "CURRENT_DATE"
 
-    # Aging tramos by proveedor
+    # Aging tramos by proveedor — uses comprobantes_proveedores table
+    cond_parts2 = ["1=1"]
+    if solo_con_saldo:
+        cond_parts2.append("cp.saldo > 0")
+    where2 = " AND ".join(cond_parts2)
+
     aging_rows = (await db.execute(text(f"""
         SELECT
-            sp.cod_proveedor,
-            COALESCE(p.nombre, sp.nombre, 'Proveedor '||sp.cod_proveedor::text) AS nombre,
+            cp.proveedor_id AS cod_proveedor,
+            cp.proveedor_nombre AS nombre,
             COUNT(*) AS facturas_pendientes,
-            COALESCE(SUM(sp.saldo_fa), 0) AS saldo_total,
-            COALESCE(SUM(CASE WHEN sp.ult_fec_vto >= {today_expr} THEN sp.saldo_fa ELSE 0 END), 0) AS corriente,
-            COALESCE(SUM(CASE WHEN sp.ult_fec_vto < {today_expr}
-                              AND sp.ult_fec_vto >= {today_expr} - INTERVAL '30 days'
-                         THEN sp.saldo_fa ELSE 0 END), 0) AS vencido_0_30,
-            COALESCE(SUM(CASE WHEN sp.ult_fec_vto < {today_expr} - INTERVAL '30 days'
-                              AND sp.ult_fec_vto >= {today_expr} - INTERVAL '60 days'
-                         THEN sp.saldo_fa ELSE 0 END), 0) AS vencido_31_60,
-            COALESCE(SUM(CASE WHEN sp.ult_fec_vto < {today_expr} - INTERVAL '60 days'
-                              AND sp.ult_fec_vto >= {today_expr} - INTERVAL '90 days'
-                         THEN sp.saldo_fa ELSE 0 END), 0) AS vencido_61_90,
-            COALESCE(SUM(CASE WHEN sp.ult_fec_vto < {today_expr} - INTERVAL '90 days'
-                         THEN sp.saldo_fa ELSE 0 END), 0) AS vencido_90_plus,
-            MIN(sp.ult_fec_vto) AS proximo_vencimiento
-        FROM saldos_proveedores sp
-        LEFT JOIN proveedores p ON p.external_id = sp.cod_proveedor::text
-        WHERE {where}
-        GROUP BY sp.cod_proveedor, p.nombre, sp.nombre
+            COALESCE(SUM(cp.saldo::float), 0) AS saldo_total,
+            COALESCE(SUM(CASE WHEN COALESCE(cp.fecha_vencimiento, cp.fecha) >= {today_expr}
+                         THEN cp.saldo::float ELSE 0 END), 0) AS corriente,
+            COALESCE(SUM(CASE WHEN COALESCE(cp.fecha_vencimiento, cp.fecha) < {today_expr}
+                              AND COALESCE(cp.fecha_vencimiento, cp.fecha) >= {today_expr} - INTERVAL '30 days'
+                         THEN cp.saldo::float ELSE 0 END), 0) AS vencido_0_30,
+            COALESCE(SUM(CASE WHEN COALESCE(cp.fecha_vencimiento, cp.fecha) < {today_expr} - INTERVAL '30 days'
+                              AND COALESCE(cp.fecha_vencimiento, cp.fecha) >= {today_expr} - INTERVAL '60 days'
+                         THEN cp.saldo::float ELSE 0 END), 0) AS vencido_31_60,
+            COALESCE(SUM(CASE WHEN COALESCE(cp.fecha_vencimiento, cp.fecha) < {today_expr} - INTERVAL '60 days'
+                              AND COALESCE(cp.fecha_vencimiento, cp.fecha) >= {today_expr} - INTERVAL '90 days'
+                         THEN cp.saldo::float ELSE 0 END), 0) AS vencido_61_90,
+            COALESCE(SUM(CASE WHEN COALESCE(cp.fecha_vencimiento, cp.fecha) < {today_expr} - INTERVAL '90 days'
+                         THEN cp.saldo::float ELSE 0 END), 0) AS vencido_90_plus,
+            MIN(cp.fecha_vencimiento) AS proximo_vencimiento
+        FROM comprobantes_proveedores cp
+        WHERE {where2}
+        GROUP BY cp.proveedor_id, cp.proveedor_nombre
         ORDER BY saldo_total DESC
         LIMIT :limit OFFSET :offset
     """), params)).mappings().all()
 
     count_params = {k: v for k, v in params.items() if k not in ("offset", "limit")}
     total = (await db.execute(text(f"""
-        SELECT COUNT(DISTINCT sp.cod_proveedor)
-        FROM saldos_proveedores sp
-        WHERE {where.replace('LIMIT :limit OFFSET :offset', '')}
+        SELECT COUNT(DISTINCT cp.proveedor_id)
+        FROM comprobantes_proveedores cp
+        WHERE {where2}
     """), count_params)).scalar()
 
     total_deuda = sum(float(r["saldo_total"] or 0) for r in aging_rows)
