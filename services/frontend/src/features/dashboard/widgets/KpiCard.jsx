@@ -98,10 +98,8 @@ export default function KpiCard({ type }) {
           <Icon size={18} />
         </div>
       </div>
-      <div className="mt-auto flex h-8 items-end gap-0.5">
-        {[35, 50, 42, 60, 55, 68, 74, 62, 80, 72, 88, 95].map((h, i) => (
-          <span key={i} className={`flex-1 rounded-t-sm ${i === 11 ? c.bar : c.barMuted}`} style={{ height: `${h}%` }} />
-        ))}
+      <div className={`mt-auto h-1 w-full rounded-full ${c.barMuted}`}>
+        <div className={`h-full rounded-full ${c.bar} opacity-60`} style={{ width: '65%' }} />
       </div>
     </div>
   );

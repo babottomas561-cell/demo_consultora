@@ -7012,6 +7012,14 @@ async def get_libro_iva_completo(
     db: AsyncSession = Depends(get_db),
 ):
     """Libro IVA ventas + compras discriminado por alícuota y período mensual."""
+    try:
+        return await _libro_iva_completo_impl(company_id, filters, current_user, db)
+    except Exception as exc:
+        import traceback
+        raise HTTPException(status_code=500, detail=f"{exc.__class__.__name__}: {exc}\n{traceback.format_exc()[-500:]}")
+
+
+async def _libro_iva_completo_impl(company_id, filters, current_user, db):
     tenant_schema = await get_tenant_schema(current_user, db, company_id)
     await set_tenant_search_path(db, tenant_schema)
     params = filters.sql_params()
@@ -7104,6 +7112,14 @@ async def get_cuenta_corriente_proveedores(
     db: AsyncSession = Depends(get_db),
 ):
     """Cuenta corriente de proveedores: facturas pendientes con aging y resumen por proveedor."""
+    try:
+        return await _cta_cte_proveedores_impl(company_id, cod_empresa, solo_con_saldo, page, limit, current_user, db)
+    except Exception as exc:
+        import traceback
+        raise HTTPException(status_code=500, detail=f"{exc.__class__.__name__}: {exc}\n{traceback.format_exc()[-500:]}")
+
+
+async def _cta_cte_proveedores_impl(company_id, cod_empresa, solo_con_saldo, page, limit, current_user, db):
     tenant_schema = await get_tenant_schema(current_user, db, company_id)
     await set_tenant_search_path(db, tenant_schema)
 
