@@ -34,6 +34,7 @@ import ClientesRiesgoWidget from './ClientesRiesgoWidget';
 import DiaSemanaWidget from './DiaSemanaWidget';
 import NuevosRecurrentesWidget from './NuevosRecurrentesWidget';
 import EstadoResultadosWidget from './EstadoResultadosWidget';
+import ResumenEjecutivoWidget from './ResumenEjecutivoWidget';
 // Nuevos widgets InfoManager (D2/D3/D5/D6)
 import SemaforoCarteraWidget from './SemaforoCarteraWidget';
 import MediosPagoWidget from './MediosPagoWidget';
@@ -424,6 +425,16 @@ const VENTAS_WIDGET_CATALOG = [
     category: 'table',
     fetchOnMount: 'fetchIvaDiscriminado',
   },
+  // ── Resumen Ejecutivo ──
+  {
+    type: 'ventas-resumen-ejecutivo',
+    name: 'Resumen Ejecutivo',
+    description: 'Vista consolidada: facturación, margen, compras, caja, deuda y alertas',
+    icon: BarChart3,
+    component: ResumenEjecutivoWidget,
+    defaultSize: { w: 12, h: 5 },
+    category: 'kpi',
+  },
 ];
 
 export default VENTAS_WIDGET_CATALOG;
@@ -436,6 +447,7 @@ export function getVentasWidgetDef(type) {
 // El resto del catálogo está disponible vía "+ Agregar widget".
 export const VENTAS_DEFAULT_WIDGETS = [
   // Vista ejecutiva: lo primero que ve un dueño
+  { id: 'v-40', type: 'ventas-resumen-ejecutivo'  },  // Dashboard consolidado
   { id: 'v-0',  type: 'ventas-pulse-strip'        },  // KPIs + alerta bajo costo
   { id: 'v-30', type: 'ventas-goal'               },  // Meta + proyección
   { id: 'v-33', type: 'ventas-estado-resultados'  },  // Mini P&L
@@ -454,52 +466,56 @@ export const VENTAS_DEFAULT_WIDGETS = [
 
 export const VENTAS_DEFAULT_LAYOUTS = {
   lg: [
-    // Row 0: Pulse strip (9) + Goal Tracker (3)
-    { i: 'v-0',  x: 0,  y: 0,  w: 9,  h: 4,  minW: 6, minH: 3  },
-    { i: 'v-30', x: 9,  y: 0,  w: 3,  h: 4,  minW: 2, minH: 3  },
-    // Row 1: Estado de resultados (5) + Clientes en riesgo (7)
-    { i: 'v-33', x: 0,  y: 4,  w: 5,  h: 5,  minW: 4, minH: 4  },
-    { i: 'v-34', x: 5,  y: 4,  w: 7,  h: 5,  minW: 5, minH: 4  },
-    // Row 2: Evolución (8) + Nuevos vs Recurrentes truncado (esta no — Nuevos abajo)
-    { i: 'v-9',  x: 0,  y: 9,  w: 12, h: 5,  minW: 6, minH: 3  },
-    // Row 3: Nuevos vs Recurrentes (7) + Día semana (5)
-    { i: 'v-35', x: 0,  y: 14, w: 7,  h: 5,  minW: 5, minH: 4  },
-    { i: 'v-36', x: 7,  y: 14, w: 5,  h: 5,  minW: 4, minH: 4  },
-    // Row 4: YoY (full)
-    { i: 'v-24', x: 0,  y: 19, w: 12, h: 4,  minW: 6, minH: 3  },
-    // Row 5: Pareto (6) + Scatter (6)
-    { i: 'v-11', x: 0,  y: 23, w: 6,  h: 5,  minW: 4, minH: 3  },
-    { i: 'v-27', x: 6,  y: 23, w: 6,  h: 5,  minW: 4, minH: 3  },
-    // Row 6: Rubro (8) + Aging (4)
-    { i: 'v-12', x: 0,  y: 28, w: 8,  h: 5,  minW: 4, minH: 3  },
-    { i: 'v-29', x: 8,  y: 28, w: 4,  h: 5,  minW: 3, minH: 4  },
+    // Row 0: Resumen Ejecutivo (full width)
+    { i: 'v-40', x: 0,  y: 0,  w: 12, h: 5,  minW: 8, minH: 4  },
+    // Row 1: Pulse strip (9) + Goal Tracker (3)
+    { i: 'v-0',  x: 0,  y: 5,  w: 9,  h: 4,  minW: 6, minH: 3  },
+    { i: 'v-30', x: 9,  y: 5,  w: 3,  h: 4,  minW: 2, minH: 3  },
+    // Row 2: Estado de resultados (5) + Clientes en riesgo (7)
+    { i: 'v-33', x: 0,  y: 9,  w: 5,  h: 5,  minW: 4, minH: 4  },
+    { i: 'v-34', x: 5,  y: 9,  w: 7,  h: 5,  minW: 5, minH: 4  },
+    // Row 3: Evolución (full)
+    { i: 'v-9',  x: 0,  y: 14, w: 12, h: 5,  minW: 6, minH: 3  },
+    // Row 4: Nuevos vs Recurrentes (7) + Día semana (5)
+    { i: 'v-35', x: 0,  y: 19, w: 7,  h: 5,  minW: 5, minH: 4  },
+    { i: 'v-36', x: 7,  y: 19, w: 5,  h: 5,  minW: 4, minH: 4  },
+    // Row 5: YoY (full)
+    { i: 'v-24', x: 0,  y: 24, w: 12, h: 4,  minW: 6, minH: 3  },
+    // Row 6: Pareto (6) + Scatter (6)
+    { i: 'v-11', x: 0,  y: 28, w: 6,  h: 5,  minW: 4, minH: 3  },
+    { i: 'v-27', x: 6,  y: 28, w: 6,  h: 5,  minW: 4, minH: 3  },
+    // Row 7: Rubro (8) + Aging (4)
+    { i: 'v-12', x: 0,  y: 33, w: 8,  h: 5,  minW: 4, minH: 3  },
+    { i: 'v-29', x: 8,  y: 33, w: 4,  h: 5,  minW: 3, minH: 4  },
   ],
   md: [
-    { i: 'v-0',  x: 0,  y: 0,  w: 9,  h: 4,  minW: 6, minH: 3  },
-    { i: 'v-30', x: 9,  y: 0,  w: 3,  h: 4,  minW: 2, minH: 3  },
-    { i: 'v-33', x: 0,  y: 4,  w: 5,  h: 5,  minW: 4, minH: 4  },
-    { i: 'v-34', x: 5,  y: 4,  w: 7,  h: 5,  minW: 5, minH: 4  },
-    { i: 'v-9',  x: 0,  y: 9,  w: 12, h: 5,  minW: 6, minH: 3  },
-    { i: 'v-35', x: 0,  y: 14, w: 7,  h: 5,  minW: 5, minH: 4  },
-    { i: 'v-36', x: 7,  y: 14, w: 5,  h: 5,  minW: 4, minH: 4  },
-    { i: 'v-24', x: 0,  y: 19, w: 12, h: 4,  minW: 6, minH: 3  },
-    { i: 'v-11', x: 0,  y: 23, w: 6,  h: 5,  minW: 4, minH: 3  },
-    { i: 'v-27', x: 6,  y: 23, w: 6,  h: 5,  minW: 4, minH: 3  },
-    { i: 'v-12', x: 0,  y: 28, w: 8,  h: 5,  minW: 4, minH: 3  },
-    { i: 'v-29', x: 8,  y: 28, w: 4,  h: 5,  minW: 3, minH: 4  },
+    { i: 'v-40', x: 0,  y: 0,  w: 12, h: 5,  minW: 8, minH: 4  },
+    { i: 'v-0',  x: 0,  y: 5,  w: 9,  h: 4,  minW: 6, minH: 3  },
+    { i: 'v-30', x: 9,  y: 5,  w: 3,  h: 4,  minW: 2, minH: 3  },
+    { i: 'v-33', x: 0,  y: 9,  w: 5,  h: 5,  minW: 4, minH: 4  },
+    { i: 'v-34', x: 5,  y: 9,  w: 7,  h: 5,  minW: 5, minH: 4  },
+    { i: 'v-9',  x: 0,  y: 14, w: 12, h: 5,  minW: 6, minH: 3  },
+    { i: 'v-35', x: 0,  y: 19, w: 7,  h: 5,  minW: 5, minH: 4  },
+    { i: 'v-36', x: 7,  y: 19, w: 5,  h: 5,  minW: 4, minH: 4  },
+    { i: 'v-24', x: 0,  y: 24, w: 12, h: 4,  minW: 6, minH: 3  },
+    { i: 'v-11', x: 0,  y: 28, w: 6,  h: 5,  minW: 4, minH: 3  },
+    { i: 'v-27', x: 6,  y: 28, w: 6,  h: 5,  minW: 4, minH: 3  },
+    { i: 'v-12', x: 0,  y: 33, w: 8,  h: 5,  minW: 4, minH: 3  },
+    { i: 'v-29', x: 8,  y: 33, w: 4,  h: 5,  minW: 3, minH: 4  },
   ],
   sm: [
-    { i: 'v-0',  x: 0, y: 0,  w: 4, h: 5,  minW: 3, minH: 3  },
-    { i: 'v-30', x: 4, y: 0,  w: 2, h: 5,  minW: 2, minH: 3  },
-    { i: 'v-33', x: 0, y: 5,  w: 6, h: 5,  minW: 3, minH: 4  },
-    { i: 'v-34', x: 0, y: 10, w: 6, h: 5,  minW: 3, minH: 4  },
-    { i: 'v-9',  x: 0, y: 15, w: 6, h: 5,  minW: 3, minH: 3  },
-    { i: 'v-35', x: 0, y: 20, w: 6, h: 5,  minW: 3, minH: 4  },
-    { i: 'v-36', x: 0, y: 25, w: 6, h: 5,  minW: 3, minH: 4  },
-    { i: 'v-24', x: 0, y: 30, w: 6, h: 4,  minW: 3, minH: 3  },
-    { i: 'v-11', x: 0, y: 34, w: 6, h: 5,  minW: 3, minH: 3  },
-    { i: 'v-27', x: 0, y: 39, w: 6, h: 5,  minW: 3, minH: 3  },
-    { i: 'v-12', x: 0, y: 44, w: 6, h: 5,  minW: 3, minH: 3  },
-    { i: 'v-29', x: 0, y: 49, w: 6, h: 5,  minW: 3, minH: 4  },
+    { i: 'v-40', x: 0, y: 0,  w: 6, h: 5,  minW: 4, minH: 4  },
+    { i: 'v-0',  x: 0, y: 5,  w: 4, h: 5,  minW: 3, minH: 3  },
+    { i: 'v-30', x: 4, y: 5,  w: 2, h: 5,  minW: 2, minH: 3  },
+    { i: 'v-33', x: 0, y: 10, w: 6, h: 5,  minW: 3, minH: 4  },
+    { i: 'v-34', x: 0, y: 15, w: 6, h: 5,  minW: 3, minH: 4  },
+    { i: 'v-9',  x: 0, y: 20, w: 6, h: 5,  minW: 3, minH: 3  },
+    { i: 'v-35', x: 0, y: 25, w: 6, h: 5,  minW: 3, minH: 4  },
+    { i: 'v-36', x: 0, y: 30, w: 6, h: 5,  minW: 3, minH: 4  },
+    { i: 'v-24', x: 0, y: 35, w: 6, h: 4,  minW: 3, minH: 3  },
+    { i: 'v-11', x: 0, y: 39, w: 6, h: 5,  minW: 3, minH: 3  },
+    { i: 'v-27', x: 0, y: 44, w: 6, h: 5,  minW: 3, minH: 3  },
+    { i: 'v-12', x: 0, y: 49, w: 6, h: 5,  minW: 3, minH: 3  },
+    { i: 'v-29', x: 0, y: 54, w: 6, h: 5,  minW: 3, minH: 4  },
   ],
 };

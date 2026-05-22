@@ -687,6 +687,12 @@ class InfomanagerConnector:
                 if item_iva is None and item_neto is not None:
                     item_iva = max(item_total - item_neto, 0)
 
+            factor = -1 if _normalize_tipo_comprobante(
+                _first_present(cab, "tipo_comprobante", "tipo_comp", "tipo") or "FC"
+            ) == "NC" else 1
+            iva_10_5_ars = (item_neto * 0.105 * factor) if item_neto and abs(_iva_por - 10.5) < 0.1 else 0.0
+            iva_27_ars   = (item_neto * 0.27  * factor) if item_neto and abs(_iva_por - 27)  < 0.1 else 0.0
+
             tipo_raw = _first_present(cab, "tipo_comprobante", "tipo_comp", "tipo")
             tipo = _normalize_tipo_comprobante(tipo_raw) if tipo_raw else "FC"
             compras.append(
@@ -713,6 +719,8 @@ class InfomanagerConnector:
                     "iva_importe": item_iva,
                     "anulada": cab.get("anulada", "N"),
                     "cod_deposito": _as_int(cab.get("cod_deposito"), 1),
+                    "iva_10_5": iva_10_5_ars if iva_10_5_ars > 0 else None,
+                    "iva_27": iva_27_ars if iva_27_ars > 0 else None,
                 }
             )
         return compras

@@ -54,6 +54,11 @@ class Venta(TenantBase):
     cod_subrubro = Column(Integer, nullable=True)
     precio_compra_actual = Column(Numeric, nullable=True)
     descuento_porc = Column(Numeric, default=0, server_default='0')
+    moneda = Column(String, nullable=True)
+    cotizacion = Column(Numeric, nullable=True)
+    cod_lista_precios = Column(Integer, nullable=True)
+    iva_10_5 = Column(Numeric, nullable=True)
+    iva_27 = Column(Numeric, nullable=True)
 
 class SimulationResult(TenantBase):
     __tablename__ = "simulation_results"
@@ -92,6 +97,8 @@ class Compra(TenantBase):
     iva_importe = Column(Numeric, nullable=True)
     anulada = Column(String, default='N', server_default='N')
     cod_deposito = Column(Integer, nullable=True)
+    iva_10_5 = Column(Numeric, nullable=True)
+    iva_27 = Column(Numeric, nullable=True)
     created_at = Column(DateTime, default=func.now(), server_default=func.now(), nullable=False)
 
 class CuentaCorrienteCliente(TenantBase):

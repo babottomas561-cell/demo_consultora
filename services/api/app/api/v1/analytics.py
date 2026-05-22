@@ -7035,6 +7035,9 @@ async def get_libro_iva_completo(
         SELECT
             to_char(date_trunc('month', fecha), 'YYYY-MM') AS periodo,
             COALESCE(SUM({compra_importe_neto_expr()}), 0) AS base_neta,
+            COALESCE(SUM(iva_importe - COALESCE(iva_10_5,0) - COALESCE(iva_27,0)), 0) AS iva_21,
+            COALESCE(SUM(COALESCE(iva_10_5,0)), 0) AS iva_10_5,
+            COALESCE(SUM(COALESCE(iva_27,0)), 0)   AS iva_27,
             COALESCE(SUM(iva_importe), 0) AS iva_credito,
             COUNT(*) AS comprobantes
         FROM compras
@@ -7044,23 +7047,32 @@ async def get_libro_iva_completo(
 
     compras_by_periodo = {r["periodo"]: dict(r) for r in compras_rows}
 
+    all_periodos = sorted(set(
+        [r["periodo"] for r in ventas_rows] +
+        [r["periodo"] for r in compras_rows]
+    ))
+
     periodos = []
-    for r in ventas_rows:
-        periodo = r["periodo"]
-        iva_debito  = float(r["iva_total"] or 0)
-        iva_credito = float((compras_by_periodo.get(periodo) or {}).get("iva_credito") or 0)
+    for periodo in all_periodos:
+        v = next((dict(r) for r in ventas_rows if r["periodo"] == periodo), {})
+        c = compras_by_periodo.get(periodo, {})
+        iva_debito  = float(v.get("iva_total") or 0)
+        iva_credito = float(c.get("iva_credito") or 0)
         periodos.append({
             "periodo":          periodo,
-            "ventas_base_neta": round(float(r["base_neta"] or 0), 2),
-            "iva_ventas_21":    round(float(r["iva_21"]   or 0), 2),
-            "iva_ventas_10_5":  round(float(r["iva_10_5"] or 0), 2),
-            "iva_ventas_27":    round(float(r["iva_27"]   or 0), 2),
+            "ventas_base_neta": round(float(v.get("base_neta") or 0), 2),
+            "iva_ventas_21":    round(float(v.get("iva_21")   or 0), 2),
+            "iva_ventas_10_5":  round(float(v.get("iva_10_5") or 0), 2),
+            "iva_ventas_27":    round(float(v.get("iva_27")   or 0), 2),
             "iva_debito":       round(iva_debito, 2),
-            "compras_base_neta":round(float((compras_by_periodo.get(periodo) or {}).get("base_neta") or 0), 2),
+            "compras_base_neta":round(float(c.get("base_neta") or 0), 2),
+            "iva_compras_21":   round(float(c.get("iva_21")   or 0), 2),
+            "iva_compras_10_5": round(float(c.get("iva_10_5") or 0), 2),
+            "iva_compras_27":   round(float(c.get("iva_27")   or 0), 2),
             "iva_credito":      round(iva_credito, 2),
-            "saldo_iva":        round(iva_debito - iva_credito, 2),  # positivo = a pagar
-            "comprobantes_v":   int(r["comprobantes"] or 0),
-            "comprobantes_c":   int((compras_by_periodo.get(periodo) or {}).get("comprobantes") or 0),
+            "saldo_iva":        round(iva_debito - iva_credito, 2),
+            "comprobantes_v":   int(v.get("comprobantes") or 0),
+            "comprobantes_c":   int(c.get("comprobantes") or 0),
         })
 
     return {"periodos": periodos}
@@ -7378,4 +7390,82 @@ async def get_interdepositos_detalle(
             }
             for r in resumen_rows
         ],
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# RESUMEN EJECUTIVO — consolidated executive view for business owners
+# ═══════════════════════════════════════════════════════════════════════════
+
+@router.get("/resumen-ejecutivo")
+async def get_resumen_ejecutivo(
+    company_id: int = None,
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Consolidated executive summary: key metrics from ventas, compras, caja, and cartera."""
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+    params = filters.sql_params()
+    where_v = _ventas_base_where(filters)
+
+    ventas_row = (await db.execute(text(f"""
+        SELECT
+            COALESCE(SUM({venta_importe_neto_expr()}), 0) AS facturacion,
+            COALESCE(SUM({venta_neto_sin_iva_expr()}), 0) AS neto,
+            COALESCE(SUM({venta_costo_neto_expr()}), 0)   AS costo,
+            COUNT(DISTINCT cliente_id)                     AS clientes_activos,
+            COUNT(DISTINCT CASE WHEN tipo_comprobante IN ('FA','ND')
+                THEN to_char(fecha,'YYYYMMDD')||'-'||COALESCE(cliente_id,'x') END) AS comprobantes
+        FROM ventas WHERE {where_v}
+    """), params)).mappings().first()
+
+    compras_where = compra_filters_clause(filters)
+    compras_params = compra_params(filters)
+    compras_row = (await db.execute(text(f"""
+        SELECT
+            COALESCE(SUM({compra_importe_neto_expr()}), 0) AS total_compras,
+            COUNT(DISTINCT proveedor_id) AS proveedores_activos
+        FROM compras WHERE {compras_where}
+    """), compras_params)).mappings().first()
+
+    caja_row = (await db.execute(text("""
+        SELECT
+            COALESCE(SUM(CASE WHEN tipo='INGRESO' THEN importe ELSE 0 END), 0) AS ingresos_caja,
+            COALESCE(SUM(CASE WHEN tipo='EGRESO' THEN importe ELSE 0 END), 0)  AS egresos_caja
+        FROM movimientos_caja
+        WHERE fecha >= :desde AND fecha <= :hasta
+    """), params)).mappings().first()
+
+    deuda_row = (await db.execute(text("""
+        SELECT
+            COALESCE(SUM(CASE WHEN saldo_acumulado > 0 THEN saldo_acumulado ELSE 0 END), 0) AS deuda_clientes,
+            COUNT(DISTINCT CASE WHEN saldo_acumulado > 0 AND fecha_vencimiento < CURRENT_DATE
+                THEN cliente_id END) AS clientes_morosos
+        FROM cuentas_corrientes_clientes
+    """))).mappings().first()
+
+    facturacion = float(ventas_row["facturacion"] or 0)
+    neto = float(ventas_row["neto"] or 0)
+    costo = float(ventas_row["costo"] or 0)
+    margen = neto - costo
+    margen_pct = (margen / neto * 100) if neto > 0 else 0
+    total_compras = float(compras_row["total_compras"] or 0)
+    ingresos_caja = float(caja_row["ingresos_caja"] or 0)
+    egresos_caja = float(caja_row["egresos_caja"] or 0)
+
+    return {
+        "facturacion":          round(facturacion, 2),
+        "margen_bruto":         round(margen, 2),
+        "margen_pct":           round(margen_pct, 1),
+        "total_compras":        round(total_compras, 2),
+        "clientes_activos":     int(ventas_row["clientes_activos"] or 0),
+        "proveedores_activos":  int(compras_row["proveedores_activos"] or 0),
+        "comprobantes_emitidos":int(ventas_row["comprobantes"] or 0),
+        "flujo_neto":           round(ingresos_caja - egresos_caja, 2),
+        "ingresos_caja":        round(ingresos_caja, 2),
+        "egresos_caja":         round(egresos_caja, 2),
+        "deuda_clientes":       round(float(deuda_row["deuda_clientes"] or 0), 2),
+        "clientes_morosos":     int(deuda_row["clientes_morosos"] or 0),
     }

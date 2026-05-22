@@ -518,14 +518,16 @@ def sync_company(self, company_id: int, connector_id: int):
                 INSERT INTO compras (
                   fecha, proveedor_id, proveedor_nombre, producto_id, producto_nombre,
                   cantidad, precio_unitario, total, tipo_comprobante, tipo_factura,
-                  punto_de_venta, cod_empresa, neto, iva_importe, anulada, cod_deposito
+                  punto_de_venta, cod_empresa, neto, iva_importe, anulada, cod_deposito,
+                  iva_10_5, iva_27
                 )
                 VALUES (
                   %(fecha)s, %(proveedor_id)s, %(proveedor_nombre)s,
                   %(producto_id)s, %(producto_nombre)s, %(cantidad)s,
                   %(precio_unitario)s, %(total)s, %(tipo_comprobante)s, %(tipo_factura)s,
                   %(punto_de_venta)s, %(cod_empresa)s, %(neto)s, %(iva_importe)s,
-                  %(anulada)s, %(cod_deposito)s
+                  %(anulada)s, %(cod_deposito)s,
+                  %(iva_10_5)s, %(iva_27)s
                 )
                 ON CONFLICT (fecha, proveedor_id, producto_id, tipo_comprobante) DO UPDATE SET
                   proveedor_nombre=EXCLUDED.proveedor_nombre,
@@ -539,7 +541,9 @@ def sync_company(self, company_id: int, connector_id: int):
                   neto=EXCLUDED.neto,
                   iva_importe=EXCLUDED.iva_importe,
                   anulada=EXCLUDED.anulada,
-                  cod_deposito=EXCLUDED.cod_deposito
+                  cod_deposito=EXCLUDED.cod_deposito,
+                  iva_10_5=EXCLUDED.iva_10_5,
+                  iva_27=EXCLUDED.iva_27
                 """,
                 compra,
             )
