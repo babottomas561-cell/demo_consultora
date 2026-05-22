@@ -5651,7 +5651,7 @@ async def get_depositos(
         tenant_schema = await get_tenant_schema(current_user, db, company_id)
         await set_tenant_search_path(db, tenant_schema)
         rows = (await db.execute(text(
-            "SELECT cod_deposito, nombre, habilitado FROM depositos ORDER BY cod_deposito"
+            "SELECT cod_deposito, nombre FROM depositos WHERE habilitado = true ORDER BY cod_deposito"
         ))).mappings().all()
         return {"depositos": [dict(r) for r in rows]}
     except Exception:
@@ -5669,7 +5669,8 @@ async def get_listas_precios(
         tenant_schema = await get_tenant_schema(current_user, db, company_id)
         await set_tenant_search_path(db, tenant_schema)
         rows = (await db.execute(text(
-            "SELECT cod_lista, descripcion FROM listas_precios ORDER BY cod_lista"
+            "SELECT cod_lista, descripcion FROM listas_precios "
+            "WHERE habilitado = true ORDER BY cod_lista"
         ))).mappings().all()
         return {"listas": [dict(r) for r in rows]}
     except Exception:

@@ -5,7 +5,7 @@ import { useFilterStore } from '../../../../store/filterStore';
 
 const KPI_DEFS = {
   'compras-kpi-total':          { label: 'Total comprado',       field: 'total_comprado',             format: 'currency', severity: 'neutral' },
-  'compras-kpi-iva':            { label: 'IVA crédito fiscal',   field: 'iva_credito_fiscal',         format: 'currency', severity: 'neutral' },
+  'compras-kpi-iva':            { label: 'IVA crédito fiscal',   field: 'iva_credito_fiscal',         format: 'currency', getSeverity: (v) => v === 0 ? 'warning' : 'neutral', zeroNote: 'Requiere resync para calcular' },
   'compras-kpi-ordenes':        { label: 'Órdenes de compra',    field: 'ordenes',                    format: 'number',   severity: 'neutral' },
   'compras-kpi-ticket':         { label: 'Ticket prom. compra',  field: 'ticket_promedio_compra',     format: 'currency', severity: 'success' },
   'compras-kpi-proveedores':    { label: 'Proveedores activos',  field: 'proveedores_activos',        format: 'number',   severity: 'neutral' },
@@ -61,9 +61,12 @@ function ComprasKpiWidget({ type }) {
     <div className={`h-full flex flex-col justify-center rounded-xl border p-4 ${cls.card}`}>
       <div className="flex items-center gap-2 mb-2">
         <div className={`h-2 w-2 rounded-full shrink-0 ${cls.dot}`} />
-        <p className={`text-xs font-medium uppercase tracking-wide truncate ${cls.label}`}>{def.label}</p>
+        <p className={`text-xs font-medium uppercase tracking-wide truncate ${cls.label}`} title={def.label}>{def.label}</p>
       </div>
       <p className={`text-2xl font-bold leading-tight ${cls.value}`}>{formatted}</p>
+      {def.zeroNote && Number(actual) === 0 && (
+        <p className="mt-1 text-[10px] text-amber-500 font-medium">⚠ {def.zeroNote}</p>
+      )}
       {trend && (
         <p className={`mt-1 text-xs font-medium ${trend.positive ? 'text-emerald-600' : 'text-red-500'}`}>
           {trend.positive ? '▲' : '▼'} {Math.abs(trend.delta).toFixed(1)}% vs {compareMode === 'anio' ? 'año ant.' : 'período ant.'}

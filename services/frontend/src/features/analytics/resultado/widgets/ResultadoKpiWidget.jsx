@@ -8,8 +8,18 @@ const fmtPct = (v) => `${Number(v ?? 0).toFixed(1)}%`;
 const KPI_DEFS = {
   'r-kpi-facturado':      { label: 'Facturado neto',       getValue: (k) => k?.facturado_neto,     format: 'currency' },
   'r-kpi-cogs':           { label: 'COGS / Costo merc.',   getValue: (k) => k?.cogs,               format: 'currency', invertTrend: true },
-  'r-kpi-margen-bruto':   { label: 'Margen bruto $',       getValue: (k) => k?.margen_bruto,       format: 'currency' },
-  'r-kpi-margen-pct':     { label: 'Margen bruto %',       getValue: (k) => k?.margen_pct,         format: 'percent' },
+  'r-kpi-margen-bruto':   {
+    label: 'Margen bruto $',
+    getValue: (k) => k?.margen_bruto,
+    format: 'currency',
+    getSeverity: (v) => v < 0 ? 'danger' : v < 0.05 ? 'warning' : 'success',
+  },
+  'r-kpi-margen-pct':     {
+    label: 'Margen bruto %',
+    getValue: (k) => k?.margen_pct,
+    format: 'percent',
+    getSeverity: (v) => v < 0 ? 'danger' : v < 5 ? 'warning' : 'success',
+  },
   'r-kpi-ticket-margen':  { label: 'Ticket prom. margen',  getValue: (k) => k?.ticket_margen,      format: 'currency' },
   'r-kpi-bajo-costo': {
     label: 'Productos bajo costo',

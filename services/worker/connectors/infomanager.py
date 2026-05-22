@@ -647,30 +647,35 @@ class InfomanagerConnector:
             cab = headers.get(_as_int(item.get("id_comprobante")))
             if not cab:
                 continue
-            # API returns importe=0 in compras items; real total is cantidad × precio_con_iva.
+            # API returns importe=0 and iva_importe=0 always in compras/items (confirmed bug).
+            # Real total = cantidad × precio_con_iva.
+            # Real IVA  = precio × (iva_por / 100) × cantidad  when iva_por is present.
             _qty = abs(_as_float(item.get("cantidad")))
-            _pcu = abs(_as_float(item.get("precio_con_iva")) or _as_float(item.get("precio")))
-            item_total = abs(_as_float(item.get("importe"))) or (_qty * _pcu)
-            header_total = abs(_as_float(_first_present(
-                cab, "total", "importe", "importe_total", "total_comprobante", "fa_total"
-            )))
-            ratio = (item_total / header_total) if header_total else 0
-            item_neto_raw = _first_present(item, "neto", "importe_neto")
-            item_iva_raw = _first_present(item, "iva_importe", "importe_iva")
-            header_neto_raw = _first_present(cab, "neto", "importe_neto")
-            header_iva_raw = _first_present(cab, "iva_importe", "importe_iva")
-            item_neto = abs(_as_float(item_neto_raw)) if item_neto_raw is not None else None
-            item_iva = abs(_as_float(item_iva_raw)) if item_iva_raw is not None else None
-            header_neto = abs(_as_float(header_neto_raw)) if header_neto_raw is not None else None
-            header_iva = abs(_as_float(header_iva_raw)) if header_iva_raw is not None else None
-            if item_neto is None and header_neto is not None and ratio:
-                item_neto = header_neto * ratio
-            if item_iva is None and header_iva is not None and ratio:
-                item_iva = header_iva * ratio
-            if item_neto is None and item_iva is not None:
-                item_neto = max(item_total - item_iva, 0)
-            if item_iva is None and item_neto is not None:
-                item_iva = max(item_total - item_neto, 0)
+            _precio_sin_iva = abs(_as_float(item.get("precio")))
+            _pcu = abs(_as_float(item.get("precio_con_iva")) or _precio_sin_iva)
+            item_total = _qty * _pcu
+
+            # IVA from iva_por (always present) — most reliable source
+            _iva_por = _as_float(item.get("iva_por"))
+            if _iva_por > 0 and _precio_sin_iva > 0:
+                item_iva = round(_qty * _precio_sin_iva * (_iva_por / 100), 2)
+                item_neto = round(_qty * _precio_sin_iva, 2)
+            else:
+                # Fallback: derive neto from total - iva using header ratios
+                header_total = abs(_as_float(_first_present(
+                    cab, "importe_total", "total", "importe"
+                )))
+                ratio = (item_total / header_total) if header_total else 0
+                header_iva_raw = _first_present(cab, "importe_iva", "iva_importe")
+                header_neto_raw = _first_present(cab, "neto", "importe_neto")
+                header_iva = abs(_as_float(header_iva_raw)) if header_iva_raw is not None else None
+                header_neto = abs(_as_float(header_neto_raw)) if header_neto_raw is not None else None
+                item_iva = (header_iva * ratio) if header_iva and ratio else None
+                item_neto = (header_neto * ratio) if header_neto and ratio else None
+                if item_neto is None and item_iva is not None:
+                    item_neto = max(item_total - item_iva, 0)
+                if item_iva is None and item_neto is not None:
+                    item_iva = max(item_total - item_neto, 0)
 
             tipo_raw = _first_present(cab, "tipo_comprobante", "tipo_comp", "tipo")
             tipo = _normalize_tipo_comprobante(tipo_raw) if tipo_raw else "FC"

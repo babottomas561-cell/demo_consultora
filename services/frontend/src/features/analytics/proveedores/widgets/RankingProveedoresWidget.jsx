@@ -66,15 +66,21 @@ export default function RankingProveedoresWidget() {
             {proveedores.map((p, i) => (
               <tr key={p.proveedor_id} className="hover:bg-slate-50">
                 <td className="px-3 py-2 text-slate-400 font-medium">{i + 1}</td>
-                <td className="px-3 py-2 font-medium text-slate-800 max-w-[160px] truncate">{p.nombre ?? `P${p.proveedor_id}`}</td>
+                <td className="px-3 py-2 font-medium text-slate-800 max-w-[160px] truncate" title={p.nombre ?? `P${p.proveedor_id}`}>{p.nombre ?? `P${p.proveedor_id}`}</td>
                 <td className="px-3 py-2 tabular-nums text-right text-slate-700 font-medium">{formatCurrency(p.total_comprado)}</td>
                 <td className="px-3 py-2 tabular-nums text-right text-slate-600">{formatNumber(p.ordenes)}</td>
                 <td className="px-3 py-2 tabular-nums text-right text-slate-600">{formatCurrency(p.ticket_promedio)}</td>
                 <td className="px-3 py-2 text-slate-500">{p.ultima_compra?.slice(0, 10)?.split('-').reverse().join('/') ?? '-'}</td>
                 <td className="px-3 py-2 tabular-nums text-right">
-                  <span className={p.saldo_cta_cte > 0 ? 'font-semibold text-amber-600' : 'text-slate-500'}>
-                    {formatCurrency(p.saldo_cta_cte)}
-                  </span>
+                  {p.saldo_cta_cte > p.total_comprado ? (
+                    <span className="font-bold text-red-600" title="Deuda supera compras del período">
+                      ⚠ {formatCurrency(p.saldo_cta_cte)}
+                    </span>
+                  ) : p.saldo_cta_cte > 0 ? (
+                    <span className="font-semibold text-amber-600">{formatCurrency(p.saldo_cta_cte)}</span>
+                  ) : (
+                    <span className="text-slate-400">{formatCurrency(p.saldo_cta_cte)}</span>
+                  )}
                 </td>
                 <td className="px-3 py-2">
                   <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold ${SEGMENTO_BADGE[p.segmento] ?? ''}`}>
