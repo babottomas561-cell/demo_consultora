@@ -2213,10 +2213,13 @@ async def ventas_productos(
     where = _ventas_base_where(filters)
 
     total_row = (await db.execute(text(f"""
-        SELECT COALESCE(SUM({venta_importe_neto_expr()}),0) AS total_fa
+        SELECT
+            COALESCE(SUM({venta_importe_neto_expr()}),0) AS total_neto,
+            COALESCE(SUM(CASE WHEN tipo_comprobante IN ('FA','ND') THEN ABS(total) ELSE 0 END), 0) AS total_fa_bruto
         FROM ventas WHERE {where}
     """), params)).mappings().one()
-    total_fa = money(total_row["total_fa"]) or 1
+    # Use gross FA total for Pareto percentages so they sum to ~100%
+    total_fa = money(total_row["total_fa_bruto"]) or 1
 
     ranking_rows = (await db.execute(text(f"""
         SELECT
@@ -7415,7 +7418,7 @@ async def get_resumen_ejecutivo(
             COALESCE(SUM({venta_importe_neto_expr()}), 0) AS facturacion,
             COALESCE(SUM({venta_neto_sin_iva_expr()}), 0) AS neto,
             COALESCE(SUM({venta_costo_neto_expr()}), 0)   AS costo,
-            COUNT(DISTINCT cliente_id)                     AS clientes_activos,
+            COUNT(DISTINCT CASE WHEN tipo_comprobante = 'FA' THEN cliente_id END) AS clientes_activos,
             COUNT(DISTINCT CASE WHEN tipo_comprobante IN ('FA','ND')
                 THEN to_char(fecha,'YYYYMMDD')||'-'||COALESCE(cliente_id,'x') END) AS comprobantes
         FROM ventas WHERE {where_v}
@@ -7432,8 +7435,8 @@ async def get_resumen_ejecutivo(
 
     caja_row = (await db.execute(text("""
         SELECT
-            COALESCE(SUM(CASE WHEN tipo='INGRESO' THEN importe ELSE 0 END), 0) AS ingresos_caja,
-            COALESCE(SUM(CASE WHEN tipo='EGRESO' THEN importe ELSE 0 END), 0)  AS egresos_caja
+            COALESCE(SUM(CASE WHEN importe > 0 THEN importe ELSE 0 END), 0)       AS ingresos_caja,
+            COALESCE(SUM(CASE WHEN importe < 0 THEN ABS(importe) ELSE 0 END), 0)  AS egresos_caja
         FROM movimientos_caja
         WHERE fecha >= :desde AND fecha <= :hasta
     """), params)).mappings().first()
@@ -7449,8 +7452,9 @@ async def get_resumen_ejecutivo(
     facturacion = float(ventas_row["facturacion"] or 0)
     neto = float(ventas_row["neto"] or 0)
     costo = float(ventas_row["costo"] or 0)
-    margen = neto - costo
-    margen_pct = (margen / neto * 100) if neto > 0 else 0
+    # Margen = facturación (con IVA) - COGS, consistent with resultado/kpis
+    margen = facturacion - costo
+    margen_pct = (margen / facturacion * 100) if facturacion > 0 else 0
     total_compras = float(compras_row["total_compras"] or 0)
     ingresos_caja = float(caja_row["ingresos_caja"] or 0)
     egresos_caja = float(caja_row["egresos_caja"] or 0)

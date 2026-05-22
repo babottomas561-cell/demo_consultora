@@ -657,29 +657,34 @@ class InfomanagerConnector:
             cab = headers.get(_as_int(item.get("id_comprobante")))
             if not cab:
                 continue
+            # Multi-moneda conversion (same logic as ventas)
+            moneda = str(cab.get("moneda") or "P").upper()
+            cotizacion = _as_float(cab.get("cotizacion"), 1.0)
+            factor = cotizacion if moneda == "D" and cotizacion > 0 else 1.0
+
             # API returns importe=0 and iva_importe=0 always in compras/items (confirmed bug).
             # Real total = cantidad × precio_con_iva.
             # Real IVA  = precio × (iva_por / 100) × cantidad  when iva_por is present.
             _qty = abs(_as_float(item.get("cantidad")))
             _precio_sin_iva = abs(_as_float(item.get("precio")))
             _pcu = abs(_as_float(item.get("precio_con_iva")) or _precio_sin_iva)
-            item_total = _qty * _pcu
+            item_total = _qty * _pcu * factor
 
             # IVA from iva_por (always present) — most reliable source
             _iva_por = _as_float(item.get("iva_por"))
             if _iva_por > 0 and _precio_sin_iva > 0:
-                item_iva = round(_qty * _precio_sin_iva * (_iva_por / 100), 2)
-                item_neto = round(_qty * _precio_sin_iva, 2)
+                item_iva = round(_qty * _precio_sin_iva * (_iva_por / 100) * factor, 2)
+                item_neto = round(_qty * _precio_sin_iva * factor, 2)
             else:
                 # Fallback: derive neto from total - iva using header ratios
                 header_total = abs(_as_float(_first_present(
                     cab, "importe_total", "total", "importe"
-                )))
+                ))) * factor  # apply multi-moneda factor to header too
                 ratio = (item_total / header_total) if header_total else 0
                 header_iva_raw = _first_present(cab, "importe_iva", "iva_importe")
                 header_neto_raw = _first_present(cab, "neto", "importe_neto")
-                header_iva = abs(_as_float(header_iva_raw)) if header_iva_raw is not None else None
-                header_neto = abs(_as_float(header_neto_raw)) if header_neto_raw is not None else None
+                header_iva = abs(_as_float(header_iva_raw)) * factor if header_iva_raw is not None else None
+                header_neto = abs(_as_float(header_neto_raw)) * factor if header_neto_raw is not None else None
                 item_iva = (header_iva * ratio) if header_iva and ratio else None
                 item_neto = (header_neto * ratio) if header_neto and ratio else None
                 if item_neto is None and item_iva is not None:
@@ -687,11 +692,11 @@ class InfomanagerConnector:
                 if item_iva is None and item_neto is not None:
                     item_iva = max(item_total - item_neto, 0)
 
-            factor = -1 if _normalize_tipo_comprobante(
+            nc_sign = -1 if _normalize_tipo_comprobante(
                 _first_present(cab, "tipo_comprobante", "tipo_comp", "tipo") or "FC"
             ) == "NC" else 1
-            iva_10_5_ars = (item_neto * 0.105 * factor) if item_neto and abs(_iva_por - 10.5) < 0.1 else 0.0
-            iva_27_ars   = (item_neto * 0.27  * factor) if item_neto and abs(_iva_por - 27)  < 0.1 else 0.0
+            iva_10_5_ars = (item_neto * 0.105 * nc_sign) if item_neto and abs(_iva_por - 10.5) < 0.1 else 0.0
+            iva_27_ars   = (item_neto * 0.27  * nc_sign) if item_neto and abs(_iva_por - 27)  < 0.1 else 0.0
 
             tipo_raw = _first_present(cab, "tipo_comprobante", "tipo_comp", "tipo")
             tipo = _normalize_tipo_comprobante(tipo_raw) if tipo_raw else "FC"
@@ -709,7 +714,7 @@ class InfomanagerConnector:
                     "producto_id": str(item.get("cod_articulo") or ""),
                     "producto_nombre": item.get("detalle") or item.get("descripcion") or "",
                     "cantidad": abs(_as_float(item.get("cantidad"))),
-                    "precio_unitario": abs(_as_float(item.get("precio"))),
+                    "precio_unitario": abs(_as_float(item.get("precio"))) * factor,
                     "total": item_total,
                     "tipo_comprobante": tipo,
                     "tipo_factura": cab.get("tipo_factura"),
@@ -721,6 +726,8 @@ class InfomanagerConnector:
                     "cod_deposito": _as_int(cab.get("cod_deposito"), 1),
                     "iva_10_5": iva_10_5_ars if iva_10_5_ars > 0 else None,
                     "iva_27": iva_27_ars if iva_27_ars > 0 else None,
+                    "moneda": moneda,
+                    "cotizacion": cotizacion if moneda == "D" else None,
                 }
             )
         return compras
