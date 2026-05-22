@@ -1,3 +1,4 @@
+import { Inbox } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { ChartSkeleton } from '../../../../components/ui/WidgetSkeleton';
@@ -59,7 +60,12 @@ export default function DiaSemanaWidget() {
   if (loadingDiaSemana) return <ChartSkeleton />;
 
   const data = diaSemana?.por_dia ?? [];
-  if (!data.length) return <p className="p-4 text-sm text-slate-400">Sin datos por día de semana.</p>;
+  if (!data.length) return (
+    <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-slate-400">
+      <Inbox size={24} />
+      <p className="text-sm">Sin datos por día de semana.</p>
+    </div>
+  );
 
   const field = MODES.find(m => m.id === mode).field;
   const activos = data.filter(d => Number(d[field] ?? 0) > 0);

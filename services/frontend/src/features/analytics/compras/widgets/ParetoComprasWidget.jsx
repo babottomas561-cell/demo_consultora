@@ -1,3 +1,4 @@
+import { Inbox } from 'lucide-react';
 import { BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { TableSkeleton } from '../../../../components/ui/WidgetSkeleton';
 import { useComprasData } from '../ComprasDataContext';
@@ -22,7 +23,12 @@ export default function ParetoComprasWidget() {
   }
 
   const rows = Array.isArray(productos?.productos) ? productos.productos : (Array.isArray(productos) ? productos : []);
-  if (!rows.length) return <p className="p-4 text-sm text-slate-400">Sin datos de productos.</p>;
+  if (!rows.length) return (
+    <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-slate-400">
+      <Inbox size={24} />
+      <p className="text-sm">Sin datos de productos.</p>
+    </div>
+  );
 
   const top = rows.slice(0, 12);
 

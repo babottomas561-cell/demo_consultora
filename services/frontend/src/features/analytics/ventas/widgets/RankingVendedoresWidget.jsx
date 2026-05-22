@@ -1,5 +1,5 @@
 import { BarChart, Bar, Cell, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Inbox } from 'lucide-react';
 import ChartTooltip from '../../../../components/analytics/ChartTooltip';
 import { formatCurrency, formatNumber } from '../../analyticsUtils';
 import { useVentasData } from '../VentasDataContext';
@@ -44,7 +44,12 @@ export default function RankingVendedoresWidget() {
   }
 
   const list = data?.vendedores ?? [];
-  if (!list.length) return <p className="p-4 text-sm text-slate-400">Sin datos de vendedores.</p>;
+  if (!list.length) return (
+    <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-slate-400">
+      <Inbox size={24} />
+      <p className="text-sm">Sin datos de vendedores.</p>
+    </div>
+  );
 
   return (
     <div className="h-full w-full p-4 pt-0 flex flex-col gap-3 overflow-auto">

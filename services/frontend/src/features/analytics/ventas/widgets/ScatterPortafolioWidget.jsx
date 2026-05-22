@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ScatterChart, Scatter, XAxis, YAxis, ZAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine } from 'recharts';
-import { X, Package, DollarSign, TrendingUp, Percent } from 'lucide-react';
+import { X, Package, DollarSign, TrendingUp, Percent, Inbox } from 'lucide-react';
 import { TableSkeleton } from '../../../../components/ui/WidgetSkeleton';
 import { useVentasData } from '../VentasDataContext';
 import { formatCurrency, formatNumber } from '../../analyticsUtils';
@@ -90,7 +90,12 @@ export default function ScatterPortafolioWidget() {
   if (loadingProductos) return <TableSkeleton />;
 
   const ranking = productos?.ranking ?? [];
-  if (!ranking.length) return <p className="p-4 text-sm text-slate-400">Sin datos de productos.</p>;
+  if (!ranking.length) return (
+    <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-slate-400">
+      <Inbox size={24} />
+      <p className="text-sm">Sin datos de productos.</p>
+    </div>
+  );
 
   const data = ranking
     .filter(r => Number(r.unidades) > 0)

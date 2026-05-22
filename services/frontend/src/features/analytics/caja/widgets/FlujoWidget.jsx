@@ -1,3 +1,4 @@
+import { Inbox } from 'lucide-react';
 import {
   Area, AreaChart, Bar, CartesianGrid, Cell, ComposedChart,
   Legend, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
@@ -30,7 +31,12 @@ export default function FlujoWidget() {
   if (loadingFlujo) {
     return <ChartSkeleton />;
   }
-  if (!flujo) return <p className="p-4 text-sm text-slate-400">Sin datos de flujo.</p>;
+  if (!flujo) return (
+    <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-slate-400">
+      <Inbox size={24} />
+      <p className="text-sm">Sin datos de flujo.</p>
+    </div>
+  );
 
   const chartData = (flujo.series ?? []).map((s) => ({
     periodo:         fmtPeriod(s.periodo),

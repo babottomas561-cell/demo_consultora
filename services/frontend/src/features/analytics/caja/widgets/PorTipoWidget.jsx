@@ -1,3 +1,4 @@
+import { Inbox } from 'lucide-react';
 import { useEffect } from 'react';
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
 import { ChartSkeleton } from '../../../../components/ui/WidgetSkeleton';
@@ -15,7 +16,12 @@ export default function PorTipoWidget() {
   useEffect(() => { fetchPorTipo(); }, [fetchPorTipo]);
 
   if (loadingPorTipo) return <ChartSkeleton />;
-  if (!porTipo) return <p className="p-4 text-sm text-slate-400">Sin datos por tipo.</p>;
+  if (!porTipo) return (
+    <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-slate-400">
+      <Inbox size={24} />
+      <p className="text-sm">Sin datos por tipo.</p>
+    </div>
+  );
 
   const tipos = porTipo.por_tipo ?? [];
 

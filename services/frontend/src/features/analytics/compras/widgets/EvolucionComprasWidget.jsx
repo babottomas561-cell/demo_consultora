@@ -1,3 +1,4 @@
+import { Inbox } from 'lucide-react';
 import {
   ComposedChart, Bar, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
@@ -37,7 +38,12 @@ export default function EvolucionComprasWidget() {
   }
 
   const series = temporal?.series ?? [];
-  if (!series.length) return <p className="p-4 text-sm text-slate-400">Sin datos de evolución temporal.</p>;
+  if (!series.length) return (
+    <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-slate-400">
+      <Inbox size={24} />
+      <p className="text-sm">Sin datos de evolución temporal.</p>
+    </div>
+  );
 
   return (
     <div className="h-full w-full p-4 pt-2 flex flex-col">

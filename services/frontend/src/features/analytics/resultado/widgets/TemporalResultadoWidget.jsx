@@ -1,3 +1,4 @@
+import { Inbox } from 'lucide-react';
 import {
   Area, AreaChart, Bar, CartesianGrid, ComposedChart, Legend, Line,
   ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
@@ -5,6 +6,15 @@ import {
 import { ChartSkeleton } from '../../../../components/ui/WidgetSkeleton';
 import { useResultadoData } from '../ResultadoDataContext';
 import { formatCurrency } from '../../analyticsUtils';
+
+const MONTHS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+const fmtPeriod = (v) => {
+  if (!v) return '';
+  const raw = String(v);
+  const date = raw.length === 7 ? new Date(`${raw}-01T00:00:00`) : new Date(raw);
+  if (Number.isNaN(date.getTime())) return raw;
+  return `${MONTHS[date.getMonth()]} ${String(date.getFullYear()).slice(-2)}`;
+};
 
 const fmtM = (v) => {
   const n = Number(v ?? 0);
@@ -29,9 +39,17 @@ export default function TemporalResultadoWidget() {
   }
 
   const series = temporal?.series ?? [];
-  const avgMargen = series.length
-    ? series.reduce((s, r) => s + (r.margen_pct ?? 0), 0) / series.length
-    : 0;
+
+  if (!series.length) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-slate-400">
+        <Inbox size={24} />
+        <p className="text-sm">Sin datos temporales.</p>
+      </div>
+    );
+  }
+
+  const avgMargen = series.reduce((s, r) => s + (r.margen_pct ?? 0), 0) / series.length;
 
   return (
     <div className="h-full w-full flex flex-col overflow-hidden">
@@ -58,7 +76,7 @@ export default function TemporalResultadoWidget() {
         <ResponsiveContainer width="100%" height="50%">
           <ComposedChart data={series} margin={{ top: 4, right: 48, left: 4, bottom: 4 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-            <XAxis dataKey="periodo" tick={{ fontSize: 9, fill: '#64748b' }} axisLine={false} tickLine={false} />
+            <XAxis dataKey="periodo" tick={{ fontSize: 9, fill: '#64748b' }} axisLine={false} tickLine={false} tickFormatter={fmtPeriod} />
             <YAxis yAxisId="left" tickFormatter={fmtM} tick={{ fontSize: 9, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
             <YAxis yAxisId="right" orientation="right" domain={[0, 100]} tickFormatter={(v) => `${v}%`} tick={{ fontSize: 9, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
             <Tooltip formatter={(v, n) => n === 'Margen %' ? [fmtPct(v), n] : [formatCurrency(v), n]} />
@@ -74,7 +92,7 @@ export default function TemporalResultadoWidget() {
         <ResponsiveContainer width="100%" height="50%">
           <AreaChart data={series} margin={{ top: 4, right: 48, left: 4, bottom: 4 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-            <XAxis dataKey="periodo" tick={{ fontSize: 9, fill: '#64748b' }} axisLine={false} tickLine={false} />
+            <XAxis dataKey="periodo" tick={{ fontSize: 9, fill: '#64748b' }} axisLine={false} tickLine={false} tickFormatter={fmtPeriod} />
             <YAxis domain={['auto', 'auto']} tickFormatter={(v) => `${v}%`} tick={{ fontSize: 9, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
             <Tooltip formatter={(v) => [fmtPct(v), 'Margen %']} />
             <ReferenceLine
@@ -94,7 +112,6 @@ export default function TemporalResultadoWidget() {
         </ResponsiveContainer>
       </div>
 
-      {!series.length && <p className="p-4 text-sm text-slate-400">Sin datos temporales.</p>}
     </div>
   );
 }

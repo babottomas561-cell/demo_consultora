@@ -1,3 +1,4 @@
+import { Inbox } from 'lucide-react';
 import { useEffect } from 'react';
 import { ComposedChart, Bar, Line, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { ChartSkeleton } from '../../../../components/ui/WidgetSkeleton';
@@ -69,7 +70,12 @@ export default function NuevosRecurrentesWidget() {
   if (loadingNuevosRecurrentes) return <ChartSkeleton />;
 
   const series = nuevosRecurrentes?.series ?? [];
-  if (!series.length) return <p className="p-4 text-sm text-slate-400">Sin datos.</p>;
+  if (!series.length) return (
+    <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-slate-400">
+      <Inbox size={24} />
+      <p className="text-sm">Sin datos.</p>
+    </div>
+  );
 
   const totalNuevos = series.reduce((a, r) => a + Number(r.facturado_nuevos ?? 0), 0);
   const totalRecurrentes = series.reduce((a, r) => a + Number(r.facturado_recurrentes ?? 0), 0);

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Inbox } from 'lucide-react';
 import { useComprasData } from '../ComprasDataContext';
 import { TableSkeleton } from '../../../../components/ui/WidgetSkeleton';
 
@@ -38,7 +38,12 @@ export default function TransaccionesComprasWidget() {
   const total = transacciones?.total ?? 0;
   const totalPages = Math.ceil(total / 50);
 
-  if (!rows.length) return <p className="p-4 text-sm text-slate-400">Sin transacciones en el período.</p>;
+  if (!rows.length) return (
+    <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-slate-400">
+      <Inbox size={24} />
+      <p className="text-sm">Sin transacciones en el período.</p>
+    </div>
+  );
 
   return (
     <div className="h-full w-full flex flex-col overflow-hidden">

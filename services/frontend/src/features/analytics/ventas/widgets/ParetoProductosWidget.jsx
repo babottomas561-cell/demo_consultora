@@ -1,7 +1,7 @@
 import {
   ComposedChart, Bar, Line, CartesianGrid, XAxis, YAxis, Tooltip, ReferenceLine, ResponsiveContainer, Cell,
 } from 'recharts';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Inbox } from 'lucide-react';
 import { formatCurrency } from '../../analyticsUtils';
 import { useVentasData } from '../VentasDataContext';
 
@@ -60,7 +60,12 @@ export default function ParetoProductosWidget() {
   }
 
   const pareto = productos?.pareto ?? [];
-  if (!pareto.length) return <p className="p-4 text-sm text-slate-400">Sin datos de productos.</p>;
+  if (!pareto.length) return (
+    <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-slate-400">
+      <Inbox size={24} />
+      <p className="text-sm">Sin datos de productos.</p>
+    </div>
+  );
 
   // Color bars: dark indigo for products within 80% threshold, lighter for the rest
   const threshold80 = pareto.findIndex((r) => r.acumulado_pct >= 80);

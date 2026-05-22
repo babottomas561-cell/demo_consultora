@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Inbox } from 'lucide-react';
 import { formatCurrency } from '../../analyticsUtils';
 import { useVentasData } from '../VentasDataContext';
 
@@ -41,7 +41,12 @@ export default function ComprobantesTipoWidget() {
     }));
 
   if (!tipoData.length && !letraData.length && !condData.length) {
-    return <p className="p-4 text-sm text-slate-400">Sin datos de comprobantes.</p>;
+    return (
+    <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-slate-400">
+      <Inbox size={24} />
+      <p className="text-sm">Sin datos de comprobantes.</p>
+    </div>
+  );
   }
 
   const Donut = ({ chartData, title }) => (

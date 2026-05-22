@@ -51,11 +51,12 @@ export function useAnalyticsData(endpoint) {
   const activeCompany = useAuthStore(s => s.activeCompany);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const fetchedRef = useRef(false);
+
+  const companyId = (user?.is_admin && activeCompany) ? activeCompany.id : user?.company_id;
 
   useEffect(() => {
-    if (fetchedRef.current) return;
-    fetchedRef.current = true;
+    if (!companyId) { setLoading(false); return; }
+    setLoading(true);
 
     const companyParam = (user?.is_admin && activeCompany) ? `&company_id=${activeCompany.id}` : '';
     const now = new Date();
@@ -67,7 +68,7 @@ export function useAnalyticsData(endpoint) {
       .then(res => setData(res.data))
       .catch(e => console.error(`Analytics fetch error: ${endpoint}`, e))
       .finally(() => setLoading(false));
-  }, [endpoint, user, activeCompany]);
+  }, [endpoint, companyId]);
 
   return { data, loading };
 }

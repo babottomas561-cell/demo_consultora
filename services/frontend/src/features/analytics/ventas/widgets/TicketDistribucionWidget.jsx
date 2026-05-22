@@ -1,3 +1,4 @@
+import { Inbox } from 'lucide-react';
 import { useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell, ReferenceLine } from 'recharts';
 import { ChartSkeleton } from '../../../../components/ui/WidgetSkeleton';
@@ -45,7 +46,12 @@ export default function TicketDistribucionWidget() {
   const totalTickets = ticketDist?.total_tickets ?? 0;
   const p50 = ticketDist?.p50_bucket;
 
-  if (!data.length) return <p className="p-4 text-sm text-slate-400">Sin datos de distribución.</p>;
+  if (!data.length) return (
+    <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-slate-400">
+      <Inbox size={24} />
+      <p className="text-sm">Sin datos de distribución.</p>
+    </div>
+  );
 
   const maxCount = Math.max(...data.map(d => d.cantidad));
 

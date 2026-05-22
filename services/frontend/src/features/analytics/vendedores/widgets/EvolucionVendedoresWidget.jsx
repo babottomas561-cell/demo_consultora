@@ -1,3 +1,4 @@
+import { Inbox } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import {
   CartesianGrid, Legend, Line, LineChart,
@@ -43,6 +44,15 @@ export default function EvolucionVendedoresWidget() {
   }
 
   const { vendedores = [], series = [] } = temporal ?? {};
+
+  if (!series.length) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-slate-400">
+        <Inbox size={24} />
+        <p className="text-sm">Sin datos de evolución.</p>
+      </div>
+    );
+  }
 
   const chartData = series.map((s) => {
     const point = { periodo: fmtPeriod(s.periodo) };
@@ -113,9 +123,6 @@ export default function EvolucionVendedoresWidget() {
         </ResponsiveContainer>
       </div>
 
-      {!series.length && (
-        <p className="p-4 text-sm text-slate-400">Sin datos de evolución.</p>
-      )}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Inbox } from 'lucide-react';
 import { useComprasData } from '../ComprasDataContext';
 import { ChartSkeleton } from '../../../../components/ui/WidgetSkeleton';
 
@@ -16,7 +16,12 @@ export default function VariacionPreciosWidget() {
   }
 
   const rows = Array.isArray(precios) ? precios : [];
-  if (!rows.length) return <p className="p-4 text-sm text-slate-400">Sin variaciones de precio en el período.</p>;
+  if (!rows.length) return (
+    <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-slate-400">
+      <Inbox size={24} />
+      <p className="text-sm">Sin variaciones de precio en el período.</p>
+    </div>
+  );
 
   const alertas = rows.filter((r) => Number(r.variacion_pct ?? 0) > 30);
   const top = rows.slice(0, 14);

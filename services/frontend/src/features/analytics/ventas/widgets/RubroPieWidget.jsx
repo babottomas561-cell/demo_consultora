@@ -1,3 +1,4 @@
+import { Inbox } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import { ChartSkeleton } from '../../../../components/ui/WidgetSkeleton';
 import { useVentasData } from '../VentasDataContext';
@@ -41,7 +42,12 @@ export default function RubroPieWidget() {
   if (loadingProductos) return <ChartSkeleton />;
 
   const rubros = productos?.por_rubro?.length ? productos.por_rubro : (productos?.por_subrubro ?? []);
-  if (!rubros.length) return <p className="p-4 text-sm text-slate-400">Sin datos de rubros.</p>;
+  if (!rubros.length) return (
+    <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-slate-400">
+      <Inbox size={24} />
+      <p className="text-sm">Sin datos de rubros.</p>
+    </div>
+  );
 
   // Calculate pct_total if not present
   const total = rubros.reduce((s, r) => s + (r.facturado || 0), 0) || 1;

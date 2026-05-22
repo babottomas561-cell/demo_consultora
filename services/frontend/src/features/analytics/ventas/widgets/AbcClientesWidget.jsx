@@ -1,3 +1,4 @@
+import { Inbox } from 'lucide-react';
 import { useEffect } from 'react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { ChartSkeleton } from '../../../../components/ui/WidgetSkeleton';
@@ -23,7 +24,12 @@ export default function AbcClientesWidget() {
     clientes: vals.clientes,
   }));
 
-  if (!donutData.length) return <p className="p-4 text-sm text-slate-400">Sin datos de clientes.</p>;
+  if (!donutData.length) return (
+    <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-slate-400">
+      <Inbox size={24} />
+      <p className="text-sm">Sin datos de clientes.</p>
+    </div>
+  );
 
   return (
     <div className="h-full w-full p-4 pt-0 flex flex-col gap-3">

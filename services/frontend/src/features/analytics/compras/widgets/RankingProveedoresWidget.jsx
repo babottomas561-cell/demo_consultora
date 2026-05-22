@@ -1,4 +1,4 @@
-import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, Inbox } from 'lucide-react';
 import { useComprasData } from '../ComprasDataContext';
 import { TableSkeleton } from '../../../../components/ui/WidgetSkeleton';
 
@@ -21,7 +21,12 @@ export default function RankingProveedoresWidget() {
   }
 
   const rows = Array.isArray(proveedores?.proveedores) ? proveedores.proveedores : (Array.isArray(proveedores) ? proveedores : []);
-  if (!rows.length) return <p className="p-4 text-sm text-slate-400">Sin proveedores en el período.</p>;
+  if (!rows.length) return (
+    <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-slate-400">
+      <Inbox size={24} />
+      <p className="text-sm">Sin proveedores en el período.</p>
+    </div>
+  );
 
   return (
     <div className="h-full w-full flex flex-col overflow-hidden">
