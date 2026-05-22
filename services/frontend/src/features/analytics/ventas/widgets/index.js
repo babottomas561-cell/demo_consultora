@@ -372,7 +372,7 @@ const VENTAS_WIDGET_CATALOG = [
   {
     type: 'ventas-estado-resultados',
     name: 'Estado de Resultados',
-    description: 'Mini P&L: ventas → COGS → margen bruto',
+    description: 'Resultado bruto: ventas netas → COGS → margen bruto (sin gastos op.)',
     icon: FileSpreadsheet,
     component: EstadoResultadosWidget,
     defaultSize: { w: 5, h: 5 },
@@ -411,9 +411,10 @@ export const VENTAS_DEFAULT_LAYOUTS = {
     // Row 0: Pulse strip (9) + Goal Tracker (3)
     { i: 'v-0',  x: 0,  y: 0,  w: 9,  h: 4,  minW: 6, minH: 3  },
     { i: 'v-30', x: 9,  y: 0,  w: 3,  h: 4,  minW: 2, minH: 3  },
-    // Row 1: Estado de resultados (5) + Clientes en riesgo (7)
-    { i: 'v-33', x: 0,  y: 4,  w: 5,  h: 5,  minW: 4, minH: 4  },
-    { i: 'v-34', x: 5,  y: 4,  w: 7,  h: 5,  minW: 5, minH: 4  },
+    // Row 1: Estado de resultados (4) + Aging Cobranza (4) + Clientes en riesgo (4)
+    { i: 'v-33', x: 0,  y: 4,  w: 4,  h: 5,  minW: 4, minH: 4  },
+    { i: 'v-29', x: 4,  y: 4,  w: 4,  h: 5,  minW: 3, minH: 4  },
+    { i: 'v-34', x: 8,  y: 4,  w: 4,  h: 5,  minW: 4, minH: 4  },
     // Row 2: Evolución (8) + Nuevos vs Recurrentes truncado (esta no — Nuevos abajo)
     { i: 'v-9',  x: 0,  y: 9,  w: 12, h: 5,  minW: 6, minH: 3  },
     // Row 3: Nuevos vs Recurrentes (7) + Día semana (5)
@@ -424,15 +425,15 @@ export const VENTAS_DEFAULT_LAYOUTS = {
     // Row 5: Pareto (6) + Scatter (6)
     { i: 'v-11', x: 0,  y: 23, w: 6,  h: 5,  minW: 4, minH: 3  },
     { i: 'v-27', x: 6,  y: 23, w: 6,  h: 5,  minW: 4, minH: 3  },
-    // Row 6: Rubro (8) + Aging (4)
-    { i: 'v-12', x: 0,  y: 28, w: 8,  h: 5,  minW: 4, minH: 3  },
-    { i: 'v-29', x: 8,  y: 28, w: 4,  h: 5,  minW: 3, minH: 4  },
+    // Row 6: Rubro (full width)
+    { i: 'v-12', x: 0,  y: 28, w: 12, h: 5,  minW: 4, minH: 3  },
   ],
   md: [
     { i: 'v-0',  x: 0,  y: 0,  w: 9,  h: 4,  minW: 6, minH: 3  },
     { i: 'v-30', x: 9,  y: 0,  w: 3,  h: 4,  minW: 2, minH: 3  },
-    { i: 'v-33', x: 0,  y: 4,  w: 5,  h: 5,  minW: 4, minH: 4  },
-    { i: 'v-34', x: 5,  y: 4,  w: 7,  h: 5,  minW: 5, minH: 4  },
+    { i: 'v-33', x: 0,  y: 4,  w: 4,  h: 5,  minW: 4, minH: 4  },
+    { i: 'v-29', x: 4,  y: 4,  w: 4,  h: 5,  minW: 3, minH: 4  },
+    { i: 'v-34', x: 8,  y: 4,  w: 4,  h: 5,  minW: 4, minH: 4  },
     { i: 'v-9',  x: 0,  y: 9,  w: 12, h: 5,  minW: 6, minH: 3  },
     { i: 'v-35', x: 0,  y: 14, w: 7,  h: 5,  minW: 5, minH: 4  },
     { i: 'v-36', x: 7,  y: 14, w: 5,  h: 5,  minW: 4, minH: 4  },

@@ -39,16 +39,6 @@ export default function ClientesRiesgoWidget() {
     </div>
   );
 
-  if (!comparar) {
-    return (
-      <div className="h-full flex flex-col items-center justify-center text-center p-4 gap-2">
-        <Users className="text-slate-300" size={28} />
-        <p className="text-sm font-medium text-slate-600">Activá "Comparar período anterior"</p>
-        <p className="text-xs text-slate-400">Necesario para detectar clientes perdidos y en caída.</p>
-      </div>
-    );
-  }
-
   const { perdidos = [], en_caida = [], nuevos = [], totales = {} } = clientesRiesgo;
   const data = tab === 'perdidos' ? perdidos : tab === 'en_caida' ? en_caida : nuevos;
   const counts = {
@@ -94,8 +84,14 @@ export default function ClientesRiesgoWidget() {
       </div>
 
       {/* Lista */}
-      <div className="flex-1 min-h-0 overflow-auto">
-        {data.length === 0 ? (
+      <div className="flex-1 min-h-0 overflow-auto relative">
+        {!comparar && tab !== 'nuevos' ? (
+          <div className="h-full flex flex-col items-center justify-center text-center p-4 gap-2">
+            <Users className="text-slate-300" size={24} />
+            <p className="text-xs font-medium text-slate-500">Activá "Comparar período anterior"</p>
+            <p className="text-[10px] text-slate-400">Necesario para detectar clientes {tab === 'perdidos' ? 'perdidos' : 'en caída'}.</p>
+          </div>
+        ) : data.length === 0 ? (
           <div className="h-full flex items-center justify-center text-xs text-slate-400 text-center py-4">
             {tab === 'perdidos' && '✓ Sin clientes perdidos en este período.'}
             {tab === 'en_caida' && '✓ Sin clientes con caída significativa.'}

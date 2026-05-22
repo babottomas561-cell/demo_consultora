@@ -1766,7 +1766,7 @@ async def ventas_kpis(
     facturado_neto = money(row["facturado_neto"])
     ticket_prom = facturado_neto / tickets if tickets else 0
     tasa_dev = min((nc / fa * 100) if fa else 0, 100.0)
-    margen_pct = (margen_d / total_con_costo * 100) if total_con_costo else 0
+    margen_pct = (margen_d / facturado_neto * 100) if facturado_neto else 0
 
     # DSO (Days Sales Outstanding) — días promedio de cobro
     # Fórmula: (saldo cuentas por cobrar / ventas a crédito) * días del período
@@ -1827,7 +1827,7 @@ async def ventas_kpis(
         ant["clientes_unicos"] = int(prev_row["clientes_unicos"] or 0)
         ant_margen_d = money(prev_row["margen_dolares"])
         ant_total_con_costo = money(prev_row["total_con_costo"])
-        ant["margen_bruto_pct"] = (ant_margen_d / ant_total_con_costo * 100) if ant_total_con_costo else 0
+        ant["margen_bruto_pct"] = (ant_margen_d / ant["facturado_neto"] * 100) if ant["facturado_neto"] else 0
 
     return {
         "facturado_neto": _kpi_obj(facturado_neto, ant.get("facturado_neto")),
@@ -1879,9 +1879,10 @@ async def ventas_temporal(
     result = []
     for r in series:
         d = dict(r)
-        tc = float(d.pop("total_con_costo") or 0)
+        d.pop("total_con_costo", None)
+        fn = float(d.get("facturado") or 0)
         ma = float(d["margen_abs"] or 0)
-        d["margen_pct"] = round(ma / tc * 100, 1) if tc else None
+        d["margen_pct"] = round(ma / fn * 100, 1) if fn else None
         result.append(d)
 
     if filters.comparar_anterior:
@@ -1906,9 +1907,10 @@ async def ventas_temporal(
         prev_map = {}
         for r in prev_series:
             d = dict(r)
-            tc = float(d.pop("total_con_costo") or 0)
+            d.pop("total_con_costo", None)
+            fn = float(d.get("facturado") or 0)
             ma = float(d["margen_abs"] or 0)
-            d["margen_pct"] = round(ma / tc * 100, 1) if tc else None
+            d["margen_pct"] = round(ma / fn * 100, 1) if fn else None
             prev_map[d["periodo"]] = d
         prev_vals = list(prev_map.values())
         for i, row in enumerate(result):

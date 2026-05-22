@@ -54,8 +54,8 @@ export default function EstadoResultadosWidget() {
     <div className="h-full overflow-auto px-3 py-2">
       <div className="rounded-xl border border-slate-200 bg-white p-3">
         <div className="flex items-center justify-between mb-2">
-          <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wide">Estado de resultados</h3>
-          <span className="text-[10px] text-slate-400">Período actual</span>
+          <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wide">Resultado bruto de ventas</h3>
+          <span className="text-[10px] text-slate-400">Período actual · con IVA incluido</span>
         </div>
 
         <Row label="Ventas brutas (FA + ND)"  value={formatCurrencyShort(facturadoBruto)}  pct={pct(facturadoBruto)} />
@@ -63,6 +63,7 @@ export default function EstadoResultadosWidget() {
         <Row label="Ventas netas"             value={formatCurrencyShort(facturadoNeto)}   pct="100%" bold divider />
         <Row label="Costo de mercadería vendida" value={`(${formatCurrencyShort(cogs)})`} pct={pct(-cogs)} indent={1} sign="−" color="text-red-500" subtle />
         <Row label="Margen bruto"             value={formatCurrencyShort(margenBruto)}     pct={fmtPct(margenPct)} bold color={margenPct >= 30 ? 'text-emerald-700' : margenPct >= 15 ? 'text-amber-600' : 'text-red-600'} divider />
+        <p className="text-[10px] text-slate-400 mt-1 leading-snug">* No incluye gastos operativos, administrativos ni financieros</p>
 
         <div className="mt-3 pt-2 border-t border-dashed border-slate-200 space-y-1">
           <div className="flex justify-between text-[11px] text-slate-500">
