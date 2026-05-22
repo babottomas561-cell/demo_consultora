@@ -571,19 +571,29 @@ class InfomanagerConnector:
             cotizacion = _as_float(cab.get("cotizacion"), 1.0)
             factor = cotizacion if moneda == "D" and cotizacion > 0 else 1.0
 
-            # B1 — importe fallback
+            # B1 — importe = precio_con_iva × cantidad (confirmed: item.importe = total WITH IVA)
             _qty = abs(_as_float(item.get("cantidad")))
-            _precio_raw = abs(_as_float(item.get("precio")))
-            _importe_raw = abs(_as_float(item.get("importe")))
-            total_ars = (_importe_raw if _importe_raw > 0 else (_qty * _precio_raw)) * factor
+            _precio_raw = abs(_as_float(item.get("precio")))           # sin IVA
+            _pci_raw    = abs(_as_float(item.get("precio_con_iva")))   # con IVA
+            _importe_raw = abs(_as_float(item.get("importe")))         # = pci × qty (WITH IVA)
 
+            # total = precio_con_iva × qty. Fallback: precio × qty if importe is missing
+            total_ars = (_importe_raw if _importe_raw > 0 else (_qty * (_pci_raw or _precio_raw))) * factor
             precio_unitario_ars = _precio_raw * factor
-            neto_ars = abs(_as_float(cab.get("neto"))) * factor
-            iva_total_ars = abs(_as_float(cab.get("iva_importe"))) * factor
 
-            # D6 — IVA discriminado por alícuota
-            iva_10_5_ars = abs(_as_float(cab.get("importe_iva_10_5"))) * factor
-            iva_27_ars = abs(_as_float(cab.get("importe_iva_27"))) * factor
+            # Per-item neto (sin IVA) = precio × qty — NOT the header neto
+            # The header.neto is the SUM of all items' neto; storing it per-row causes
+            # double-counting in analytics for multi-item invoices.
+            neto_ars = _precio_raw * _qty * factor
+
+            # Per-item IVA = precio × iva_por/100 × qty — iva_importe in items is always 0
+            _iva_por = _as_float(item.get("iva_por", 0))
+            iva_total_ars = _precio_raw * _qty * (_iva_por / 100) * factor
+
+            # D6 — IVA discriminado por alícuota (from header, proportional to item weight)
+            # Use header iva_10_5 / iva_27 only for items whose iva_por matches
+            iva_10_5_ars = (_precio_raw * _qty * 0.105 * factor) if abs(_iva_por - 10.5) < 0.1 else 0.0
+            iva_27_ars   = (_precio_raw * _qty * 0.27  * factor) if abs(_iva_por - 27)  < 0.1 else 0.0
 
             # B3 — cod_rubro desde lookup de artículos (ventas/items no tiene este campo)
             cod_articulo_str = str(item.get("cod_articulo") or "")
