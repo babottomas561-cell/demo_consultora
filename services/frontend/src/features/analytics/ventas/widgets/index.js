@@ -40,6 +40,11 @@ import SemaforoCarteraWidget from './SemaforoCarteraWidget';
 import MediosPagoWidget from './MediosPagoWidget';
 import ConversionWidget from './ConversionWidget';
 import LibroIVAWidget from './LibroIVAWidget';
+// Nuevos gráficos de torta y series temporales por dimensión
+import FacturacionCentroCostoWidget from './FacturacionCentroCostoWidget';
+import TemporalDimensionWidget from './TemporalDimensionWidget';
+import RubroPieWidget from './RubroPieWidget';
+import ListaPieWidget from './ListaPieWidget';
 
 const VENTAS_WIDGET_CATALOG = [
   // ── Pulse Strip (mega-KPI row) ──
@@ -435,6 +440,43 @@ const VENTAS_WIDGET_CATALOG = [
     defaultSize: { w: 12, h: 5 },
     category: 'kpi',
   },
+  // ── Tortas y series temporales por dimensión ──
+  {
+    type: 'ventas-cc-pie',
+    name: 'Facturación por Centro de Costo',
+    description: 'Facturación bruta (c/IVA) por CC con torta, barras apiladas y líneas temporales',
+    icon: PieChart,
+    component: FacturacionCentroCostoWidget,
+    defaultSize: { w: 6, h: 5 },
+    category: 'chart',
+  },
+  {
+    type: 'ventas-temporal-dimension',
+    name: 'Evolución por Dimensión',
+    description: 'Serie temporal por rubro, lista, vendedor o depósito — con torta, área y barras',
+    icon: BarChart3,
+    component: TemporalDimensionWidget,
+    defaultSize: { w: 8, h: 6 },
+    category: 'chart',
+  },
+  {
+    type: 'ventas-rubro-pie',
+    name: 'Torta por Rubro',
+    description: 'Distribución de facturación por rubro en gráfico de torta',
+    icon: PieChart,
+    component: RubroPieWidget,
+    defaultSize: { w: 5, h: 5 },
+    category: 'chart',
+  },
+  {
+    type: 'ventas-lista-pie',
+    name: 'Torta por Lista de Precios',
+    description: 'Distribución de facturación por lista de precios en gráfico de torta',
+    icon: PieChart,
+    component: ListaPieWidget,
+    defaultSize: { w: 5, h: 5 },
+    category: 'chart',
+  },
 ];
 
 export default VENTAS_WIDGET_CATALOG;
@@ -457,6 +499,11 @@ export const VENTAS_DEFAULT_WIDGETS = [
   { id: 'v-35', type: 'ventas-nuevos-recurrentes' },  // Nuevos vs. recurrentes
   { id: 'v-36', type: 'ventas-dia-semana'         },  // Día de semana
   { id: 'v-24', type: 'ventas-yoy'                },  // YoY
+  // Distribución y dimensiones
+  { id: 'v-50', type: 'ventas-cc-pie'             },  // Torta por CC
+  { id: 'v-51', type: 'ventas-temporal-dimension' },  // Serie temporal multi-dimensión
+  { id: 'v-52', type: 'ventas-rubro-pie'          },  // Torta rubro
+  { id: 'v-53', type: 'ventas-lista-pie'          },  // Torta lista
   // Productos / portafolio
   { id: 'v-11', type: 'ventas-pareto'             },
   { id: 'v-27', type: 'ventas-scatter'            },  // BCG con cuadrantes
@@ -481,12 +528,18 @@ export const VENTAS_DEFAULT_LAYOUTS = {
     { i: 'v-36', x: 7,  y: 19, w: 5,  h: 5,  minW: 4, minH: 4  },
     // Row 5: YoY (full)
     { i: 'v-24', x: 0,  y: 24, w: 12, h: 4,  minW: 6, minH: 3  },
-    // Row 6: Pareto (6) + Scatter (6)
-    { i: 'v-11', x: 0,  y: 28, w: 6,  h: 5,  minW: 4, minH: 3  },
-    { i: 'v-27', x: 6,  y: 28, w: 6,  h: 5,  minW: 4, minH: 3  },
-    // Row 7: Rubro (8) + Aging (4)
-    { i: 'v-12', x: 0,  y: 33, w: 8,  h: 5,  minW: 4, minH: 3  },
-    { i: 'v-29', x: 8,  y: 33, w: 4,  h: 5,  minW: 3, minH: 4  },
+    // Row 6: CC pie (6) + Temporal dimension (6)
+    { i: 'v-50', x: 0,  y: 28, w: 6,  h: 5,  minW: 4, minH: 4  },
+    { i: 'v-51', x: 6,  y: 28, w: 6,  h: 6,  minW: 5, minH: 4  },
+    // Row 7: Rubro pie (5) + Lista pie (5) + gap
+    { i: 'v-52', x: 0,  y: 34, w: 5,  h: 5,  minW: 4, minH: 4  },
+    { i: 'v-53', x: 5,  y: 34, w: 5,  h: 5,  minW: 4, minH: 4  },
+    // Row 8: Pareto (6) + Scatter (6)
+    { i: 'v-11', x: 0,  y: 39, w: 6,  h: 5,  minW: 4, minH: 3  },
+    { i: 'v-27', x: 6,  y: 39, w: 6,  h: 5,  minW: 4, minH: 3  },
+    // Row 9: Rubro bar (8) + Aging (4)
+    { i: 'v-12', x: 0,  y: 44, w: 8,  h: 5,  minW: 4, minH: 3  },
+    { i: 'v-29', x: 8,  y: 44, w: 4,  h: 5,  minW: 3, minH: 4  },
   ],
   md: [
     { i: 'v-40', x: 0,  y: 0,  w: 12, h: 5,  minW: 8, minH: 4  },
@@ -498,10 +551,14 @@ export const VENTAS_DEFAULT_LAYOUTS = {
     { i: 'v-35', x: 0,  y: 19, w: 7,  h: 5,  minW: 5, minH: 4  },
     { i: 'v-36', x: 7,  y: 19, w: 5,  h: 5,  minW: 4, minH: 4  },
     { i: 'v-24', x: 0,  y: 24, w: 12, h: 4,  minW: 6, minH: 3  },
-    { i: 'v-11', x: 0,  y: 28, w: 6,  h: 5,  minW: 4, minH: 3  },
-    { i: 'v-27', x: 6,  y: 28, w: 6,  h: 5,  minW: 4, minH: 3  },
-    { i: 'v-12', x: 0,  y: 33, w: 8,  h: 5,  minW: 4, minH: 3  },
-    { i: 'v-29', x: 8,  y: 33, w: 4,  h: 5,  minW: 3, minH: 4  },
+    { i: 'v-50', x: 0,  y: 28, w: 6,  h: 5,  minW: 4, minH: 4  },
+    { i: 'v-51', x: 6,  y: 28, w: 6,  h: 6,  minW: 5, minH: 4  },
+    { i: 'v-52', x: 0,  y: 34, w: 6,  h: 5,  minW: 4, minH: 4  },
+    { i: 'v-53', x: 6,  y: 34, w: 6,  h: 5,  minW: 4, minH: 4  },
+    { i: 'v-11', x: 0,  y: 39, w: 6,  h: 5,  minW: 4, minH: 3  },
+    { i: 'v-27', x: 6,  y: 39, w: 6,  h: 5,  minW: 4, minH: 3  },
+    { i: 'v-12', x: 0,  y: 44, w: 8,  h: 5,  minW: 4, minH: 3  },
+    { i: 'v-29', x: 8,  y: 44, w: 4,  h: 5,  minW: 3, minH: 4  },
   ],
   sm: [
     { i: 'v-40', x: 0, y: 0,  w: 6, h: 5,  minW: 4, minH: 4  },
@@ -513,9 +570,13 @@ export const VENTAS_DEFAULT_LAYOUTS = {
     { i: 'v-35', x: 0, y: 25, w: 6, h: 5,  minW: 3, minH: 4  },
     { i: 'v-36', x: 0, y: 30, w: 6, h: 5,  minW: 3, minH: 4  },
     { i: 'v-24', x: 0, y: 35, w: 6, h: 4,  minW: 3, minH: 3  },
-    { i: 'v-11', x: 0, y: 39, w: 6, h: 5,  minW: 3, minH: 3  },
-    { i: 'v-27', x: 0, y: 44, w: 6, h: 5,  minW: 3, minH: 3  },
-    { i: 'v-12', x: 0, y: 49, w: 6, h: 5,  minW: 3, minH: 3  },
-    { i: 'v-29', x: 0, y: 54, w: 6, h: 5,  minW: 3, minH: 4  },
+    { i: 'v-50', x: 0, y: 39, w: 6, h: 5,  minW: 3, minH: 4  },
+    { i: 'v-51', x: 0, y: 44, w: 6, h: 6,  minW: 3, minH: 4  },
+    { i: 'v-52', x: 0, y: 50, w: 6, h: 5,  minW: 3, minH: 4  },
+    { i: 'v-53', x: 0, y: 55, w: 6, h: 5,  minW: 3, minH: 4  },
+    { i: 'v-11', x: 0, y: 60, w: 6, h: 5,  minW: 3, minH: 3  },
+    { i: 'v-27', x: 0, y: 65, w: 6, h: 5,  minW: 3, minH: 3  },
+    { i: 'v-12', x: 0, y: 70, w: 6, h: 5,  minW: 3, minH: 3  },
+    { i: 'v-29', x: 0, y: 75, w: 6, h: 5,  minW: 3, minH: 4  },
   ],
 };

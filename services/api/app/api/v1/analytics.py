@@ -2420,6 +2420,188 @@ async def ventas_por_lista(
     }
 
 
+@router.get("/ventas/por-centro-costo")
+async def ventas_por_centro_costo(
+    company_id: int = None,
+    granularidad: Literal["dia", "semana", "mes", "trimestre"] = "mes",
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Facturación bruta (con IVA) por centro de costos (tag: S=CC2, N=CC1) con serie temporal."""
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+
+    params = filters.sql_params()
+    where = _ventas_base_where(filters)
+    trunc_map = {"dia": "day", "semana": "week", "mes": "month", "trimestre": "quarter"}
+    trunc = trunc_map.get(granularidad, "month")
+
+    # Totals by CC
+    totals = (await db.execute(text(f"""
+        SELECT
+            CASE WHEN tag = 'S' THEN 'CC2' WHEN tag = 'N' THEN 'CC1' ELSE COALESCE(tag, 'Sin CC') END AS centro_costo,
+            COALESCE(SUM(ABS(total)), 0) AS facturado_bruto,
+            COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END) AS tickets,
+            COUNT(DISTINCT cliente_id) AS clientes
+        FROM ventas
+        WHERE {where}
+        GROUP BY 1
+        ORDER BY facturado_bruto DESC
+    """), params)).mappings().all()
+
+    # Temporal by CC
+    temporal = (await db.execute(text(f"""
+        SELECT
+            to_char(date_trunc('{trunc}', fecha), 'YYYY-MM-DD') AS periodo,
+            CASE WHEN tag = 'S' THEN 'CC2' WHEN tag = 'N' THEN 'CC1' ELSE COALESCE(tag, 'Sin CC') END AS centro_costo,
+            COALESCE(SUM(ABS(total)), 0) AS facturado_bruto,
+            COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END) AS tickets
+        FROM ventas
+        WHERE {where}
+        GROUP BY 1, 2
+        ORDER BY 1, 2
+    """), params)).mappings().all()
+
+    # Pivot temporal for chart
+    periodos_set = []
+    series_map = {}
+    for r in temporal:
+        p = r["periodo"]
+        cc = r["centro_costo"]
+        if p not in periodos_set:
+            periodos_set.append(p)
+        if p not in series_map:
+            series_map[p] = {"periodo": p}
+        series_map[p][cc] = round(float(r["facturado_bruto"]), 2)
+        series_map[p][f"{cc}_tickets"] = int(r["tickets"])
+
+    total_general = sum(float(r["facturado_bruto"]) for r in totals) or 1
+    resumen = []
+    for r in totals:
+        resumen.append({
+            "centro_costo": r["centro_costo"],
+            "facturado_bruto": round(float(r["facturado_bruto"]), 2),
+            "tickets": int(r["tickets"]),
+            "clientes": int(r["clientes"]),
+            "pct_total": round(float(r["facturado_bruto"]) / total_general * 100, 1),
+        })
+
+    centros = [r["centro_costo"] for r in resumen]
+
+    return {
+        "resumen": resumen,
+        "serie": list(series_map.values()),
+        "centros": centros,
+        "total_facturado_bruto": round(total_general, 2),
+    }
+
+
+@router.get("/ventas/temporal-por-dimension")
+async def ventas_temporal_por_dimension(
+    company_id: int = None,
+    dimension: Literal["rubro", "lista", "vendedor", "deposito"] = "rubro",
+    granularidad: Literal["dia", "semana", "mes", "trimestre"] = "mes",
+    filters: GlobalFilters = Depends(get_global_filters),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Serie temporal de facturación bruta (con IVA) desglosada por dimensión (rubro, lista, vendedor, deposito)."""
+    tenant_schema = await get_tenant_schema(current_user, db, company_id)
+    await set_tenant_search_path(db, tenant_schema)
+
+    params = filters.sql_params()
+    where = _ventas_base_where(filters)
+    trunc_map = {"dia": "day", "semana": "week", "mes": "month", "trimestre": "quarter"}
+    trunc = trunc_map.get(granularidad, "month")
+
+    dim_col_map = {
+        "rubro": "cod_rubro",
+        "lista": "cod_lista_precios",
+        "vendedor": "cod_vendedor",
+        "deposito": "cod_deposito",
+    }
+    dim_col = dim_col_map[dimension]
+
+    # Get totals for top N filter
+    top_rows = (await db.execute(text(f"""
+        SELECT {dim_col} AS dim_key, COALESCE(SUM(ABS(total)), 0) AS facturado_bruto
+        FROM ventas
+        WHERE {where} AND {dim_col} IS NOT NULL
+        GROUP BY 1
+        ORDER BY 2 DESC
+        LIMIT 10
+    """), params)).mappings().all()
+
+    top_keys = [r["dim_key"] for r in top_rows]
+    if not top_keys:
+        return {"serie": [], "dimensiones": [], "resumen": []}
+
+    # Name resolution
+    name_map = {}
+    try:
+        if dimension == "rubro":
+            nr = (await db.execute(text(
+                "SELECT DISTINCT ON (cod_articulo) cod_rubro, rubro FROM stock_disponible WHERE rubro IS NOT NULL"
+            ))).mappings().all()
+            name_map = {r["cod_rubro"]: r["rubro"] for r in nr}
+        elif dimension == "lista":
+            nr = (await db.execute(text("SELECT cod_lista, descripcion FROM listas_precios"))).mappings().all()
+            name_map = {r["cod_lista"]: r["descripcion"] for r in nr}
+        elif dimension == "vendedor":
+            nr = (await db.execute(text("SELECT cod_vendedor, nombre FROM vendedores"))).mappings().all()
+            name_map = {r["cod_vendedor"]: r["nombre"] for r in nr}
+        elif dimension == "deposito":
+            nr = (await db.execute(text("SELECT cod_deposito, nombre FROM depositos"))).mappings().all()
+            name_map = {r["cod_deposito"]: r["nombre"] for r in nr}
+    except Exception:
+        pass
+
+    # Temporal by dimension
+    keys_str = ",".join(str(k) for k in top_keys)
+    temporal = (await db.execute(text(f"""
+        SELECT
+            to_char(date_trunc('{trunc}', fecha), 'YYYY-MM-DD') AS periodo,
+            {dim_col} AS dim_key,
+            COALESCE(SUM(ABS(total)), 0) AS facturado_bruto,
+            COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END) AS tickets
+        FROM ventas
+        WHERE {where} AND {dim_col} IN ({keys_str})
+        GROUP BY 1, 2
+        ORDER BY 1, 2
+    """), params)).mappings().all()
+
+    # Pivot
+    series_map = {}
+    for r in temporal:
+        p = r["periodo"]
+        key = r["dim_key"]
+        name = name_map.get(key, f"{dimension.title()} {key}")
+        if p not in series_map:
+            series_map[p] = {"periodo": p}
+        series_map[p][name] = round(float(r["facturado_bruto"]), 2)
+
+    total_general = sum(float(r["facturado_bruto"]) for r in top_rows) or 1
+    resumen = []
+    for r in top_rows:
+        k = r["dim_key"]
+        resumen.append({
+            "key": k,
+            "nombre": name_map.get(k, f"{dimension.title()} {k}"),
+            "facturado_bruto": round(float(r["facturado_bruto"]), 2),
+            "pct_total": round(float(r["facturado_bruto"]) / total_general * 100, 1),
+        })
+
+    dimensiones = [name_map.get(k, f"{dimension.title()} {k}") for k in top_keys]
+
+    return {
+        "serie": list(series_map.values()),
+        "dimensiones": dimensiones,
+        "resumen": resumen,
+        "total_facturado_bruto": round(total_general, 2),
+    }
+
+
 @router.get("/ventas/por-vendedor")
 async def ventas_por_vendedor(
     company_id: int = None,
