@@ -7025,18 +7025,38 @@ async def _libro_iva_completo_impl(company_id, filters, current_user, db):
     params = filters.sql_params()
     where_v = _ventas_base_where(filters)
 
+    # Check if iva_10_5 / iva_27 columns exist (may not if migration pending)
+    has_iva_disc = True
+    try:
+        col_check = (await db.execute(text(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_schema = :schema AND table_name = 'ventas' "
+            "AND column_name IN ('iva_10_5','iva_27')"
+        ), {"schema": tenant_schema})).scalars().all()
+        has_iva_disc = len(col_check) >= 2
+    except Exception:
+        has_iva_disc = False
+
+    safe_iva = "COALESCE(NULLIF(iva_importe::text,'')::float, 0)"
+    if has_iva_disc:
+        safe_105 = "COALESCE(NULLIF(iva_10_5::text,'')::float, 0)"
+        safe_27 = "COALESCE(NULLIF(iva_27::text,'')::float, 0)"
+        iva_21_expr = f"{safe_iva} - {safe_105} - {safe_27}"
+        iva_105_expr = safe_105
+        iva_27_expr = safe_27
+    else:
+        iva_21_expr = safe_iva  # all IVA counted as 21%
+        iva_105_expr = "0"
+        iva_27_expr = "0"
+
     ventas_rows = (await db.execute(text(f"""
         SELECT
             to_char(date_trunc('month', fecha), 'YYYY-MM') AS periodo,
             COALESCE(SUM(COALESCE(NULLIF(neto::text,'')::float, 0)), 0) AS base_neta,
-            COALESCE(SUM(
-                COALESCE(NULLIF(iva_importe::text,'')::float, 0)
-                - COALESCE(NULLIF(iva_10_5::text,'')::float, 0)
-                - COALESCE(NULLIF(iva_27::text,'')::float, 0)
-            ), 0) AS iva_21,
-            COALESCE(SUM(COALESCE(NULLIF(iva_10_5::text,'')::float, 0)), 0) AS iva_10_5,
-            COALESCE(SUM(COALESCE(NULLIF(iva_27::text,'')::float, 0)), 0)   AS iva_27,
-            COALESCE(SUM(COALESCE(NULLIF(iva_importe::text,'')::float, 0)), 0) AS iva_total,
+            COALESCE(SUM({iva_21_expr}), 0) AS iva_21,
+            COALESCE(SUM({iva_105_expr}), 0) AS iva_10_5,
+            COALESCE(SUM({iva_27_expr}), 0)  AS iva_27,
+            COALESCE(SUM({safe_iva}), 0) AS iva_total,
             COUNT(DISTINCT CASE WHEN tipo_comprobante='FA'
                 THEN to_char(fecha,'YYYYMMDD')||'-'||COALESCE(cliente_id,'x') END) AS comprobantes
         FROM ventas
@@ -7046,18 +7066,38 @@ async def _libro_iva_completo_impl(company_id, filters, current_user, db):
 
     compras_where = compra_filters_clause(filters)
     compras_params = compra_params(filters)
+
+    # Check compras columns too
+    has_iva_disc_c = True
+    try:
+        col_check_c = (await db.execute(text(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_schema = :schema AND table_name = 'compras' "
+            "AND column_name IN ('iva_10_5','iva_27')"
+        ), {"schema": tenant_schema})).scalars().all()
+        has_iva_disc_c = len(col_check_c) >= 2
+    except Exception:
+        has_iva_disc_c = False
+
+    if has_iva_disc_c:
+        c_105 = "COALESCE(NULLIF(iva_10_5::text,'')::float, 0)"
+        c_27 = "COALESCE(NULLIF(iva_27::text,'')::float, 0)"
+        c_iva_21_expr = f"{safe_iva} - {c_105} - {c_27}"
+        c_iva_105_expr = c_105
+        c_iva_27_expr = c_27
+    else:
+        c_iva_21_expr = safe_iva
+        c_iva_105_expr = "0"
+        c_iva_27_expr = "0"
+
     compras_rows = (await db.execute(text(f"""
         SELECT
             to_char(date_trunc('month', fecha), 'YYYY-MM') AS periodo,
             COALESCE(SUM({compra_importe_neto_expr()}), 0) AS base_neta,
-            COALESCE(SUM(
-                COALESCE(NULLIF(iva_importe::text,'')::float, 0)
-                - COALESCE(NULLIF(iva_10_5::text,'')::float, 0)
-                - COALESCE(NULLIF(iva_27::text,'')::float, 0)
-            ), 0) AS iva_21,
-            COALESCE(SUM(COALESCE(NULLIF(iva_10_5::text,'')::float, 0)), 0) AS iva_10_5,
-            COALESCE(SUM(COALESCE(NULLIF(iva_27::text,'')::float, 0)), 0)   AS iva_27,
-            COALESCE(SUM(COALESCE(NULLIF(iva_importe::text,'')::float, 0)), 0) AS iva_credito,
+            COALESCE(SUM({c_iva_21_expr}), 0) AS iva_21,
+            COALESCE(SUM({c_iva_105_expr}), 0) AS iva_10_5,
+            COALESCE(SUM({c_iva_27_expr}), 0)  AS iva_27,
+            COALESCE(SUM({safe_iva}), 0) AS iva_credito,
             COUNT(*) AS comprobantes
         FROM compras
         WHERE {compras_where}
