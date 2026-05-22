@@ -1,7 +1,7 @@
 import { cn } from './utils';
 
 export const Tabs = ({ className, ...props }) => (
-  <div className={cn('inline-flex rounded-[9px] bg-slate-100 p-[3px] shadow-[inset_0_0_0_1px_var(--slate-200)]', className)} {...props} />
+  <div className={cn('inline-flex rounded-[9px] bg-slate-100 p-[3px] shadow-[inset_0_0_0_1px_#e2e8f0]', className)} {...props} />
 );
 
 export const TabButton = ({ active, className, ...props }) => (

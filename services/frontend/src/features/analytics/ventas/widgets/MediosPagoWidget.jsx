@@ -1,5 +1,6 @@
 import React from 'react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { Inbox } from 'lucide-react';
 import { useVentasData } from '../VentasDataContext';
 import { formatCurrency } from '../../analyticsUtils';
 
@@ -16,14 +17,11 @@ const CustomTooltip = ({ active, payload }) => {
   if (!active || !payload?.length) return null;
   const d = payload[0].payload;
   return (
-    <div style={{
-      background: 'var(--surface-2)', border: '1px solid var(--border)',
-      borderRadius: 8, padding: '10px 14px', fontSize: 12,
-    }}>
-      <div style={{ fontWeight: 700, marginBottom: 4 }}>{d.label}</div>
-      <div>Total: <strong>{formatCurrency(d.total)}</strong></div>
-      <div>Operaciones: <strong>{d.operaciones}</strong></div>
-      <div>Participación: <strong>{d.pct?.toFixed(1)}%</strong></div>
+    <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-lg text-xs min-w-[160px]">
+      <p className="font-bold text-slate-700 mb-1">{d.label}</p>
+      <p className="text-slate-600">Total: <strong className="text-slate-800">{formatCurrency(d.total)}</strong></p>
+      <p className="text-slate-600">Operaciones: <strong>{d.operaciones}</strong></p>
+      <p className="text-slate-600">Participación: <strong>{d.pct?.toFixed(1)}%</strong></p>
     </div>
   );
 };
@@ -33,8 +31,8 @@ export default function MediosPagoWidget() {
 
   if (mediosPagoLoading) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-        <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Cargando medios de pago...</div>
+      <div className="flex items-center justify-center h-full">
+        <p className="text-slate-400 text-sm">Cargando medios de pago...</p>
       </div>
     );
   }
@@ -47,63 +45,61 @@ export default function MediosPagoWidget() {
 
   const totalCobrado = mediosPago?.total_cobrado ?? 0;
 
+  if (!medios.length) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-slate-400">
+        <Inbox size={24} />
+        <p className="text-sm">Sin cobros en el período.</p>
+      </div>
+    );
+  }
+
   return (
-    <div style={{ padding: '16px 20px', height: '100%', display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+    <div className="h-full flex flex-col gap-3 px-4 py-3">
+      <div className="flex justify-between items-baseline shrink-0">
+        <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
           Medios de Cobro
         </span>
-        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+        <span className="text-[10px] text-slate-400">
           Total: {formatCurrency(totalCobrado)}
         </span>
       </div>
 
-      {medios.length === 0 ? (
-        <div style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 24, textAlign: 'center' }}>
-          Sin cobros en el período
-        </div>
-      ) : (
-        <>
-          <div style={{ flex: 1, minHeight: 0 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={medios}
-                  dataKey="total"
-                  nameKey="label"
-                  cx="50%"
-                  cy="50%"
-                  innerRadius="50%"
-                  outerRadius="80%"
-                  paddingAngle={3}
-                >
-                  {medios.map((m) => (
-                    <Cell key={m.forma_pago} fill={m.fill} />
-                  ))}
-                </Pie>
-                <Tooltip content={<CustomTooltip />} />
-                <Legend
-                  formatter={(value) => <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{value}</span>}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
+      <div className="flex-1 min-h-0">
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie
+              data={medios}
+              dataKey="total"
+              nameKey="label"
+              cx="50%"
+              cy="50%"
+              innerRadius="50%"
+              outerRadius="80%"
+              paddingAngle={3}
+            >
+              {medios.map((m) => (
+                <Cell key={m.forma_pago} fill={m.fill} />
+              ))}
+            </Pie>
+            <Tooltip content={<CustomTooltip />} />
+            <Legend
+              formatter={(value) => <span className="text-xs text-slate-500">{value}</span>}
+            />
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {medios.map((m) => (
-              <div key={m.forma_pago} style={{
-                display: 'flex', alignItems: 'center', gap: 8,
-                fontSize: 12, color: 'var(--text-secondary)',
-              }}>
-                <div style={{ width: 8, height: 8, borderRadius: 2, background: m.fill, flexShrink: 0 }} />
-                <span style={{ flex: 1 }}>{m.label}</span>
-                <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{formatCurrency(m.total)}</span>
-                <span style={{ color: 'var(--text-muted)', minWidth: 42, textAlign: 'right' }}>{m.pct?.toFixed(1)}%</span>
-              </div>
-            ))}
+      <div className="flex flex-col gap-1.5 shrink-0">
+        {medios.map((m) => (
+          <div key={m.forma_pago} className="flex items-center gap-2 text-xs text-slate-500">
+            <div className="w-2 h-2 rounded-sm shrink-0" style={{ background: m.fill }} />
+            <span className="flex-1">{m.label}</span>
+            <span className="font-semibold text-slate-700 tabular-nums">{formatCurrency(m.total)}</span>
+            <span className="text-slate-400 min-w-[42px] text-right tabular-nums">{m.pct?.toFixed(1)}%</span>
           </div>
-        </>
-      )}
+        ))}
+      </div>
     </div>
   );
 }

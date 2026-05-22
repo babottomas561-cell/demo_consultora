@@ -2,6 +2,7 @@ import React from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
+import { Inbox } from 'lucide-react';
 import { useVentasData } from '../VentasDataContext';
 import { formatCurrency } from '../../analyticsUtils';
 
@@ -17,24 +18,30 @@ const IVA_LABELS = {
   iva_27:   'IVA 27%',
 };
 
+const MONTHS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+const fmtPeriod = (v) => {
+  if (!v) return '';
+  const raw = String(v);
+  const date = raw.length === 7 ? new Date(`${raw}-01T00:00:00`) : new Date(raw);
+  if (Number.isNaN(date.getTime())) return raw;
+  return `${MONTHS[date.getMonth()]} ${String(date.getFullYear()).slice(-2)}`;
+};
+
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
   const total = payload.reduce((s, p) => s + (p.value || 0), 0);
   return (
-    <div style={{
-      background: 'var(--surface-2)', border: '1px solid var(--border)',
-      borderRadius: 8, padding: '10px 14px', fontSize: 12, minWidth: 180,
-    }}>
-      <div style={{ fontWeight: 700, marginBottom: 6 }}>{label}</div>
+    <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-lg text-xs min-w-[180px]">
+      <p className="font-bold text-slate-700 mb-1.5">{fmtPeriod(label)}</p>
       {payload.map((p) => (
-        <div key={p.dataKey} style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginBottom: 3 }}>
+        <div key={p.dataKey} className="flex justify-between gap-4 mb-0.5">
           <span style={{ color: p.fill }}>{IVA_LABELS[p.dataKey] ?? p.dataKey}</span>
-          <strong>{formatCurrency(p.value)}</strong>
+          <span className="font-semibold tabular-nums">{formatCurrency(p.value)}</span>
         </div>
       ))}
-      <div style={{ borderTop: '1px solid var(--border)', marginTop: 6, paddingTop: 6, display: 'flex', justifyContent: 'space-between' }}>
-        <span style={{ color: 'var(--text-muted)' }}>Total IVA</span>
-        <strong>{formatCurrency(total)}</strong>
+      <div className="border-t border-slate-200 mt-1.5 pt-1.5 flex justify-between">
+        <span className="text-slate-400">Total IVA</span>
+        <span className="font-bold tabular-nums">{formatCurrency(total)}</span>
       </div>
     </div>
   );
@@ -45,15 +52,14 @@ export default function LibroIVAWidget() {
 
   if (ivaDiscriminadoLoading) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-        <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Cargando IVA discriminado...</div>
+      <div className="flex items-center justify-center h-full">
+        <p className="text-slate-400 text-sm">Cargando IVA discriminado...</p>
       </div>
     );
   }
 
   const periodos = ivaDiscriminado?.periodos ?? [];
 
-  // Totales acumulados del período
   const totalIva21   = periodos.reduce((s, p) => s + (p.iva_21   ?? 0), 0);
   const totalIva105  = periodos.reduce((s, p) => s + (p.iva_10_5 ?? 0), 0);
   const totalIva27   = periodos.reduce((s, p) => s + (p.iva_27   ?? 0), 0);
@@ -63,91 +69,89 @@ export default function LibroIVAWidget() {
   const has105 = totalIva105 > 0;
   const has27  = totalIva27  > 0;
 
+  if (!periodos.length) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-slate-400">
+        <Inbox size={24} />
+        <p className="text-sm">Sin datos de IVA discriminado.</p>
+      </div>
+    );
+  }
+
+  const kpiItems = [
+    { label: 'Base Neta', value: totalBase, color: '#0f172a' },
+    { label: 'IVA 21%',   value: totalIva21,  color: IVA_COLORS.iva_21 },
+    ...(has105 ? [{ label: 'IVA 10,5%', value: totalIva105, color: IVA_COLORS.iva_10_5 }] : []),
+    ...(has27  ? [{ label: 'IVA 27%',   value: totalIva27,  color: IVA_COLORS.iva_27   }] : []),
+    { label: 'Débito Total', value: totalIvaAll, bold: true },
+  ];
+
   return (
-    <div style={{ padding: '16px 20px', height: '100%', display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+    <div className="h-full flex flex-col gap-3 px-4 py-3">
+      <div className="flex justify-between items-baseline shrink-0">
+        <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
           IVA Ventas Discriminado
         </span>
-        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Libro IVA — CPN</span>
+        <span className="text-[10px] text-slate-400">Libro IVA — CPN</span>
       </div>
 
-      {/* KPIs resumen */}
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        {[
-          { label: 'Base Neta', value: totalBase, color: 'var(--text-primary)' },
-          { label: 'IVA 21%',   value: totalIva21,  color: IVA_COLORS.iva_21 },
-          ...(has105 ? [{ label: 'IVA 10,5%', value: totalIva105, color: IVA_COLORS.iva_10_5 }] : []),
-          ...(has27  ? [{ label: 'IVA 27%',   value: totalIva27,  color: IVA_COLORS.iva_27   }] : []),
-          { label: 'Débito Total', value: totalIvaAll, color: '#f8fafc', bold: true },
-        ].map((k) => (
-          <div key={k.label} style={{
-            flex: 1, minWidth: 90,
-            background: k.bold ? 'rgba(99,102,241,0.12)' : 'var(--surface-2)',
-            border: k.bold ? '1px solid #6366f1' : '1px solid var(--border)',
-            borderRadius: 8, padding: '8px 10px', textAlign: 'center',
-          }}>
-            <div style={{ fontSize: 15, fontWeight: k.bold ? 800 : 600, color: k.color }}>
+      <div className="flex gap-2 flex-wrap shrink-0">
+        {kpiItems.map((k) => (
+          <div key={k.label} className={`flex-1 min-w-[90px] rounded-lg border text-center px-2.5 py-2 ${
+            k.bold ? 'bg-indigo-50 border-indigo-300' : 'bg-white border-slate-200'
+          }`}>
+            <p className={`text-sm tabular-nums ${k.bold ? 'font-extrabold text-indigo-700' : 'font-semibold'}`}
+               style={k.color ? { color: k.color } : undefined}>
               {formatCurrency(k.value)}
-            </div>
-            <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>{k.label}</div>
+            </p>
+            <p className="text-[10px] text-slate-400 mt-0.5">{k.label}</p>
           </div>
         ))}
       </div>
 
-      {/* Gráfico de barras apiladas por mes */}
-      {periodos.length === 0 ? (
-        <div style={{ color: 'var(--text-muted)', fontSize: 13, textAlign: 'center', marginTop: 24 }}>
-          Sin datos. Requerís un sync con las columnas iva_10_5 / iva_27.
-        </div>
-      ) : (
-        <div style={{ flex: 1, minHeight: 0 }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={periodos} margin={{ left: 0, right: 8, top: 4, bottom: 0 }}>
-              <CartesianGrid vertical={false} stroke="var(--border)" strokeDasharray="3 3" />
-              <XAxis dataKey="periodo" tick={{ fontSize: 10, fill: 'var(--text-muted)' }} />
-              <YAxis tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 10, fill: 'var(--text-muted)' }} />
-              <Tooltip content={<CustomTooltip />} />
-              <Legend
-                formatter={(value) => <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{IVA_LABELS[value] ?? value}</span>}
-              />
-              <Bar dataKey="iva_21"   stackId="iva" fill={IVA_COLORS.iva_21}   radius={has105 || has27 ? 0 : [4,4,0,0]} />
-              {has105 && <Bar dataKey="iva_10_5" stackId="iva" fill={IVA_COLORS.iva_10_5} radius={0} />}
-              {has27  && <Bar dataKey="iva_27"   stackId="iva" fill={IVA_COLORS.iva_27}   radius={[4,4,0,0]} />}
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      )}
+      <div className="flex-1 min-h-0">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={periodos} margin={{ left: 0, right: 8, top: 4, bottom: 0 }}>
+            <CartesianGrid vertical={false} stroke="#e2e8f0" strokeDasharray="3 3" />
+            <XAxis dataKey="periodo" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={fmtPeriod} />
+            <YAxis tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 10, fill: '#94a3b8' }} />
+            <Tooltip content={<CustomTooltip />} />
+            <Legend
+              formatter={(value) => <span className="text-[11px] text-slate-500">{IVA_LABELS[value] ?? value}</span>}
+            />
+            <Bar dataKey="iva_21"   stackId="iva" fill={IVA_COLORS.iva_21}   radius={has105 || has27 ? 0 : [4,4,0,0]} />
+            {has105 && <Bar dataKey="iva_10_5" stackId="iva" fill={IVA_COLORS.iva_10_5} radius={0} />}
+            {has27  && <Bar dataKey="iva_27"   stackId="iva" fill={IVA_COLORS.iva_27}   radius={[4,4,0,0]} />}
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
 
-      {/* Tabla mensual compacta */}
-      {periodos.length > 0 && (
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
-            <thead>
-              <tr style={{ color: 'var(--text-muted)', textAlign: 'right' }}>
-                <th style={{ textAlign: 'left', padding: '4px 6px' }}>Período</th>
-                <th style={{ padding: '4px 6px' }}>Base neta</th>
-                <th style={{ padding: '4px 6px' }}>IVA 21%</th>
-                {has105 && <th style={{ padding: '4px 6px' }}>IVA 10,5%</th>}
-                {has27  && <th style={{ padding: '4px 6px' }}>IVA 27%</th>}
-                <th style={{ padding: '4px 6px', color: 'var(--text-secondary)' }}>Total IVA</th>
+      <div className="overflow-x-auto shrink-0">
+        <table className="w-full text-[11px] border-collapse">
+          <thead>
+            <tr className="text-slate-400 text-right">
+              <th className="text-left px-1.5 py-1 font-medium">Período</th>
+              <th className="px-1.5 py-1 font-medium">Base neta</th>
+              <th className="px-1.5 py-1 font-medium">IVA 21%</th>
+              {has105 && <th className="px-1.5 py-1 font-medium">IVA 10,5%</th>}
+              {has27  && <th className="px-1.5 py-1 font-medium">IVA 27%</th>}
+              <th className="px-1.5 py-1 font-medium text-slate-500">Total IVA</th>
+            </tr>
+          </thead>
+          <tbody>
+            {periodos.map((p) => (
+              <tr key={p.periodo} className="border-t border-slate-100">
+                <td className="px-1.5 py-1 font-semibold text-slate-700">{fmtPeriod(p.periodo)}</td>
+                <td className="px-1.5 py-1 text-right text-slate-500 tabular-nums">{formatCurrency(p.base_neta)}</td>
+                <td className="px-1.5 py-1 text-right tabular-nums" style={{ color: IVA_COLORS.iva_21 }}>{formatCurrency(p.iva_21)}</td>
+                {has105 && <td className="px-1.5 py-1 text-right tabular-nums" style={{ color: IVA_COLORS.iva_10_5 }}>{formatCurrency(p.iva_10_5)}</td>}
+                {has27  && <td className="px-1.5 py-1 text-right tabular-nums" style={{ color: IVA_COLORS.iva_27 }}>{formatCurrency(p.iva_27)}</td>}
+                <td className="px-1.5 py-1 text-right font-bold text-slate-700 tabular-nums">{formatCurrency(p.iva_total)}</td>
               </tr>
-            </thead>
-            <tbody>
-              {periodos.map((p) => (
-                <tr key={p.periodo} style={{ borderTop: '1px solid var(--border)' }}>
-                  <td style={{ padding: '4px 6px', color: 'var(--text-primary)', fontWeight: 600 }}>{p.periodo}</td>
-                  <td style={{ padding: '4px 6px', textAlign: 'right', color: 'var(--text-secondary)' }}>{formatCurrency(p.base_neta)}</td>
-                  <td style={{ padding: '4px 6px', textAlign: 'right', color: IVA_COLORS.iva_21 }}>{formatCurrency(p.iva_21)}</td>
-                  {has105 && <td style={{ padding: '4px 6px', textAlign: 'right', color: IVA_COLORS.iva_10_5 }}>{formatCurrency(p.iva_10_5)}</td>}
-                  {has27  && <td style={{ padding: '4px 6px', textAlign: 'right', color: IVA_COLORS.iva_27  }}>{formatCurrency(p.iva_27)}</td>}
-                  <td style={{ padding: '4px 6px', textAlign: 'right', fontWeight: 700, color: 'var(--text-primary)' }}>{formatCurrency(p.iva_total)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

@@ -1,12 +1,13 @@
 import React from 'react';
+import { Inbox } from 'lucide-react';
 import { useVentasData } from '../VentasDataContext';
 import { formatCurrency } from '../../analyticsUtils';
 
 const COLOR_CONFIG = {
-  verde:    { bg: 'rgba(34,197,94,0.12)',  border: '#22c55e', dot: '#22c55e',  label: 'Al día' },
-  amarillo: { bg: 'rgba(234,179,8,0.12)',  border: '#eab308', dot: '#eab308',  label: 'Con mora' },
-  rojo:     { bg: 'rgba(239,68,68,0.12)',  border: '#ef4444', dot: '#ef4444',  label: 'En riesgo' },
-  sin_dato: { bg: 'rgba(148,163,184,0.08)', border: '#475569', dot: '#64748b', label: 'Sin dato' },
+  verde:    { bg: 'bg-emerald-50',  border: 'border-emerald-400', dot: '#22c55e', label: 'Al día' },
+  amarillo: { bg: 'bg-amber-50',    border: 'border-amber-400',   dot: '#eab308', label: 'Con mora' },
+  rojo:     { bg: 'bg-red-50',      border: 'border-red-400',     dot: '#ef4444', label: 'En riesgo' },
+  sin_dato: { bg: 'bg-slate-50',    border: 'border-slate-300',   dot: '#64748b', label: 'Sin dato' },
 };
 
 export default function SemaforoCarteraWidget() {
@@ -14,8 +15,8 @@ export default function SemaforoCarteraWidget() {
 
   if (semaforoCarteraLoading) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-        <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Cargando semáforo...</div>
+      <div className="flex items-center justify-center h-full">
+        <p className="text-slate-400 text-sm">Cargando semáforo...</p>
       </div>
     );
   }
@@ -23,66 +24,57 @@ export default function SemaforoCarteraWidget() {
   const data = semaforoCartera?.semaforo ?? [];
   const totalCartera = semaforoCartera?.total_cartera ?? 0;
 
+  if (!data.length) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-slate-400">
+        <Inbox size={24} />
+        <p className="text-sm">Sin datos de cartera.</p>
+      </div>
+    );
+  }
+
   return (
-    <div style={{ padding: '16px 20px', height: '100%', display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+    <div className="h-full flex flex-col gap-3 px-4 py-3">
+      <div className="flex justify-between items-baseline shrink-0">
+        <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
           Semáforo de Cartera
         </span>
-        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+        <span className="text-[10px] text-slate-400">
           Total: {formatCurrency(totalCartera)}
         </span>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
-        {data.length === 0 && (
-          <div style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 16, textAlign: 'center' }}>
-            Sin datos. Ejecutá el sync para cargar saldos.
-          </div>
-        )}
+      <div className="flex flex-col gap-2 flex-1">
         {data.map((item) => {
           const cfg = COLOR_CONFIG[item.color] ?? COLOR_CONFIG.sin_dato;
           return (
             <div
               key={item.color}
-              style={{
-                background: cfg.bg,
-                border: `1px solid ${cfg.border}`,
-                borderRadius: 10,
-                padding: '10px 14px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-              }}
+              className={`${cfg.bg} border ${cfg.border} rounded-xl px-3.5 py-2.5 flex items-center gap-2.5`}
             >
-              <div style={{
-                width: 10, height: 10, borderRadius: '50%',
-                background: cfg.dot, flexShrink: 0,
-                boxShadow: `0 0 6px ${cfg.dot}`,
-              }} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>
+              <div
+                className="w-2.5 h-2.5 rounded-full shrink-0"
+                style={{ background: cfg.dot, boxShadow: `0 0 6px ${cfg.dot}` }}
+              />
+              <div className="flex-1 min-w-0">
+                <p className="text-[13px] font-semibold text-slate-800">
                   {cfg.label}
-                  <span style={{ marginLeft: 8, fontWeight: 400, fontSize: 12, color: 'var(--text-muted)' }}>
+                  <span className="ml-2 font-normal text-xs text-slate-400">
                     {item.clientes} cliente{item.clientes !== 1 ? 's' : ''}
                   </span>
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
-                  Deuda: <strong style={{ color: 'var(--text-primary)' }}>{formatCurrency(item.saldo_deudor)}</strong>
+                </p>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Deuda: <strong className="text-slate-700">{formatCurrency(item.saldo_deudor)}</strong>
                   {item.saldo_a_favor > 0 && (
-                    <span style={{ marginLeft: 8 }}>
-                      A favor: <strong style={{ color: '#22c55e' }}>{formatCurrency(item.saldo_a_favor)}</strong>
+                    <span className="ml-2">
+                      A favor: <strong className="text-emerald-600">{formatCurrency(item.saldo_a_favor)}</strong>
                     </span>
                   )}
-                </div>
+                </p>
               </div>
-              <div style={{
-                fontSize: 14, fontWeight: 700,
-                color: cfg.dot,
-                flexShrink: 0,
-              }}>
+              <span className="text-sm font-bold shrink-0 tabular-nums" style={{ color: cfg.dot }}>
                 {item.pct_cartera?.toFixed(1)}%
-              </div>
+              </span>
             </div>
           );
         })}

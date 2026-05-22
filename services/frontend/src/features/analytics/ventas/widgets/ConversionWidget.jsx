@@ -2,23 +2,20 @@ import React from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts';
+import { Inbox } from 'lucide-react';
 import { useVentasData } from '../VentasDataContext';
 import { formatCurrency } from '../../analyticsUtils';
-const formatPct = (v) => `${Number(v ?? 0).toFixed(1)}%`;
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
   const d = payload[0].payload;
   return (
-    <div style={{
-      background: 'var(--surface-2)', border: '1px solid var(--border)',
-      borderRadius: 8, padding: '10px 14px', fontSize: 12,
-    }}>
-      <div style={{ fontWeight: 700, marginBottom: 4 }}>{d.vendedor_nombre || label}</div>
-      <div>Presupuestos: <strong>{d.total}</strong></div>
-      <div>Confirmados: <strong>{d.confirmados}</strong></div>
-      <div>Tasa: <strong style={{ color: '#22c55e' }}>{d.tasa_pct?.toFixed(1)}%</strong></div>
-      <div>Monto confirmado: <strong>{formatCurrency(d.monto_confirmado)}</strong></div>
+    <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-lg text-xs min-w-[170px]">
+      <p className="font-bold text-slate-700 mb-1">{d.vendedor_nombre || label}</p>
+      <p className="text-slate-600">Presupuestos: <strong>{d.total}</strong></p>
+      <p className="text-slate-600">Confirmados: <strong>{d.confirmados}</strong></p>
+      <p className="text-slate-600">Tasa: <strong className="text-emerald-600">{d.tasa_pct?.toFixed(1)}%</strong></p>
+      <p className="text-slate-600">Monto confirmado: <strong>{formatCurrency(d.monto_confirmado)}</strong></p>
     </div>
   );
 };
@@ -28,8 +25,8 @@ export default function ConversionWidget() {
 
   if (conversionLoading) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-        <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Cargando conversión...</div>
+      <div className="flex items-center justify-center h-full">
+        <p className="text-slate-400 text-sm">Cargando conversión...</p>
       </div>
     );
   }
@@ -41,45 +38,51 @@ export default function ConversionWidget() {
   const total = data.total ?? 0;
   const confirmados = data.confirmados ?? 0;
 
+  if (!total) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-slate-400">
+        <Inbox size={24} />
+        <p className="text-sm">Sin presupuestos en el período.</p>
+      </div>
+    );
+  }
+
+  const kpiItems = [
+    { label: 'Tasa global', value: `${tasaGlobal.toFixed(1)}%`, color: tasaGlobal >= 50 ? '#22c55e' : tasaGlobal >= 25 ? '#eab308' : '#ef4444' },
+    { label: 'Total emitidos', value: total },
+    { label: 'Confirmados', value: confirmados, color: '#22c55e' },
+    { label: 'Sin confirmar', value: total - confirmados, color: '#ef4444' },
+  ];
+
   return (
-    <div style={{ padding: '16px 20px', height: '100%', display: 'flex', flexDirection: 'column', gap: 14 }}>
-      {/* Header KPIs */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+    <div className="h-full flex flex-col gap-3 px-4 py-3">
+      <div className="shrink-0">
+        <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
           Conversión Presupuestos
         </span>
       </div>
 
-      <div style={{ display: 'flex', gap: 12 }}>
-        {[
-          { label: 'Tasa global', value: `${tasaGlobal.toFixed(1)}%`, color: tasaGlobal >= 50 ? '#22c55e' : tasaGlobal >= 25 ? '#eab308' : '#ef4444' },
-          { label: 'Total emitidos', value: total },
-          { label: 'Confirmados', value: confirmados, color: '#22c55e' },
-          { label: 'Sin confirmar', value: total - confirmados, color: '#ef4444' },
-        ].map((k) => (
-          <div key={k.label} style={{
-            flex: 1, background: 'var(--surface-2)', borderRadius: 8,
-            padding: '8px 10px', textAlign: 'center',
-          }}>
-            <div style={{ fontSize: 18, fontWeight: 700, color: k.color ?? 'var(--text-primary)' }}>
+      <div className="flex gap-2.5 shrink-0">
+        {kpiItems.map((k) => (
+          <div key={k.label} className="flex-1 bg-slate-50 rounded-lg px-2.5 py-2 text-center">
+            <p className="text-lg font-bold tabular-nums" style={{ color: k.color ?? '#0f172a' }}>
               {k.value}
-            </div>
-            <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>{k.label}</div>
+            </p>
+            <p className="text-[10px] text-slate-400 mt-0.5">{k.label}</p>
           </div>
         ))}
       </div>
 
-      {/* Bar chart por vendedor */}
       {porVendedor.length > 0 && (
-        <div style={{ flex: 1, minHeight: 0 }}>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+        <div className="flex-1 min-h-0">
+          <p className="text-[10px] text-slate-400 uppercase tracking-wide mb-1.5">
             Tasa de cierre por vendedor
-          </div>
+          </p>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={porVendedor} layout="vertical" margin={{ left: 4, right: 30, top: 0, bottom: 0 }}>
-              <CartesianGrid horizontal={false} stroke="var(--border)" strokeDasharray="3 3" />
-              <XAxis type="number" domain={[0, 100]} tickFormatter={(v) => `${v}%`} tick={{ fontSize: 10, fill: 'var(--text-muted)' }} />
-              <YAxis type="category" dataKey="vendedor_nombre" tick={{ fontSize: 10, fill: 'var(--text-secondary)' }} width={90} />
+              <CartesianGrid horizontal={false} stroke="#e2e8f0" strokeDasharray="3 3" />
+              <XAxis type="number" domain={[0, 100]} tickFormatter={(v) => `${v}%`} tick={{ fontSize: 10, fill: '#94a3b8' }} />
+              <YAxis type="category" dataKey="vendedor_nombre" tick={{ fontSize: 10, fill: '#64748b' }} width={90} />
               <Tooltip content={<CustomTooltip />} />
               <Bar dataKey="tasa_pct" radius={[0, 4, 4, 0]} maxBarSize={18}>
                 {porVendedor.map((v) => (
@@ -95,14 +98,10 @@ export default function ConversionWidget() {
         </div>
       )}
 
-      {/* Canal origen */}
       {porCanal.length > 0 && (
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <div className="flex gap-2 flex-wrap shrink-0">
           {porCanal.map((c) => (
-            <div key={c.canal} style={{
-              background: 'var(--surface-2)', borderRadius: 6, padding: '4px 10px',
-              fontSize: 11, color: 'var(--text-secondary)',
-            }}>
+            <div key={c.canal} className="bg-slate-50 rounded-md px-2.5 py-1 text-[11px] text-slate-500">
               {c.canal}: <strong>{c.tasa_pct?.toFixed(0)}%</strong> ({c.confirmados}/{c.total})
             </div>
           ))}
