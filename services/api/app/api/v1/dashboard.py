@@ -114,7 +114,9 @@ async def get_kpis(
         {"mes": row.mes, "total": float(row.total)} for row in result_meses
     ]
 
-    month_label = ref_month.strftime("%B %Y") if not is_current else None
+    MESES_ES = {1:'enero',2:'febrero',3:'marzo',4:'abril',5:'mayo',6:'junio',
+                 7:'julio',8:'agosto',9:'septiembre',10:'octubre',11:'noviembre',12:'diciembre'}
+    month_label = f"{MESES_ES[ref_month.month]} {ref_month.year}" if not is_current else None
 
     return {
         "total_ventas_mes": float(total_ventas_mes),
