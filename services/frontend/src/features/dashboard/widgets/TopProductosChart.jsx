@@ -1,5 +1,5 @@
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Package } from 'lucide-react';
 import { useAnalyticsData } from '../useDashboardData';
 
 const fmt = (v) =>
@@ -16,7 +16,12 @@ export default function TopProductosChart() {
     total: p.total || p.total_ventas || 0,
   }));
 
-  if (!items.length) return <p className="p-4 text-sm text-slate-400">Sin datos de productos.</p>;
+  if (!items.length) return (
+    <div className="flex h-full flex-col items-center justify-center gap-2 text-slate-400">
+      <Package size={24} />
+      <p className="text-sm">Sin datos de productos.</p>
+    </div>
+  );
 
   return (
     <div className="h-full w-full p-4 pt-0">

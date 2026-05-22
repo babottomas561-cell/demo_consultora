@@ -20,6 +20,7 @@ const CONFIGS = {
     title: 'Ventas del Mes',
     icon: DollarSign,
     getValue: (k) => formatCurrency(k?.total_ventas_mes || 0),
+    getSubtitle: (k) => k?.referencia_label || null,
     color: 'indigo',
   },
   'clientes-activos': {
@@ -67,9 +68,9 @@ const CONFIGS = {
 };
 
 const colorClasses = {
-  indigo: { bg: 'bg-indigo-50', text: 'text-indigo-600', bar: 'bg-indigo-600', barMuted: 'bg-indigo-100' },
-  green: { bg: 'bg-green-50', text: 'text-green-600', bar: 'bg-green-600', barMuted: 'bg-green-100' },
-  red: { bg: 'bg-red-50', text: 'text-red-600', bar: 'bg-red-600', barMuted: 'bg-red-100' },
+  indigo: { bg: 'bg-indigo-50', text: 'text-indigo-600', accent: 'border-indigo-500' },
+  green:  { bg: 'bg-emerald-50', text: 'text-emerald-600', accent: 'border-emerald-500' },
+  red:    { bg: 'bg-red-50', text: 'text-red-600', accent: 'border-red-500' },
 };
 
 export default function KpiCard({ type }) {
@@ -80,26 +81,30 @@ export default function KpiCard({ type }) {
   const Icon = config.getIcon ? config.getIcon(kpis) : config.icon;
   const color = config.getColor ? config.getColor(kpis) : config.color;
   const c = colorClasses[color] || colorClasses.indigo;
+  const subtitle = config.getSubtitle ? config.getSubtitle(kpis) : null;
 
   return (
-    <div className="flex h-full flex-col gap-3 p-5">
+    <div className={`flex h-full flex-col justify-center p-5 border-l-[3px] ${c.accent}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <p className="mb-1 text-xs font-semibold uppercase tracking-[0.05em] text-slate-500">{config.title}</p>
+          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">{config.title}</p>
           {loading ? (
-            <div className="h-8 w-24 bg-slate-200 animate-pulse rounded mt-2" />
+            <div className="space-y-2 mt-1">
+              <div className="h-7 w-24 bg-slate-200 animate-pulse rounded" />
+              <div className="h-2 w-16 bg-slate-100 animate-pulse rounded" />
+            </div>
           ) : (
-            <h3 className="text-2xl font-bold tracking-[-0.02em] text-slate-900 tabular-nums truncate">
-              {config.getValue(kpis)}
-            </h3>
+            <>
+              <h3 className="text-2xl font-bold tracking-[-0.02em] text-slate-900 tabular-nums truncate leading-tight">
+                {config.getValue(kpis)}
+              </h3>
+              {subtitle && <p className="text-[10px] text-slate-400 mt-1 capitalize">{subtitle}</p>}
+            </>
           )}
         </div>
-        <div className={`rounded-[10px] ${c.bg} p-3 ${c.text} shrink-0`}>
-          <Icon size={18} />
+        <div className={`rounded-xl ${c.bg} p-2.5 ${c.text} shrink-0`}>
+          <Icon size={18} strokeWidth={2} />
         </div>
-      </div>
-      <div className={`mt-auto h-1 w-full rounded-full ${c.barMuted}`}>
-        <div className={`h-full rounded-full ${c.bar} opacity-60`} style={{ width: '65%' }} />
       </div>
     </div>
   );

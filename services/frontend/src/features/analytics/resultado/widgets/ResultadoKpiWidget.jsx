@@ -54,9 +54,10 @@ function ResultadoKpiWidget({ type }) {
 
   if (loadingKpis) {
         return (
-      <div className="h-full flex flex-col justify-center rounded-xl border border-slate-200 bg-white p-4 animate-pulse">
-        <div className="h-2.5 w-2/3 rounded bg-slate-200 mb-3" />
-        <div className="h-7 w-1/2 rounded bg-slate-200" />
+      <div className="h-full flex flex-col justify-center rounded-xl border border-slate-200 bg-white px-4 py-3 animate-pulse">
+        <div className="h-2 w-2/3 rounded bg-slate-200 mb-3" />
+        <div className="h-7 w-1/2 rounded bg-slate-200 mb-2" />
+        <div className="h-2 w-1/3 rounded bg-slate-100" />
       </div>
     );
   }
@@ -76,12 +77,12 @@ function ResultadoKpiWidget({ type }) {
   }
 
   return (
-    <div className={`h-full flex flex-col justify-center rounded-xl border p-4 ${cls.card}`}>
-      <div className="flex items-center gap-2 mb-2">
+    <div className={`h-full flex flex-col justify-center rounded-xl border px-4 py-3 ${cls.card}`}>
+      <div className="flex items-center gap-2 mb-1.5">
         <div className={`h-2 w-2 rounded-full shrink-0 ${cls.dot}`} />
-        <p className={`text-xs font-medium uppercase tracking-wide truncate ${cls.label}`}>{def.label}</p>
+        <p className={`text-[11px] font-semibold uppercase tracking-wide truncate ${cls.label}`}>{def.label}</p>
       </div>
-      <p className={`text-2xl font-bold leading-tight ${cls.value}`}>{formatted}</p>
+      <p className={`text-2xl font-bold leading-tight tabular-nums ${cls.value}`}>{formatted}</p>
       {trend && (
         <p className={`mt-1 text-xs font-medium ${trend.positive ? 'text-emerald-600' : 'text-red-500'}`}>
           {trend.positive ? '▲' : '▼'} {Math.abs(trend.delta).toFixed(1)}% vs {compareMode === 'anio' ? 'año ant.' : 'período ant.'}

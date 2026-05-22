@@ -56,7 +56,7 @@ export default function ResumenEjecutivoWidget() {
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 flex-1 auto-rows-min">
         <MetricCard
-          label="Facturación"
+          label="Facturado Neto"
           value={fmt(data.facturacion)}
           icon={TrendingUp}
           color="bg-emerald-50 text-emerald-800"

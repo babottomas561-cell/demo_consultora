@@ -1,5 +1,5 @@
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { Loader2 } from 'lucide-react';
+import { Activity, Loader2 } from 'lucide-react';
 import { useAnalyticsData } from '../useDashboardData';
 
 const fmt = (v) =>
@@ -16,7 +16,12 @@ export default function TendenciaVentasChart() {
     total: s.total || s.total_ventas || 0,
   }));
 
-  if (!series.length) return <p className="p-4 text-sm text-slate-400">Sin datos de tendencia.</p>;
+  if (!series.length) return (
+    <div className="flex h-full flex-col items-center justify-center gap-2 text-slate-400">
+      <Activity size={24} />
+      <p className="text-sm">Sin datos de tendencia.</p>
+    </div>
+  );
 
   return (
     <div className="h-full w-full p-4 pt-0">

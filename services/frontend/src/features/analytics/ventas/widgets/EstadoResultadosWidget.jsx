@@ -37,8 +37,9 @@ export default function EstadoResultadosWidget() {
   );
 
   const facturadoBruto    = Number(kpis?.facturado_bruto?.actual ?? 0);
-  const facturadoNeto     = Number(kpis?.facturado_neto?.actual ?? 0);
-  const devoluciones      = facturadoBruto - facturadoNeto;
+  const facturadoConIva   = Number(kpis?.facturado_neto?.actual ?? 0);
+  const facturadoNeto     = Number(resultadoKpis?.facturado_neto?.actual ?? kpis?.facturado_neto_sin_iva?.actual ?? 0);
+  const devoluciones      = facturadoBruto - facturadoConIva;
   const cogs              = Number(resultadoKpis?.cogs?.actual ?? 0);
   const margenBruto       = Number(resultadoKpis?.margen_bruto?.actual ?? (facturadoNeto - cogs));
   const margenPct         = Number(resultadoKpis?.margen_pct?.actual ?? (facturadoNeto > 0 ? margenBruto / facturadoNeto * 100 : 0));
@@ -58,9 +59,10 @@ export default function EstadoResultadosWidget() {
           <span className="text-[10px] text-slate-400">Período actual</span>
         </div>
 
-        <Row label="Ventas brutas (FA + ND)"  value={formatCurrencyShort(facturadoBruto)}  pct={pct(facturadoBruto)} />
-        <Row label="Notas de crédito / devoluciones" value={`(${formatCurrencyShort(devoluciones)})`} pct={pct(-devoluciones)} indent={1} sign="−" color="text-red-500" subtle />
-        <Row label="Ventas netas"             value={formatCurrencyShort(facturadoNeto)}   pct="100%" bold divider />
+        <Row label="Ventas brutas c/IVA (FA + ND)"  value={formatCurrencyShort(facturadoBruto)}  pct="" />
+        <Row label="Notas de crédito / devoluciones" value={`(${formatCurrencyShort(devoluciones)})`} pct="" indent={1} sign="−" color="text-red-500" subtle />
+        <Row label="IVA débito fiscal" value={`(${formatCurrencyShort(iva)})`} pct="" indent={1} sign="−" color="text-slate-400" subtle />
+        <Row label="Ventas netas s/IVA"       value={formatCurrencyShort(facturadoNeto)}   pct="100%" bold divider />
         <Row label="Costo de mercadería vendida" value={`(${formatCurrencyShort(cogs)})`} pct={pct(-cogs)} indent={1} sign="−" color="text-red-500" subtle />
         <Row label="Margen bruto"             value={formatCurrencyShort(margenBruto)}     pct={fmtPct(margenPct)} bold color={margenPct >= 30 ? 'text-emerald-700' : margenPct >= 15 ? 'text-amber-600' : 'text-red-600'} divider />
 
@@ -70,8 +72,8 @@ export default function EstadoResultadosWidget() {
             <span className="tabular-nums">{formatCurrencyShort(descuento)} ({fmtPct(descuentoPct)})</span>
           </div>
           <div className="flex justify-between text-[11px] text-slate-500">
-            <span>IVA débito fiscal</span>
-            <span className="tabular-nums">{formatCurrencyShort(iva)}</span>
+            <span>Facturado c/IVA</span>
+            <span className="tabular-nums">{formatCurrencyShort(facturadoConIva)}</span>
           </div>
           {cobertura != null && (
             <div className="flex justify-between text-[11px]">

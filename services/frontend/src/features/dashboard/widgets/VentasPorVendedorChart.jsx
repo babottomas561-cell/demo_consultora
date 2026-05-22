@@ -1,5 +1,5 @@
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Users } from 'lucide-react';
 import { useAnalyticsData } from '../useDashboardData';
 
 const COLORS = ['#4f46e5', '#7c3aed', '#2563eb', '#0891b2', '#059669', '#d97706', '#dc2626', '#ec4899'];
@@ -18,7 +18,12 @@ export default function VentasPorVendedorChart() {
     value: v.total || v.total_ventas || 0,
   }));
 
-  if (!items.length) return <p className="p-4 text-sm text-slate-400">Sin datos de vendedores.</p>;
+  if (!items.length) return (
+    <div className="flex h-full flex-col items-center justify-center gap-2 text-slate-400">
+      <Users size={24} />
+      <p className="text-sm">Sin datos de vendedores.</p>
+    </div>
+  );
 
   return (
     <div className="h-full w-full p-2">

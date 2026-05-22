@@ -2537,6 +2537,7 @@ async def ventas_por_cliente(
         FROM ventas
         WHERE {where}
         GROUP BY cliente_id
+        HAVING COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END) > 0
         ORDER BY facturado_neto DESC
         LIMIT 200
     """), params)).mappings().all()
@@ -2603,7 +2604,7 @@ async def ventas_por_cliente(
             "ticket_promedio": fn / tk if tk else 0,
             "pct_total": round(fn / total_facturado * 100, 2),
             "margen_dolares": md,
-            "margen_pct": round(md / tc * 100, 1) if tc else 0,
+            "margen_pct": max(-100.0, min(100.0, round(md / fn * 100, 1))) if fn > 0 else 0,
             "condicion_venta_predominante": d.get("condicion_predominante"),
             "ultima_compra": ultima.isoformat() if ultima else None,
             "dias_sin_comprar": dias_sin_comprar,
@@ -4880,7 +4881,9 @@ async def clientes_ranking(
             COALESCE(SUM({venta_neto_sin_iva_expr()} - {venta_costo_neto_expr()}), 0)         AS margen_dolares,
             COALESCE(SUM(CASE WHEN precio_compra_actual IS NOT NULL THEN ABS(total) ELSE 0 END), 0) AS total_con_costo
         FROM ventas WHERE {ventas_where}
-        GROUP BY cliente_id ORDER BY fa_bruto DESC
+        GROUP BY cliente_id
+        HAVING COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END) > 0
+        ORDER BY fa_bruto DESC
     """), params)).mappings().all()
 
     total_facturado = sum(float(r["facturado_neto"] or 0) for r in rows)
@@ -4896,6 +4899,9 @@ async def clientes_ranking(
         cumsum += pct
         segmento = "A" if cumsum <= 80 else "B" if cumsum <= 95 else "C"
 
+        margen_pct_raw = round(m / fn * 100, 1) if fn > 0 else 0
+        margen_pct_capped = max(-100.0, min(100.0, margen_pct_raw))
+
         resultado.append({
             "cliente_id": r["cliente_id"],
             "nombre": r["nombre"],
@@ -4903,7 +4909,7 @@ async def clientes_ranking(
             "tickets": t,
             "ticket_promedio": round(fn / t, 2) if t > 0 else 0,
             "unidades": int(r["unidades"] or 0),
-            "margen_pct": round(m / tc * 100, 1) if tc > 0 else 0,
+            "margen_pct": margen_pct_capped,
             "ultima_compra": str(r["ultima_compra"]) if r["ultima_compra"] else None,
             "pct_del_total": round(pct, 1),
             "pct_acumulado": round(cumsum, 1),
@@ -7529,7 +7535,8 @@ async def get_resumen_ejecutivo(
     egresos_caja = float(caja_row["egresos_caja"] or 0)
 
     return {
-        "facturacion":          round(facturacion, 2),
+        "facturacion":          round(neto, 2),           # Neto sin IVA (base coherente con margen)
+        "facturacion_con_iva":  round(facturacion, 2),    # Total facturado con IVA
         "margen_bruto":         round(margen, 2),
         "margen_pct":           round(margen_pct, 1),
         "total_compras":        round(total_compras, 2),

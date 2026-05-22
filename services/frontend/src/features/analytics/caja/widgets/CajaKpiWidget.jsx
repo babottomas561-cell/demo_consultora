@@ -8,7 +8,7 @@ const KPI_DEFS = {
   'caja-kpi-egresos':       { label: 'Egresos (caja + compras)', getValue: (k) => k?.egresos, format: 'currency', invertTrend: true },
   'caja-kpi-flujo-neto':    { label: 'Flujo neto',         getValue: (k) => k?.flujo_neto,      format: 'currency', getSeverity: (v) => v >= 0 ? 'success' : 'danger' },
   'caja-kpi-movimientos':   { label: 'Movimientos',        getValue: (k) => k?.movimientos,     format: 'number' },
-  'caja-kpi-saldo-actual':  { label: 'Saldo actual',       getValue: (k) => k?.saldo_actual,    format: 'currency', getSeverity: (v) => v >= 0 ? 'success' : 'danger' },
+  'caja-kpi-saldo-actual':  { label: 'Saldo acumulado',     getValue: (k) => k?.saldo_actual,    format: 'currency', getSeverity: (v) => v >= 0 ? 'success' : 'danger' },
   'caja-kpi-mayor-ingreso': { label: 'Mayor ingreso',      getValue: (k) => k?.mayor_ingreso,   format: 'currency', severity: 'success' },
   'caja-kpi-mayor-egreso':  { label: 'Mayor egreso caja',  getValue: (k) => k?.mayor_egreso,    format: 'currency', invertTrend: true, hideIfZero: true },
   'caja-kpi-ratio':         { label: 'Ratio cobro/pago',   getValue: (k) => k?.ratio_cobro_pago, format: 'number', getSeverity: (v) => v >= 1 ? 'success' : 'warning' },
@@ -36,10 +36,11 @@ function CajaKpiWidget({ type }) {
   if (!def) return null;
 
   if (loadingKpis) {
-        return (
-      <div className="h-full flex flex-col justify-center rounded-xl border border-slate-200 bg-white p-4 animate-pulse">
-        <div className="h-2.5 w-2/3 rounded bg-slate-200 mb-3" />
-        <div className="h-7 w-1/2 rounded bg-slate-200" />
+    return (
+      <div className="h-full flex flex-col justify-center rounded-xl border border-slate-200 bg-white px-4 py-3 animate-pulse">
+        <div className="h-2 w-2/3 rounded bg-slate-200 mb-3" />
+        <div className="h-7 w-1/2 rounded bg-slate-200 mb-2" />
+        <div className="h-2 w-1/3 rounded bg-slate-100" />
       </div>
     );
   }
@@ -74,12 +75,12 @@ function CajaKpiWidget({ type }) {
   }
 
   return (
-    <div className={`h-full flex flex-col justify-center rounded-xl border p-4 ${cls.card}`}>
-      <div className="flex items-center gap-2 mb-2">
+    <div className={`h-full flex flex-col justify-center rounded-xl border px-4 py-3 ${cls.card}`}>
+      <div className="flex items-center gap-2 mb-1.5">
         <div className={`h-2 w-2 rounded-full shrink-0 ${cls.dot}`} />
-        <p className={`text-xs font-medium uppercase tracking-wide truncate ${cls.label}`}>{def.label}</p>
+        <p className={`text-[11px] font-semibold uppercase tracking-wide truncate ${cls.label}`}>{def.label}</p>
       </div>
-      <p className={`text-2xl font-bold leading-tight ${cls.value}`}>{formatted}</p>
+      <p className={`text-2xl font-bold leading-tight tabular-nums ${cls.value}`}>{formatted}</p>
       {trend && (
         <p className={`mt-1 text-xs font-medium ${trend.positive ? 'text-emerald-600' : 'text-red-500'}`}>
           {trend.positive ? '▲' : '▼'} {Math.abs(trend.delta).toFixed(1)}% vs {compareMode === 'anio' ? 'año ant.' : 'período ant.'}
