@@ -2356,6 +2356,7 @@ async def ventas_por_lista(
     where = _ventas_base_where(filters)
 
     lista_names: dict = {}
+    vendedor_names: dict = {}
     try:
         lp_rows = (await db.execute(text(
             "SELECT cod_lista, descripcion FROM listas_precios"
@@ -2363,39 +2364,59 @@ async def ventas_por_lista(
         lista_names = {r["cod_lista"]: r["descripcion"] for r in lp_rows}
     except Exception:
         pass
-
-    por_lista = (await db.execute(text(f"""
-        SELECT
-            cod_lista_precios,
-            COALESCE(SUM({venta_importe_neto_expr()}), 0) AS facturado,
-            COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END) AS tickets,
-            COUNT(DISTINCT cliente_id) AS clientes_unicos,
-            COUNT(DISTINCT cod_vendedor) AS vendedores_unicos,
-            COALESCE(SUM({venta_neto_sin_iva_expr()} - {venta_costo_neto_expr()}), 0) AS margen_abs,
-            COALESCE(SUM(CASE WHEN precio_compra_actual IS NOT NULL THEN ABS(total) ELSE 0 END), 0) AS total_con_costo
-        FROM ventas
-        WHERE {where} AND cod_lista_precios IS NOT NULL
-        GROUP BY cod_lista_precios
-        ORDER BY facturado DESC
-    """), params)).mappings().all()
-
-    por_vendedor_lista = (await db.execute(text(f"""
-        SELECT
-            cod_vendedor, cod_lista_precios,
-            COALESCE(SUM({venta_importe_neto_expr()}), 0) AS facturado,
-            COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END) AS tickets
-        FROM ventas
-        WHERE {where} AND cod_lista_precios IS NOT NULL AND cod_vendedor IS NOT NULL
-        GROUP BY cod_vendedor, cod_lista_precios
-        ORDER BY cod_vendedor, facturado DESC
-    """), params)).mappings().all()
-
-    vendedor_names: dict = {}
     try:
         vd_rows = (await db.execute(text("SELECT cod_vendedor, nombre FROM vendedores"))).mappings().all()
         vendedor_names = {r["cod_vendedor"]: r["nombre"] for r in vd_rows}
     except Exception:
         pass
+
+    try:
+        por_lista = (await db.execute(text(f"""
+            WITH base AS (
+                SELECT cod_lista_precios, cod_vendedor, tipo_comprobante,
+                       cliente_id, total,
+                       COALESCE(neto, 0)::float AS neto_f,
+                       cantidad,
+                       COALESCE(precio_compra_actual, 0)::float AS costo_f
+                FROM ventas
+                WHERE {where} AND cod_lista_precios IS NOT NULL
+            )
+            SELECT
+                cod_lista_precios,
+                COALESCE(SUM(CASE WHEN tipo_comprobante IN ('FA','ND') THEN ABS(total)
+                                  WHEN tipo_comprobante='NC' THEN -ABS(total) ELSE 0 END), 0) AS facturado,
+                COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END) AS tickets,
+                COUNT(DISTINCT cliente_id) AS clientes_unicos,
+                COUNT(DISTINCT cod_vendedor) AS vendedores_unicos,
+                COALESCE(SUM(
+                    CASE WHEN tipo_comprobante IN ('FA','ND') THEN ABS(neto_f) - ABS(cantidad) * costo_f
+                         WHEN tipo_comprobante = 'NC' THEN -(ABS(neto_f) - ABS(cantidad) * costo_f)
+                         ELSE 0 END
+                ), 0) AS margen_abs,
+                COALESCE(SUM(CASE WHEN costo_f > 0 THEN ABS(total) ELSE 0 END), 0) AS total_con_costo
+            FROM base
+            GROUP BY cod_lista_precios
+            ORDER BY facturado DESC
+        """), params)).mappings().all()
+
+        por_vendedor_lista = (await db.execute(text(f"""
+            WITH base AS (
+                SELECT cod_lista_precios, cod_vendedor, tipo_comprobante, total
+                FROM ventas
+                WHERE {where} AND cod_lista_precios IS NOT NULL AND cod_vendedor IS NOT NULL
+            )
+            SELECT
+                cod_vendedor, cod_lista_precios,
+                COALESCE(SUM(CASE WHEN tipo_comprobante IN ('FA','ND') THEN ABS(total)
+                                  WHEN tipo_comprobante='NC' THEN -ABS(total) ELSE 0 END), 0) AS facturado,
+                COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END) AS tickets
+            FROM base
+            GROUP BY cod_vendedor, cod_lista_precios
+            ORDER BY cod_vendedor, facturado DESC
+        """), params)).mappings().all()
+    except Exception:
+        por_lista = []
+        por_vendedor_lista = []
 
     total_fa = sum(float(r["facturado"] or 0) for r in por_lista) or 1
     listas_out = []
