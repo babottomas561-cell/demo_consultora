@@ -20,6 +20,53 @@ RAW_REPORT_MAX_PAGES = int(os.getenv("INFOMANAGER_RAW_REPORT_MAX_PAGES", "500"))
 HISTORICAL_START = date.fromisoformat(os.getenv("INFOMANAGER_HISTORICAL_START", "2010-01-01"))
 
 
+def _ensure_tables(cur) -> None:
+    """Create tables that may not exist if tenant migrations haven't run."""
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS saldos_proveedores (
+            fa_id           BIGINT PRIMARY KEY,
+            fa_fecha        DATE,
+            fa_pto_vta      INTEGER,
+            fa_nro          BIGINT,
+            fa_cod_empresa  INTEGER,
+            moneda          TEXT,
+            cod_proveedor   INTEGER,
+            nombre          TEXT,
+            fa_total        NUMERIC,
+            op_imp_pagado   NUMERIC,
+            saldo_fa        NUMERIC,
+            nro_ultima_op   TEXT,
+            primer_fec_vto  DATE,
+            ult_fec_vto     DATE,
+            vto_cant_cuotas INTEGER,
+            vto_importe     NUMERIC,
+            synced_at       TIMESTAMP NOT NULL DEFAULT NOW()
+        )
+    """)
+    cur.execute("CREATE INDEX IF NOT EXISTS ix_saldos_prov_proveedor ON saldos_proveedores (cod_proveedor)")
+    cur.execute("CREATE INDEX IF NOT EXISTS ix_saldos_prov_empresa   ON saldos_proveedores (fa_cod_empresa)")
+    cur.execute("CREATE INDEX IF NOT EXISTS ix_saldos_prov_vto       ON saldos_proveedores (ult_fec_vto)")
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS interdepositos (
+            id              BIGINT PRIMARY KEY,
+            fecha           DATE,
+            cod_articulo    INTEGER,
+            descripcion     TEXT,
+            cantidad        NUMERIC,
+            precio          NUMERIC,
+            total           NUMERIC,
+            deposito_origen INTEGER,
+            deposito_destino INTEGER,
+            cod_empresa     INTEGER,
+            estado          TEXT,
+            observacion     TEXT,
+            synced_at       TIMESTAMP NOT NULL DEFAULT NOW()
+        )
+    """)
+    cur.execute("CREATE INDEX IF NOT EXISTS ix_interdep_fecha    ON interdepositos (fecha)")
+    cur.execute("CREATE INDEX IF NOT EXISTS ix_interdep_articulo ON interdepositos (cod_articulo)")
+
+
 def _as_float(value: Any, default: float = 0.0) -> float:
     if value in (None, ""):
         return default
@@ -323,6 +370,7 @@ def sync_company(self, company_id: int, connector_id: int):
         )
 
         _set_tenant_search_path(cur, tenant)
+        _ensure_tables(cur)
 
         # --- Empresas master data ---
         empresas_raw = im.fetch_paginated("/api/v1/empresas", max_pages=1)
@@ -1509,6 +1557,7 @@ def sync_incremental(tenant_schema: str, erp_config: dict, connector_id: int = N
         im.authenticate()
 
         _set_tenant_search_path(cur, tenant_schema)
+        _ensure_tables(cur)
 
         desde_inc = date.today() - timedelta(days=2)
         hasta_inc = date.today()
@@ -1646,6 +1695,8 @@ def sync_completo(tenant_schema: str, erp_config: dict, connector_id: int = None
 
         desde = HISTORICAL_START
         hasta = date.today()
+
+        _ensure_tables(cur)
 
         _upsert_empresas(cur, im.obtener_empresas())
 
