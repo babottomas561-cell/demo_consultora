@@ -2,7 +2,7 @@ import { Inbox } from 'lucide-react';
 import {
   ComposedChart, Bar, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
-import { ChartSkeleton } from '../../../../components/ui/WidgetSkeleton';
+import { ChartSkeleton, WidgetEmptyState } from '../../../../components/ui/WidgetSkeleton';
 import ChartTooltip from '../../../../components/analytics/ChartTooltip';
 import { useComprasData } from '../ComprasDataContext';
 
@@ -39,10 +39,7 @@ export default function EvolucionComprasWidget() {
 
   const series = temporal?.series ?? [];
   if (!series.length) return (
-    <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-slate-400">
-      <Inbox size={24} />
-      <p className="text-sm">Sin datos de evolución temporal.</p>
-    </div>
+    <WidgetEmptyState icon={Inbox} title="Sin datos de evolución" subtitle="No hay compras en el período seleccionado." />
   );
 
   return (

@@ -3,7 +3,7 @@ import {
   Area, AreaChart, Bar, CartesianGrid, ComposedChart, Legend, Line,
   ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
-import { ChartSkeleton } from '../../../../components/ui/WidgetSkeleton';
+import { ChartSkeleton, WidgetEmptyState } from '../../../../components/ui/WidgetSkeleton';
 import { useResultadoData } from '../ResultadoDataContext';
 import { formatCurrency } from '../../analyticsUtils';
 
@@ -42,10 +42,7 @@ export default function TemporalResultadoWidget() {
 
   if (!series.length) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-slate-400">
-        <Inbox size={24} />
-        <p className="text-sm">Sin datos temporales.</p>
-      </div>
+      <WidgetEmptyState icon={Inbox} title="Sin datos temporales" subtitle="No hay resultados en el período seleccionado." />
     );
   }
 

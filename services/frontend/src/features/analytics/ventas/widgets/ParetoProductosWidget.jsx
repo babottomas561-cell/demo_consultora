@@ -2,6 +2,7 @@ import {
   ComposedChart, Bar, Line, CartesianGrid, XAxis, YAxis, Tooltip, ReferenceLine, ResponsiveContainer, Cell,
 } from 'recharts';
 import { Loader2, Inbox } from 'lucide-react';
+import { WidgetEmptyState } from '../../../../components/ui/WidgetSkeleton';
 import { formatCurrency } from '../../analyticsUtils';
 import { useVentasData } from '../VentasDataContext';
 
@@ -38,7 +39,7 @@ const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
   const d = payload[0]?.payload ?? {};
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-lg text-xs space-y-1 min-w-[180px]">
+    <div className="bi-chart-tooltip text-xs space-y-1 min-w-[180px]">
       <p className="font-semibold text-slate-700 truncate max-w-[200px]">{label}</p>
       <div className="flex justify-between gap-4">
         <span className="text-slate-500">Facturado</span>
@@ -61,10 +62,7 @@ export default function ParetoProductosWidget() {
 
   const pareto = productos?.pareto ?? [];
   if (!pareto.length) return (
-    <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-slate-400">
-      <Inbox size={24} />
-      <p className="text-sm">Sin datos de productos.</p>
-    </div>
+    <WidgetEmptyState icon={Inbox} title="Sin datos de productos" subtitle="No hay productos vendidos en el período." />
   );
 
   // Color bars: dark indigo for products within 80% threshold, lighter for the rest
@@ -76,8 +74,8 @@ export default function ParetoProductosWidget() {
         <ComposedChart data={pareto} margin={{ bottom: 40 }}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
           <XAxis dataKey="producto" axisLine={false} tickLine={false} tick={<CustomXTick />} interval={0} height={50} />
-          <YAxis yAxisId="left" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10 }} tickFormatter={fmtM} />
-          <YAxis yAxisId="right" orientation="right" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10 }} tickFormatter={(v) => `${v}%`} domain={[0, 100]} />
+          <YAxis yAxisId="left" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11 }} tickFormatter={fmtM} />
+          <YAxis yAxisId="right" orientation="right" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11 }} tickFormatter={(v) => `${v}%`} domain={[0, 100]} />
           <Tooltip content={<CustomTooltip />} />
           <Bar yAxisId="left" dataKey="facturado" name="Facturado" radius={[3, 3, 0, 0]}>
             {pareto.map((_, i) => (

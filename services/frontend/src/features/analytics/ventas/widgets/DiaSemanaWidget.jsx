@@ -1,7 +1,7 @@
 import { Inbox } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import { ChartSkeleton } from '../../../../components/ui/WidgetSkeleton';
+import { ChartSkeleton, WidgetEmptyState } from '../../../../components/ui/WidgetSkeleton';
 import { useVentasData } from '../VentasDataContext';
 import { formatCurrencyShort } from '../../analyticsUtils';
 
@@ -23,7 +23,7 @@ const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
   const d = payload[0]?.payload;
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-2.5 shadow-lg text-xs min-w-[180px]">
+    <div className="bi-chart-tooltip text-xs min-w-[180px]">
       <p className="font-semibold text-slate-700 mb-1.5">{label}</p>
       <div className="space-y-0.5 text-slate-600">
         <div className="flex justify-between gap-4">
@@ -61,10 +61,7 @@ export default function DiaSemanaWidget() {
 
   const data = diaSemana?.por_dia ?? [];
   if (!data.length) return (
-    <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-slate-400">
-      <Inbox size={24} />
-      <p className="text-sm">Sin datos por día de semana.</p>
-    </div>
+    <WidgetEmptyState icon={Inbox} title="Sin datos por día" subtitle="No hay ventas por día de semana en el período." />
   );
 
   const field = MODES.find(m => m.id === mode).field;

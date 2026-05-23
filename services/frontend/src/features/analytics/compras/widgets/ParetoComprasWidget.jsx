@@ -1,6 +1,6 @@
 import { Inbox } from 'lucide-react';
 import { BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { TableSkeleton } from '../../../../components/ui/WidgetSkeleton';
+import { TableSkeleton, WidgetEmptyState } from '../../../../components/ui/WidgetSkeleton';
 import { useComprasData } from '../ComprasDataContext';
 
 const fmtM = (v) => {
@@ -24,10 +24,7 @@ export default function ParetoComprasWidget() {
 
   const rows = Array.isArray(productos?.productos) ? productos.productos : (Array.isArray(productos) ? productos : []);
   if (!rows.length) return (
-    <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-slate-400">
-      <Inbox size={24} />
-      <p className="text-sm">Sin datos de productos.</p>
-    </div>
+    <WidgetEmptyState icon={Inbox} title="Sin datos de productos" subtitle="No hay productos comprados en el período." />
   );
 
   const top = rows.slice(0, 12);
