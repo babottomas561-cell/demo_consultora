@@ -176,7 +176,7 @@ export default function PulseStripWidget() {
 
   if (loadingKpis) {
     return (
-      <div className="h-full p-3 grid grid-cols-3 sm:grid-cols-6 gap-3">
+      <div className="h-full p-3 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
         {KPIS.map((k) => (
           <div key={k.id} className="rounded-xl border border-slate-100 bg-white p-3 animate-pulse">
             <div className="h-7 w-7 rounded-lg bg-slate-200 mb-2" />
@@ -190,7 +190,7 @@ export default function PulseStripWidget() {
 
   return (
     <div className="h-full flex flex-col gap-3 p-3 overflow-auto">
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
         {KPIS.map((kpi) => (
           <KpiCard
             key={kpi.id}

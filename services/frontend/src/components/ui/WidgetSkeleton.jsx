@@ -34,4 +34,18 @@ export function TableSkeleton() {
   );
 }
 
+export function WidgetEmptyState({ icon: Icon, title = 'Sin datos', subtitle }) {
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-slate-400">
+      {Icon && (
+        <div className="rounded-full bg-slate-100 p-2.5">
+          <Icon size={20} className="text-slate-400" />
+        </div>
+      )}
+      <p className="text-sm font-medium text-slate-500">{title}</p>
+      {subtitle && <p className="text-xs text-slate-400 text-center max-w-[200px]">{subtitle}</p>}
+    </div>
+  );
+}
+
 export default ChartSkeleton;

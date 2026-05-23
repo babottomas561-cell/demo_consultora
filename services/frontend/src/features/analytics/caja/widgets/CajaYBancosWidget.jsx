@@ -31,14 +31,14 @@ export default function CajaYBancosWidget() {
 
   if (error || !data?.tiene_datos) {
     return (
-      <div className="h-full flex flex-col items-center justify-center gap-3 text-slate-400 p-4">
-        <Landmark size={32} />
-        <div className="text-center">
-          <p className="text-sm font-medium text-slate-600">Sin datos del mayor contable</p>
-          <p className="text-xs mt-1">
-            {error || 'El mayor no tiene movimientos de caja/bancos. Sincronizá el conector InfoManager.'}
-          </p>
+      <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-slate-400">
+        <div className="rounded-full bg-slate-100 p-2.5">
+          <Landmark size={20} className="text-slate-400" />
         </div>
+        <p className="text-sm font-medium text-slate-500">Sin datos del mayor contable</p>
+        <p className="text-xs text-slate-400 text-center max-w-[200px]">
+          {error || 'El mayor no tiene movimientos de caja/bancos. Sincronizá el conector InfoManager.'}
+        </p>
       </div>
     );
   }

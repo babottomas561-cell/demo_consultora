@@ -49,7 +49,7 @@ export default function RotacionAbcWidget() {
             <BarChart data={abcChartData} margin={{ left: 4, right: 4, top: 4 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
               <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
-              <YAxis tickFormatter={fmtM} tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+              <YAxis tickFormatter={fmtM} tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
               <Tooltip formatter={(v) => [formatCurrency(v), 'Valor']} />
               <Bar dataKey="valor" radius={[4, 4, 0, 0]}>
                 {abcChartData.map((d, i) => <Cell key={i} fill={ABC_COLORS[d.cls] ?? '#94a3b8'} />)}

@@ -22,7 +22,7 @@ const fmtM = (v) => {
 const ChartTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-2.5 shadow-lg text-xs min-w-[170px] max-h-[200px] overflow-auto">
+    <div className="bi-chart-tooltip text-xs min-w-[170px] max-h-[200px] overflow-auto">
       <p className="font-semibold text-slate-700 mb-1">{fmtPeriod(label)}</p>
       {payload.filter(p => p.value > 0).map((p) => (
         <div key={p.dataKey} className="flex items-center justify-between gap-3">
@@ -41,7 +41,7 @@ const PieTooltip = ({ active, payload }) => {
   if (!active || !payload?.length) return null;
   const d = payload[0]?.payload;
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-2.5 shadow-lg text-xs">
+    <div className="bi-chart-tooltip text-xs">
       <p className="font-semibold text-slate-700">{d?.nombre}</p>
       <p className="text-slate-600">{formatCurrencyShort(d?.facturado_bruto)} ({d?.pct_total?.toFixed(1)}%)</p>
     </div>
@@ -84,7 +84,7 @@ export default function TemporalDimensionWidget({ defaultDimension = 'rubro' }) 
           <button
             key={d.key}
             onClick={() => setDimension(d.key)}
-            className={`px-2 py-0.5 text-[10px] font-medium rounded transition-colors ${dimension === d.key ? 'bg-white shadow-sm text-indigo-700' : 'text-slate-500 hover:text-slate-700'}`}
+            className={`px-2 py-0.5 text-[11px] font-medium rounded transition-colors ${dimension === d.key ? 'bg-white shadow-sm text-indigo-700' : 'text-slate-500 hover:text-slate-700'}`}
           >
             {d.label}
           </button>
@@ -95,7 +95,7 @@ export default function TemporalDimensionWidget({ defaultDimension = 'rubro' }) 
           <button
             key={v.key}
             onClick={() => setView(v.key)}
-            className={`px-2 py-0.5 text-[10px] font-medium rounded transition-colors ${view === v.key ? 'bg-white shadow-sm text-indigo-700' : 'text-slate-500 hover:text-slate-700'}`}
+            className={`px-2 py-0.5 text-[11px] font-medium rounded transition-colors ${view === v.key ? 'bg-white shadow-sm text-indigo-700' : 'text-slate-500 hover:text-slate-700'}`}
           >
             {v.label}
           </button>
@@ -142,8 +142,8 @@ export default function TemporalDimensionWidget({ defaultDimension = 'rubro' }) 
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={serie} margin={{ left: 0, right: 10, top: 5, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-              <XAxis dataKey="periodo" tick={{ fontSize: 10, fill: '#64748b' }} tickFormatter={fmtPeriod} />
-              <YAxis tick={{ fontSize: 10, fill: '#64748b' }} tickFormatter={fmtM} />
+              <XAxis dataKey="periodo" tick={{ fontSize: 11, fill: '#64748b' }} tickFormatter={fmtPeriod} />
+              <YAxis tick={{ fontSize: 11, fill: '#64748b' }} tickFormatter={fmtM} />
               <Tooltip content={<ChartTooltip />} />
               <Legend wrapperStyle={{ fontSize: 10 }} />
               {dimensiones.map((dim, i) => (
@@ -157,8 +157,8 @@ export default function TemporalDimensionWidget({ defaultDimension = 'rubro' }) 
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={serie} margin={{ left: 0, right: 10, top: 5, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-              <XAxis dataKey="periodo" tick={{ fontSize: 10, fill: '#64748b' }} tickFormatter={fmtPeriod} />
-              <YAxis tick={{ fontSize: 10, fill: '#64748b' }} tickFormatter={fmtM} />
+              <XAxis dataKey="periodo" tick={{ fontSize: 11, fill: '#64748b' }} tickFormatter={fmtPeriod} />
+              <YAxis tick={{ fontSize: 11, fill: '#64748b' }} tickFormatter={fmtM} />
               <Tooltip content={<ChartTooltip />} />
               <Legend wrapperStyle={{ fontSize: 10 }} />
               {dimensiones.map((dim, i) => (

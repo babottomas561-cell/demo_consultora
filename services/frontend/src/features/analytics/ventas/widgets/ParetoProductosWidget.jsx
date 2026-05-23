@@ -85,7 +85,7 @@ export default function ParetoProductosWidget() {
             ))}
           </Bar>
           <Line yAxisId="right" type="monotone" dataKey="acumulado_pct" name="% Acum." stroke="#f97316" strokeWidth={2} dot={false} />
-          <ReferenceLine yAxisId="right" y={80} stroke="#ef4444" strokeDasharray="4 4" label={{ value: '80%', fill: '#ef4444', fontSize: 10, position: 'insideTopRight' }} />
+          <ReferenceLine yAxisId="right" y={80} stroke="#ef4444" strokeDasharray="4 4" label={{ value: '80%', fill: '#ef4444', fontSize: 11, position: 'insideTopRight' }} />
         </ComposedChart>
       </ResponsiveContainer>
     </div>

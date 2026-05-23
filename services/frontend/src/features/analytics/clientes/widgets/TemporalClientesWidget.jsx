@@ -4,7 +4,7 @@ import {
   Bar, BarChart, CartesianGrid, Line, LineChart,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
-import { ChartSkeleton } from '../../../../components/ui/WidgetSkeleton';
+import { ChartSkeleton, WidgetEmptyState } from '../../../../components/ui/WidgetSkeleton';
 import { useClientesData } from '../ClientesDataContext';
 import { formatCurrency, formatNumber } from '../../analyticsUtils';
 
@@ -43,11 +43,8 @@ export default function TemporalClientesWidget() {
 
   if (!chartData.length) {
     return (
-    <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-slate-400">
-      <Inbox size={24} />
-      <p className="text-sm">Sin datos temporales.</p>
-    </div>
-  );
+      <WidgetEmptyState icon={Inbox} title="Sin datos temporales" subtitle="No hay movimientos de clientes en el período." />
+    );
   }
 
   return (
@@ -58,8 +55,8 @@ export default function TemporalClientesWidget() {
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={chartData} margin={{ top: 4, right: 8, left: 4, bottom: 4 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-            <XAxis dataKey="periodo" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
-            <YAxis tickFormatter={fmtM} tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+            <XAxis dataKey="periodo" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+            <YAxis tickFormatter={fmtM} tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
             <Tooltip formatter={(v) => [formatCurrency(v), 'Facturado neto']} />
             <Line type="monotone" dataKey="facturado" stroke="#4f46e5" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
           </LineChart>
@@ -72,8 +69,8 @@ export default function TemporalClientesWidget() {
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={chartData} margin={{ top: 4, right: 8, left: 4, bottom: 4 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-            <XAxis dataKey="periodo" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
-            <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+            <XAxis dataKey="periodo" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+            <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
             <Tooltip formatter={(v) => [formatNumber(v), 'Clientes activos']} />
             <Bar dataKey="clientes_activos" fill="#10b981" radius={[4, 4, 0, 0]} />
           </BarChart>

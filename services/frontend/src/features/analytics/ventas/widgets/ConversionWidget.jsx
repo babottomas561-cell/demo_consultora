@@ -81,8 +81,8 @@ export default function ConversionWidget() {
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={porVendedor} layout="vertical" margin={{ left: 4, right: 30, top: 0, bottom: 0 }}>
               <CartesianGrid horizontal={false} stroke="#e2e8f0" strokeDasharray="3 3" />
-              <XAxis type="number" domain={[0, 100]} tickFormatter={(v) => `${v}%`} tick={{ fontSize: 10, fill: '#94a3b8' }} />
-              <YAxis type="category" dataKey="vendedor_nombre" tick={{ fontSize: 10, fill: '#64748b' }} width={90} />
+              <XAxis type="number" domain={[0, 100]} tickFormatter={(v) => `${v}%`} tick={{ fontSize: 11, fill: '#94a3b8' }} />
+              <YAxis type="category" dataKey="vendedor_nombre" tick={{ fontSize: 11, fill: '#64748b' }} width={90} />
               <Tooltip content={<CustomTooltip />} />
               <Bar dataKey="tasa_pct" radius={[0, 4, 4, 0]} maxBarSize={18}>
                 {porVendedor.map((v) => (

@@ -3,7 +3,7 @@ import {
   Area, AreaChart, Bar, CartesianGrid, Cell, ComposedChart,
   Legend, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
-import { ChartSkeleton } from '../../../../components/ui/WidgetSkeleton';
+import { ChartSkeleton, WidgetEmptyState } from '../../../../components/ui/WidgetSkeleton';
 import { useCajaData } from '../CajaDataContext';
 import { formatCurrency } from '../../analyticsUtils';
 
@@ -32,10 +32,7 @@ export default function FlujoWidget() {
     return <ChartSkeleton />;
   }
   if (!flujo) return (
-    <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-slate-400">
-      <Inbox size={24} />
-      <p className="text-sm">Sin datos de flujo.</p>
-    </div>
+    <WidgetEmptyState icon={Inbox} title="Sin datos de flujo" subtitle="No hay movimientos de caja en el período seleccionado." />
   );
 
   const chartData = (flujo.series ?? []).map((s) => ({
@@ -59,8 +56,8 @@ export default function FlujoWidget() {
         <ResponsiveContainer width="100%" height="90%">
           <ComposedChart data={chartData} margin={{ top: 4, right: 12, left: 8, bottom: 4 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-            <XAxis dataKey="periodo" tick={{ fontSize: 10 }} />
-            <YAxis tickFormatter={fmtM} tick={{ fontSize: 10 }} width={56} />
+            <XAxis dataKey="periodo" tick={{ fontSize: 11 }} />
+            <YAxis tickFormatter={fmtM} tick={{ fontSize: 11 }} width={56} />
             <Tooltip
               formatter={(v, name) => [
                 formatCurrency(Math.abs(v)),
@@ -95,8 +92,8 @@ export default function FlujoWidget() {
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-            <XAxis dataKey="periodo" tick={{ fontSize: 10 }} />
-            <YAxis tickFormatter={fmtM} tick={{ fontSize: 10 }} width={56} />
+            <XAxis dataKey="periodo" tick={{ fontSize: 11 }} />
+            <YAxis tickFormatter={fmtM} tick={{ fontSize: 11 }} width={56} />
             <Tooltip formatter={(v) => [formatCurrency(v), 'Saldo acumulado']} />
             <ReferenceLine y={0} stroke="#ef4444" strokeDasharray="4 4" />
             <Area

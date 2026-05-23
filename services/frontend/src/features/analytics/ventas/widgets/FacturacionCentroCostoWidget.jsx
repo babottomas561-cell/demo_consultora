@@ -118,8 +118,8 @@ export default function FacturacionCentroCostoWidget() {
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={serie} margin={{ left: 0, right: 10, top: 5, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-              <XAxis dataKey="periodo" tick={{ fontSize: 10, fill: '#64748b' }} tickFormatter={fmtPeriod} />
-              <YAxis tick={{ fontSize: 10, fill: '#64748b' }} tickFormatter={fmtM} />
+              <XAxis dataKey="periodo" tick={{ fontSize: 11, fill: '#64748b' }} tickFormatter={fmtPeriod} />
+              <YAxis tick={{ fontSize: 11, fill: '#64748b' }} tickFormatter={fmtM} />
               <Tooltip content={<BarTooltip />} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
               {centros.map((cc, i) => (
@@ -133,8 +133,8 @@ export default function FacturacionCentroCostoWidget() {
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={serie} margin={{ left: 0, right: 10, top: 5, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-              <XAxis dataKey="periodo" tick={{ fontSize: 10, fill: '#64748b' }} tickFormatter={fmtPeriod} />
-              <YAxis tick={{ fontSize: 10, fill: '#64748b' }} tickFormatter={fmtM} />
+              <XAxis dataKey="periodo" tick={{ fontSize: 11, fill: '#64748b' }} tickFormatter={fmtPeriod} />
+              <YAxis tick={{ fontSize: 11, fill: '#64748b' }} tickFormatter={fmtM} />
               <Tooltip content={<BarTooltip />} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
               {centros.map((cc, i) => (

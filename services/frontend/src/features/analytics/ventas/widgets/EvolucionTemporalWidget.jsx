@@ -44,7 +44,7 @@ const CustomTooltip = ({ active, payload, label }) => {
     value: p.dataKey === 'nc_neg' ? Math.abs(p.value) : p.value,
   }));
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-lg text-xs space-y-1 min-w-[180px]">
+    <div className="bi-chart-tooltip text-xs space-y-1 min-w-[180px]">
       <p className="font-semibold text-slate-700 mb-1">{fmtPeriod(label)}</p>
       {items.map((p) => (
         <div key={p.dataKey} className="flex items-center justify-between gap-4">

@@ -45,7 +45,7 @@ export default function ConversionVendedoresWidget() {
             <BarChart data={chartData} margin={{ top: 4, right: 16, left: 8, bottom: 4 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
               <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
               <Tooltip formatter={(v) => [formatNumber(v)]} />
               <Legend />
               <Bar dataKey="confirmados" name="Confirmados"      fill="#10b981" radius={[4, 4, 0, 0]} />

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { RadialBarChart, RadialBar, ResponsiveContainer, PolarAngleAxis } from 'recharts';
-import { Settings } from 'lucide-react';
+import { Settings, Target } from 'lucide-react';
 import { useVentasData } from '../VentasDataContext';
 import { formatCurrencyShort } from '../../analyticsUtils';
 
@@ -92,7 +92,7 @@ export default function GoalTrackerWidget() {
 
   if (loadingKpis) {
     return (
-      <div className="h-full flex items-center justify-center">
+      <div className="h-full rounded-xl border border-slate-200 bg-white shadow-sm flex items-center justify-center">
         <div className="animate-pulse rounded-full bg-slate-200 w-28 h-28" />
       </div>
     );
@@ -100,7 +100,10 @@ export default function GoalTrackerWidget() {
 
   if (!goal && !showConfig) {
     return (
-      <div className="h-full flex flex-col items-center justify-center gap-3 p-4 text-center">
+      <div className="h-full rounded-xl border border-slate-200 bg-white shadow-sm flex flex-col items-center justify-center gap-3 p-4 text-center">
+        <div className="rounded-full bg-indigo-50 p-3">
+          <Target size={20} className="text-indigo-500" />
+        </div>
         <p className="text-sm font-medium text-slate-600">Configurá tu meta de ventas</p>
         <p className="text-xs text-slate-400">Vas a ver el progreso del período actual en tiempo real.</p>
         <button onClick={() => setShowConfig(true)}
@@ -113,7 +116,7 @@ export default function GoalTrackerWidget() {
 
   if (showConfig) {
     return (
-      <div className="h-full flex flex-col items-center justify-center gap-3 p-5">
+      <div className="h-full rounded-xl border border-slate-200 bg-white shadow-sm flex flex-col items-center justify-center gap-3 p-5">
         <p className="text-sm font-semibold text-slate-700">Configurar meta</p>
         <input
           type="text" value={labelInput} onChange={e => setLabelInput(e.target.value)}
@@ -140,7 +143,7 @@ export default function GoalTrackerWidget() {
   }
 
   return (
-    <div className="h-full flex flex-col items-center justify-center px-3 py-2 gap-1">
+    <div className="h-full rounded-xl border border-slate-200 bg-white shadow-sm flex flex-col items-center justify-center px-3 py-2 gap-1">
       <div className="flex items-center justify-between w-full shrink-0 mb-1">
         <p className="text-xs font-semibold text-slate-600">{goal?.label ?? 'Meta'}</p>
         <button onClick={() => setShowConfig(true)} className="rounded-lg p-1 hover:bg-slate-100">

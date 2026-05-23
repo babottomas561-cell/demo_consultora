@@ -139,12 +139,12 @@ export default function RFMMatrixWidget() {
             <XAxis
               type="number" dataKey="rScore" domain={[0.5, 5.5]} ticks={[1,2,3,4,5]}
               axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10 }}
-              label={{ value: 'Recencia (5=más reciente)', position: 'insideBottom', offset: -10, fontSize: 10, fill: '#94a3b8' }}
+              label={{ value: 'Recencia (5=más reciente)', position: 'insideBottom', offset: -10, fontSize: 11, fill: '#94a3b8' }}
             />
             <YAxis
               type="number" dataKey="fScore" domain={[0.5, 5.5]} ticks={[1,2,3,4,5]}
               axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10 }}
-              label={{ value: 'Frecuencia', angle: -90, position: 'insideLeft', fontSize: 10, fill: '#94a3b8' }}
+              label={{ value: 'Frecuencia', angle: -90, position: 'insideLeft', fontSize: 11, fill: '#94a3b8' }}
             />
             <ZAxis type="number" dataKey="size" range={[20, 250]} />
             <Tooltip content={<CustomTooltip />} cursor={{ strokeDasharray: '3 3' }} />

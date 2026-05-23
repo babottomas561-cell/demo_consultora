@@ -45,7 +45,7 @@ export default function VendedoresResultadoWidget() {
           <BarChart data={ranking} layout="vertical" margin={{ top: 4, right: 24, left: 90, bottom: 4 }}>
             <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
             <XAxis type="number" tickFormatter={fmtM} tick={{ fontSize: 9, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-            <YAxis type="category" dataKey="nombre" width={85} tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
+            <YAxis type="category" dataKey="nombre" width={85} tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
             <Tooltip formatter={(v) => [formatCurrency(v)]} />
             <Legend iconSize={8} wrapperStyle={{ fontSize: 10 }} />
             <Bar dataKey="facturado"      name="Facturado"  fill="#4f46e5" radius={[0, 3, 3, 0]} />
@@ -58,7 +58,7 @@ export default function VendedoresResultadoWidget() {
           <BarChart data={ranking} layout="vertical" margin={{ top: 4, right: 24, left: 90, bottom: 4 }}>
             <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
             <XAxis type="number" tickFormatter={(v) => `${v}%`} tick={{ fontSize: 9, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-            <YAxis type="category" dataKey="nombre" width={85} tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
+            <YAxis type="category" dataKey="nombre" width={85} tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
             <Tooltip formatter={(v) => [fmtPct(v), 'Desc. %']} />
             <ReferenceLine x={avgDesc} stroke="#94a3b8" strokeDasharray="4 4" />
             <Bar dataKey="descuento_promedio_pct" name="Desc. %" isAnimationActive={false} radius={[0, 3, 3, 0]}>

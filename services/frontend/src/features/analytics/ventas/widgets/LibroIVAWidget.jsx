@@ -113,8 +113,8 @@ export default function LibroIVAWidget() {
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={periodos} margin={{ left: 0, right: 8, top: 4, bottom: 0 }}>
             <CartesianGrid vertical={false} stroke="#e2e8f0" strokeDasharray="3 3" />
-            <XAxis dataKey="periodo" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={fmtPeriod} />
-            <YAxis tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 10, fill: '#94a3b8' }} />
+            <XAxis dataKey="periodo" tick={{ fontSize: 11, fill: '#94a3b8' }} tickFormatter={fmtPeriod} />
+            <YAxis tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 11, fill: '#94a3b8' }} />
             <Tooltip content={<CustomTooltip />} />
             <Legend
               formatter={(value) => <span className="text-[11px] text-slate-500">{IVA_LABELS[value] ?? value}</span>}

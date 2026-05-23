@@ -115,7 +115,7 @@ export default function NuevosRecurrentesWidget() {
             <YAxis yAxisId="right" orientation="right" axisLine={false} tickLine={false}
               tick={{ fill: '#cbd5e1', fontSize: 10 }} />
             <Tooltip content={<CustomTooltip />} />
-            <Legend verticalAlign="bottom" iconType="square" wrapperStyle={{ fontSize: 10, paddingTop: 4 }} />
+            <Legend verticalAlign="bottom" iconType="square" wrapperStyle={{ fontSize: 11, paddingTop: 4 }} />
             <Bar yAxisId="left" dataKey="facturado_recurrentes" name="Recurrentes" fill="#4f46e5" stackId="a" radius={[0, 0, 0, 0]} />
             <Bar yAxisId="left" dataKey="facturado_nuevos" name="Nuevos" fill="#10b981" stackId="a" radius={[3, 3, 0, 0]} />
             <Line yAxisId="right" type="monotone" dataKey="clientes_nuevos" name="# nuevos" stroke="#f97316" strokeWidth={1.5} strokeDasharray="4 2" dot={{ r: 2 }} />

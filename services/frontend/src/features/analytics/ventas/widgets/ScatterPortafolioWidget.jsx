@@ -150,11 +150,11 @@ export default function ScatterPortafolioWidget() {
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
               <XAxis type="number" dataKey="x" name="Unidades"
                 axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10 }}
-                label={{ value: 'Unidades vendidas →', position: 'insideBottom', offset: -2, fontSize: 10, fill: '#94a3b8' }} />
+                label={{ value: 'Unidades vendidas →', position: 'insideBottom', offset: -2, fontSize: 11, fill: '#94a3b8' }} />
               <YAxis type="number" dataKey="y" name="Margen%"
                 axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10 }}
                 tickFormatter={v => `${v}%`}
-                label={{ value: 'Margen% →', angle: -90, position: 'insideLeft', fontSize: 10, fill: '#94a3b8' }} />
+                label={{ value: 'Margen% →', angle: -90, position: 'insideLeft', fontSize: 11, fill: '#94a3b8' }} />
               <Tooltip content={<CustomTooltip />} />
               <ReferenceLine y={avgMargen} stroke="#cbd5e1" strokeDasharray="4 2"
                 label={{ value: `prom. ${avgMargen.toFixed(0)}%`, position: 'right', fontSize: 9, fill: '#94a3b8' }} />

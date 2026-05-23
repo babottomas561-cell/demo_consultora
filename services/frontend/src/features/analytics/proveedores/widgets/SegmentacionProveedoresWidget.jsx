@@ -81,8 +81,8 @@ export default function SegmentacionProveedoresWidget() {
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={barData} margin={{ top: 4, right: 8, left: 4, bottom: 4 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-              <XAxis dataKey="segmento" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+              <XAxis dataKey="segmento" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
               <Tooltip />
               <Bar dataKey="proveedores" name="Proveedores" radius={[4, 4, 0, 0]}>
                 {barData.map((_, i) => <Cell key={i} fill={SEGMENTO_COLORS[['A', 'B', 'C'][i]]} />)}
