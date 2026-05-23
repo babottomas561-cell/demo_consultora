@@ -2554,10 +2554,10 @@ async def ventas_temporal_por_dimension(
     }
     dim_col = dim_col_map[dimension]
 
-    # Get totals for top N filter
+    # Get totals for top N filter — net: FA/ND positive, NC negative
     if is_cc:
         top_rows = (await db.execute(text(f"""
-            SELECT {cc_expr} AS dim_key, COALESCE(SUM(ABS(total)), 0) AS facturado_bruto
+            SELECT {cc_expr} AS dim_key, COALESCE(SUM({venta_importe_neto_expr()}), 0) AS facturado_bruto
             FROM ventas
             WHERE {where}
             GROUP BY 1
@@ -2566,7 +2566,7 @@ async def ventas_temporal_por_dimension(
         """), params)).mappings().all()
     else:
         top_rows = (await db.execute(text(f"""
-            SELECT {dim_col} AS dim_key, COALESCE(SUM(ABS(total)), 0) AS facturado_bruto
+            SELECT {dim_col} AS dim_key, COALESCE(SUM({venta_importe_neto_expr()}), 0) AS facturado_bruto
             FROM ventas
             WHERE {where} AND {dim_col} IS NOT NULL
             GROUP BY 1
@@ -2607,7 +2607,7 @@ async def ventas_temporal_por_dimension(
             SELECT
                 to_char(date_trunc('{trunc}', fecha), 'YYYY-MM-DD') AS periodo,
                 {cc_expr} AS dim_key,
-                COALESCE(SUM(ABS(total)), 0) AS facturado_bruto,
+                COALESCE(SUM({venta_importe_neto_expr()}), 0) AS facturado_bruto,
                 COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END) AS tickets
             FROM ventas
             WHERE {where}
@@ -2620,7 +2620,7 @@ async def ventas_temporal_por_dimension(
             SELECT
                 to_char(date_trunc('{trunc}', fecha), 'YYYY-MM-DD') AS periodo,
                 {dim_col} AS dim_key,
-                COALESCE(SUM(ABS(total)), 0) AS facturado_bruto,
+                COALESCE(SUM({venta_importe_neto_expr()}), 0) AS facturado_bruto,
                 COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END) AS tickets
             FROM ventas
             WHERE {where} AND {dim_col} IN ({keys_str})
