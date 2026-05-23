@@ -2463,11 +2463,11 @@ async def ventas_por_centro_costo(
     trunc_map = {"dia": "day", "semana": "week", "mes": "month", "trimestre": "quarter"}
     trunc = trunc_map.get(granularidad, "month")
 
-    # Totals by CC
+    # Totals by CC — net: FA/ND positive, NC negative
     totals = (await db.execute(text(f"""
         SELECT
             CASE WHEN tag = 'S' THEN 'CC2' WHEN tag = 'N' THEN 'CC1' ELSE COALESCE(tag, 'Sin CC') END AS centro_costo,
-            COALESCE(SUM(ABS(total)), 0) AS facturado_bruto,
+            COALESCE(SUM({venta_importe_neto_expr()}), 0) AS facturado_bruto,
             COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END) AS tickets,
             COUNT(DISTINCT cliente_id) AS clientes
         FROM ventas
@@ -2476,12 +2476,12 @@ async def ventas_por_centro_costo(
         ORDER BY facturado_bruto DESC
     """), params)).mappings().all()
 
-    # Temporal by CC
+    # Temporal by CC — net: FA/ND positive, NC negative
     temporal = (await db.execute(text(f"""
         SELECT
             to_char(date_trunc('{trunc}', fecha), 'YYYY-MM-DD') AS periodo,
             CASE WHEN tag = 'S' THEN 'CC2' WHEN tag = 'N' THEN 'CC1' ELSE COALESCE(tag, 'Sin CC') END AS centro_costo,
-            COALESCE(SUM(ABS(total)), 0) AS facturado_bruto,
+            COALESCE(SUM({venta_importe_neto_expr()}), 0) AS facturado_bruto,
             COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END) AS tickets
         FROM ventas
         WHERE {where}
