@@ -76,35 +76,44 @@ export default function TemporalDimensionWidget({ defaultDimension = 'rubro' }) 
   if (error) return <div className="p-4 text-sm text-red-500">{error}</div>;
 
   const { serie = [], dimensiones = [], resumen = [] } = data || {};
-  if (!resumen.length) return <div className="p-4 text-sm text-slate-400">Sin datos para la dimensión seleccionada.</div>;
+
+  const controls = (
+    <div className="flex items-center justify-between px-3 pt-2 pb-1 shrink-0 gap-2 flex-wrap">
+      <div className="flex gap-0.5 bg-slate-100 rounded-md p-0.5">
+        {DIMENSIONS.map((d) => (
+          <button
+            key={d.key}
+            onClick={() => setDimension(d.key)}
+            className={`px-2 py-0.5 text-[10px] font-medium rounded transition-colors ${dimension === d.key ? 'bg-white shadow-sm text-indigo-700' : 'text-slate-500 hover:text-slate-700'}`}
+          >
+            {d.label}
+          </button>
+        ))}
+      </div>
+      <div className="flex gap-0.5 bg-slate-100 rounded-md p-0.5">
+        {VIEWS.map((v) => (
+          <button
+            key={v.key}
+            onClick={() => setView(v.key)}
+            className={`px-2 py-0.5 text-[10px] font-medium rounded transition-colors ${view === v.key ? 'bg-white shadow-sm text-indigo-700' : 'text-slate-500 hover:text-slate-700'}`}
+          >
+            {v.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+
+  if (!resumen.length) return (
+    <div className="h-full w-full flex flex-col overflow-hidden">
+      {controls}
+      <div className="flex-1 flex items-center justify-center p-4 text-sm text-slate-400">Sin datos para la dimensión seleccionada.</div>
+    </div>
+  );
 
   return (
     <div className="h-full w-full flex flex-col overflow-hidden">
-      {/* Controls */}
-      <div className="flex items-center justify-between px-3 pt-2 pb-1 shrink-0 gap-2 flex-wrap">
-        <div className="flex gap-0.5 bg-slate-100 rounded-md p-0.5">
-          {DIMENSIONS.map((d) => (
-            <button
-              key={d.key}
-              onClick={() => setDimension(d.key)}
-              className={`px-2 py-0.5 text-[10px] font-medium rounded transition-colors ${dimension === d.key ? 'bg-white shadow-sm text-indigo-700' : 'text-slate-500 hover:text-slate-700'}`}
-            >
-              {d.label}
-            </button>
-          ))}
-        </div>
-        <div className="flex gap-0.5 bg-slate-100 rounded-md p-0.5">
-          {VIEWS.map((v) => (
-            <button
-              key={v.key}
-              onClick={() => setView(v.key)}
-              className={`px-2 py-0.5 text-[10px] font-medium rounded transition-colors ${view === v.key ? 'bg-white shadow-sm text-indigo-700' : 'text-slate-500 hover:text-slate-700'}`}
-            >
-              {v.label}
-            </button>
-          ))}
-        </div>
-      </div>
+      {controls}
 
       <div className="flex-1 min-h-0 px-2 pb-2">
         {view === 'pie' && (
