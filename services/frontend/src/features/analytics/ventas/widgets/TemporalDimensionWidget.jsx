@@ -53,6 +53,7 @@ const DIMENSIONS = [
   { key: 'lista', label: 'Lista' },
   { key: 'vendedor', label: 'Vendedor' },
   { key: 'deposito', label: 'Depósito' },
+  { key: 'centro_costo', label: 'CC' },
 ];
 const VIEWS = [
   { key: 'pie', label: 'Torta' },

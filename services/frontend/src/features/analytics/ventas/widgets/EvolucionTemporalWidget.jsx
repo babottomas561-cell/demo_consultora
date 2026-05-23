@@ -29,11 +29,18 @@ const fmtM = (v) => {
 const fmtCurrency = (v) =>
   new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(Number(v ?? 0));
 
+const METRIC_LABELS = {
+  facturado: 'Bruto (c/IVA)',
+  facturado_sin_iva: 'Neto (s/IVA)',
+  facturado_anterior: 'Anterior (c/IVA)',
+  facturado_sin_iva_anterior: 'Anterior (s/IVA)',
+};
+
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
   const items = payload.map((p) => ({
     ...p,
-    name: p.dataKey === 'nc_neg' ? 'NC / Devoluciones' : p.name,
+    name: p.dataKey === 'nc_neg' ? 'NC / Devoluciones' : (METRIC_LABELS[p.dataKey] || p.name),
     value: p.dataKey === 'nc_neg' ? Math.abs(p.value) : p.value,
   }));
   return (
@@ -90,15 +97,18 @@ const linearForecast = (series, key, steps = 3) => {
 
 const WIDGET_ID = 'ventas-evolucion';
 
-function EvolucionChart({ series, chartType, comparar, showForecast, showMargen }) {
+function EvolucionChart({ series, chartType, comparar, showForecast, showMargen, metric = 'facturado' }) {
   const hasFaBruto = series.some((r) => r.fa_bruto !== undefined);
   const hasMargen = showMargen && series.some((r) => r.margen_pct != null);
+  const mainKey = metric;
+  const anteriorKey = metric === 'facturado_sin_iva' ? 'facturado_sin_iva_anterior' : 'facturado_anterior';
+  const mainLabel = metric === 'facturado_sin_iva' ? 'Neto s/IVA' : 'Neto c/IVA';
   const data = hasFaBruto
     ? series.map((r) => ({ ...r, nc_neg: -(Number(r.devoluciones ?? 0)) }))
     : series;
-  const hasNegativeNet = data.some((r) => Number(r.facturado ?? 0) < 0);
+  const hasNegativeNet = data.some((r) => Number(r[mainKey] ?? 0) < 0);
 
-  const forecastPoints = showForecast ? linearForecast(series, 'facturado') : [];
+  const forecastPoints = showForecast ? linearForecast(series, mainKey) : [];
   const allData = [...data, ...forecastPoints];
 
   const commonProps = {
@@ -129,8 +139,8 @@ function EvolucionChart({ series, chartType, comparar, showForecast, showMargen 
         <BarChart {...commonProps}>
           {grid}{xAxis}{yAxisLeft}{tooltip}{legend}
           <ReferenceLine yAxisId="left" y={0} stroke="#94a3b8" />
-          {comparar && <Bar yAxisId="left" dataKey="facturado_anterior" name="Anterior" fill="#e2e8f0" radius={[3,3,0,0]} />}
-          <Bar yAxisId="left" dataKey="facturado" name="Neto" fill="#4f46e5" radius={[3,3,0,0]} />
+          {comparar && <Bar yAxisId="left" dataKey={anteriorKey} name="Anterior" fill="#e2e8f0" radius={[3,3,0,0]} />}
+          <Bar yAxisId="left" dataKey={mainKey} name={mainLabel} fill="#4f46e5" radius={[3,3,0,0]} />
           {showForecast && <Bar yAxisId="left" dataKey="forecast" name="Pronóstico" fill="#4f46e5" fillOpacity={0.3} radius={[3,3,0,0]} strokeDasharray="4 2" />}
         </BarChart>
       </ResponsiveContainer>
@@ -142,8 +152,8 @@ function EvolucionChart({ series, chartType, comparar, showForecast, showMargen 
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart {...commonProps}>
           {grid}{xAxis}{yAxisLeft}{tooltip}{legend}
-          {comparar && <Area yAxisId="left" type="monotone" dataKey="facturado_anterior" name="Anterior" stroke="#e2e8f0" fill="#e2e8f0" fillOpacity={0.4} />}
-          <Area yAxisId="left" type="monotone" dataKey="facturado" name="Neto" stroke="#4f46e5" fill="#4f46e5" fillOpacity={0.2} />
+          {comparar && <Area yAxisId="left" type="monotone" dataKey={anteriorKey} name="Anterior" stroke="#e2e8f0" fill="#e2e8f0" fillOpacity={0.4} />}
+          <Area yAxisId="left" type="monotone" dataKey={mainKey} name={mainLabel} stroke="#4f46e5" fill="#4f46e5" fillOpacity={0.2} />
           {showForecast && <Area yAxisId="left" type="monotone" dataKey="forecast" name="Pronóstico" stroke="#4f46e5" strokeDasharray="5 3" fill="#4f46e5" fillOpacity={0.08} />}
         </AreaChart>
       </ResponsiveContainer>
@@ -156,8 +166,8 @@ function EvolucionChart({ series, chartType, comparar, showForecast, showMargen 
         <LineChart {...commonProps}>
           {grid}{xAxis}{yAxisLeft}{tooltip}{legend}
           <ReferenceLine yAxisId="left" y={0} stroke="#94a3b8" />
-          {comparar && <Line yAxisId="left" type="monotone" dataKey="facturado_anterior" name="Anterior" stroke="#cbd5e1" strokeWidth={1.5} dot={false} />}
-          <Line yAxisId="left" type="monotone" dataKey="facturado" name="Neto" stroke="#4f46e5" strokeWidth={2.5} dot={{ r: 3, fill: '#4f46e5', strokeWidth: 0 }} activeDot={{ r: 5 }} />
+          {comparar && <Line yAxisId="left" type="monotone" dataKey={anteriorKey} name="Anterior" stroke="#cbd5e1" strokeWidth={1.5} dot={false} />}
+          <Line yAxisId="left" type="monotone" dataKey={mainKey} name={mainLabel} stroke="#4f46e5" strokeWidth={2.5} dot={{ r: 3, fill: '#4f46e5', strokeWidth: 0 }} activeDot={{ r: 5 }} />
           {showForecast && <Line yAxisId="left" type="monotone" dataKey="forecast" name="Pronóstico" stroke="#4f46e5" strokeWidth={1.5} strokeDasharray="5 3" dot={false} />}
         </LineChart>
       </ResponsiveContainer>
@@ -171,10 +181,10 @@ function EvolucionChart({ series, chartType, comparar, showForecast, showMargen 
         {grid}{xAxis}{yAxisLeft}{yAxisRight}
         <ReferenceLine yAxisId="left" y={0} stroke="#94a3b8" strokeWidth={1} />
         {tooltip}{legend}
-        {comparar && <Bar yAxisId="left" dataKey="facturado_anterior" name="Neto anterior" fill="#e2e8f0" radius={[3,3,0,0]} />}
-        {hasFaBruto && <Bar yAxisId="left" dataKey="fa_bruto" name="FA bruto" fill="#818cf8" radius={[3,3,0,0]} opacity={0.55} />}
-        {hasFaBruto && <Bar yAxisId="left" dataKey="nc_neg" name="NC / Devol." fill="#f87171" radius={[0,0,3,3]} opacity={0.8} />}
-        <Line yAxisId="left" type="monotone" dataKey="facturado" name="Neto facturado" stroke="#4f46e5" strokeWidth={2.5} dot={{ r: 3, fill: '#4f46e5', strokeWidth: 0 }} activeDot={{ r: 5 }} />
+        {comparar && <Bar yAxisId="left" dataKey={anteriorKey} name={`${mainLabel} anterior`} fill="#e2e8f0" radius={[3,3,0,0]} />}
+        {hasFaBruto && mainKey === 'facturado' && <Bar yAxisId="left" dataKey="fa_bruto" name="FA bruto" fill="#818cf8" radius={[3,3,0,0]} opacity={0.55} />}
+        {hasFaBruto && mainKey === 'facturado' && <Bar yAxisId="left" dataKey="nc_neg" name="NC / Devol." fill="#f87171" radius={[0,0,3,3]} opacity={0.8} />}
+        <Line yAxisId="left" type="monotone" dataKey={mainKey} name={mainLabel} stroke="#4f46e5" strokeWidth={2.5} dot={{ r: 3, fill: '#4f46e5', strokeWidth: 0 }} activeDot={{ r: 5 }} />
         {!hasMargen && <Line yAxisId="right" type="monotone" dataKey="tickets" name="Tickets" stroke="#f97316" strokeWidth={1.5} strokeDasharray="4 2" dot={false} />}
         {hasMargen && <Line yAxisId="right" type="monotone" dataKey="margen_pct" name="Margen%" stroke="#059669" strokeWidth={2} dot={{ r: 3, fill: '#059669', strokeWidth: 0 }} activeDot={{ r: 5 }} />}
         {showForecast && <Line yAxisId="left" type="monotone" dataKey="forecast" name="Pronóstico" stroke="#4f46e5" strokeWidth={1.5} strokeDasharray="5 3" dot={false} />}
@@ -183,11 +193,17 @@ function EvolucionChart({ series, chartType, comparar, showForecast, showMargen 
   );
 }
 
+const METRIC_OPTIONS = [
+  { value: 'facturado', label: 'Bruto (c/IVA)' },
+  { value: 'facturado_sin_iva', label: 'Neto (s/IVA)' },
+];
+
 export default function EvolucionTemporalWidget() {
   const { temporal, loadingTemporal, granularidad, setGranularidad, comparar } = useVentasData();
   const setting = useWidgetSetting(WIDGET_ID);
   const [showForecast, setShowForecast] = useState(false);
   const [showMargen, setShowMargen] = useState(false);
+  const [metric, setMetric] = useState('facturado');
 
   const chartType = setting.chartType || 'composed';
   const activeGran = setting.granularity || granularidad || 'mes';
@@ -199,10 +215,13 @@ export default function EvolucionTemporalWidget() {
   const rawSeries = temporal?.series ?? [];
   const isEmpty = !loadingTemporal && rawSeries.length === 0;
   const hasNegativeNet = rawSeries.some((r) => Number(r.facturado ?? 0) < 0);
+  const metricLabel = metric === 'facturado' ? 'Bruto (c/IVA)' : 'Neto (s/IVA)';
 
   const exportData = rawSeries.map((r) => ({
     Período: r.periodo,
-    'Facturado neto': r.facturado,
+    'Facturado bruto (c/IVA)': r.facturado,
+    'Facturado neto (s/IVA)': r.facturado_sin_iva,
+    'IVA Débito': r.iva_debito,
     'Facturado anterior': r.facturado_anterior,
     Tickets: r.tickets,
   }));
@@ -211,8 +230,8 @@ export default function EvolucionTemporalWidget() {
     <SmartWidget
       widgetId={WIDGET_ID}
       title="Evolución Temporal"
-      subtitle="Facturado neto y tickets por período"
-      info="Compara el facturado del período con el anterior. Activá el pronóstico para ver tendencia lineal."
+      subtitle={`${metricLabel} y tickets por período`}
+      info="Facturación Bruta = con IVA (total factura). Neta = sin IVA (base imponible). Activá margen o pronóstico desde settings."
       loading={loadingTemporal}
       empty={isEmpty}
       chartTypeOptions={CHART_TYPE_OPTIONS}
@@ -222,12 +241,26 @@ export default function EvolucionTemporalWidget() {
       exportFilename="evolucion-ventas"
       exportColumns={[
         { key: 'Período', label: 'Período' },
-        { key: 'Facturado neto', label: 'Facturado Neto' },
+        { key: 'Facturado bruto (c/IVA)', label: 'Bruto c/IVA' },
+        { key: 'Facturado neto (s/IVA)', label: 'Neto s/IVA' },
+        { key: 'IVA Débito', label: 'IVA Débito' },
         { key: 'Facturado anterior', label: 'Anterior' },
         { key: 'Tickets', label: 'Tickets' },
       ]}
       customSettingsFields={
         <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-slate-700">Métrica principal</span>
+            <select
+              value={metric}
+              onChange={(e) => setMetric(e.target.value)}
+              className="rounded border border-slate-200 px-2 py-1 text-xs text-slate-600 bg-white"
+            >
+              {METRIC_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </div>
           <div className="flex items-center justify-between">
             <span className="text-sm text-slate-700">Mostrar margen bruto%</span>
             <button
@@ -249,11 +282,24 @@ export default function EvolucionTemporalWidget() {
         </div>
       }
       rightExtras={
-        hasNegativeNet ? (
-          <span className="text-[10px] text-amber-700 font-medium bg-amber-50 border border-amber-200 rounded px-2 py-0.5">
-            ⚠ NC &gt; FA
-          </span>
-        ) : null
+        <div className="flex items-center gap-1.5">
+          <div className="flex gap-0.5 bg-slate-100 rounded-md p-0.5">
+            {METRIC_OPTIONS.map((o) => (
+              <button
+                key={o.value}
+                onClick={() => setMetric(o.value)}
+                className={`px-2 py-0.5 text-[10px] font-medium rounded transition-colors ${metric === o.value ? 'bg-white shadow-sm text-indigo-700' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+          {hasNegativeNet && (
+            <span className="text-[10px] text-amber-700 font-medium bg-amber-50 border border-amber-200 rounded px-2 py-0.5">
+              NC &gt; FA
+            </span>
+          )}
+        </div>
       }
     >
       <div className="h-full w-full p-3 pt-1">
@@ -263,6 +309,7 @@ export default function EvolucionTemporalWidget() {
           comparar={comparar}
           showForecast={showForecast}
           showMargen={showMargen}
+          metric={metric}
         />
       </div>
     </SmartWidget>

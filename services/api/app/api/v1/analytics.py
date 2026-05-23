@@ -2144,6 +2144,8 @@ async def ventas_temporal(
             COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN ABS(total) ELSE 0 END),0)               AS fa_bruto,
             COALESCE(SUM(CASE WHEN tipo_comprobante='NC' THEN ABS(total) ELSE 0 END),0)               AS devoluciones,
             COALESCE(SUM({venta_importe_neto_expr()}),0)                                              AS facturado,
+            COALESCE(SUM({venta_neto_sin_iva_expr()}),0)                                              AS facturado_sin_iva,
+            COALESCE(SUM({venta_iva_neto_expr()}),0)                                                  AS iva_debito,
             COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END)                                          AS tickets,
             COALESCE(SUM({venta_neto_sin_iva_expr()} - {venta_costo_neto_expr()}),0)                  AS margen_abs,
             COALESCE(SUM(CASE WHEN precio_compra_actual IS NOT NULL THEN ABS(total) ELSE 0 END),0)    AS total_con_costo
@@ -2172,6 +2174,8 @@ async def ventas_temporal(
                 COALESCE(SUM(CASE WHEN tipo_comprobante='FA' THEN ABS(total) ELSE 0 END),0)               AS fa_bruto,
                 COALESCE(SUM(CASE WHEN tipo_comprobante='NC' THEN ABS(total) ELSE 0 END),0)               AS devoluciones,
                 COALESCE(SUM({venta_importe_neto_expr()}),0)                                              AS facturado,
+                COALESCE(SUM({venta_neto_sin_iva_expr()}),0)                                              AS facturado_sin_iva,
+                COALESCE(SUM({venta_iva_neto_expr()}),0)                                                  AS iva_debito,
                 COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END)                                          AS tickets,
                 COALESCE(SUM({venta_neto_sin_iva_expr()} - {venta_costo_neto_expr()}),0)                  AS margen_abs,
                 COALESCE(SUM(CASE WHEN precio_compra_actual IS NOT NULL THEN ABS(total) ELSE 0 END),0)    AS total_con_costo
@@ -2192,6 +2196,7 @@ async def ventas_temporal(
         for i, row in enumerate(result):
             if i < len(prev_vals):
                 row["facturado_anterior"] = prev_vals[i]["facturado"]
+                row["facturado_sin_iva_anterior"] = prev_vals[i].get("facturado_sin_iva")
                 row["tickets_anterior"] = prev_vals[i]["tickets"]
                 row["margen_pct_anterior"] = prev_vals[i].get("margen_pct")
                 row["periodo_anterior"] = prev_vals[i]["periodo"]
@@ -2500,13 +2505,13 @@ async def ventas_por_centro_costo(
 @router.get("/ventas/temporal-por-dimension")
 async def ventas_temporal_por_dimension(
     company_id: int = None,
-    dimension: Literal["rubro", "lista", "vendedor", "deposito"] = "rubro",
+    dimension: Literal["rubro", "lista", "vendedor", "deposito", "centro_costo"] = "rubro",
     granularidad: Literal["dia", "semana", "mes", "trimestre"] = "mes",
     filters: GlobalFilters = Depends(get_global_filters),
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Serie temporal de facturación bruta (con IVA) desglosada por dimensión (rubro, lista, vendedor, deposito)."""
+    """Serie temporal de facturación bruta (con IVA) desglosada por dimensión (rubro, lista, vendedor, deposito, centro_costo)."""
     tenant_schema = await get_tenant_schema(current_user, db, company_id)
     await set_tenant_search_path(db, tenant_schema)
 
@@ -2515,23 +2520,38 @@ async def ventas_temporal_por_dimension(
     trunc_map = {"dia": "day", "semana": "week", "mes": "month", "trimestre": "quarter"}
     trunc = trunc_map.get(granularidad, "month")
 
+    # Centro de costo uses tag field with label mapping
+    is_cc = dimension == "centro_costo"
+    cc_expr = "CASE WHEN tag = 'S' THEN 'CC2' WHEN tag = 'N' THEN 'CC1' ELSE COALESCE(tag, 'Sin CC') END"
+
     dim_col_map = {
         "rubro": "cod_rubro",
         "lista": "cod_lista_precios",
         "vendedor": "cod_vendedor",
         "deposito": "cod_deposito",
+        "centro_costo": "tag",
     }
     dim_col = dim_col_map[dimension]
 
     # Get totals for top N filter
-    top_rows = (await db.execute(text(f"""
-        SELECT {dim_col} AS dim_key, COALESCE(SUM(ABS(total)), 0) AS facturado_bruto
-        FROM ventas
-        WHERE {where} AND {dim_col} IS NOT NULL
-        GROUP BY 1
-        ORDER BY 2 DESC
-        LIMIT 10
-    """), params)).mappings().all()
+    if is_cc:
+        top_rows = (await db.execute(text(f"""
+            SELECT {cc_expr} AS dim_key, COALESCE(SUM(ABS(total)), 0) AS facturado_bruto
+            FROM ventas
+            WHERE {where}
+            GROUP BY 1
+            ORDER BY 2 DESC
+            LIMIT 10
+        """), params)).mappings().all()
+    else:
+        top_rows = (await db.execute(text(f"""
+            SELECT {dim_col} AS dim_key, COALESCE(SUM(ABS(total)), 0) AS facturado_bruto
+            FROM ventas
+            WHERE {where} AND {dim_col} IS NOT NULL
+            GROUP BY 1
+            ORDER BY 2 DESC
+            LIMIT 10
+        """), params)).mappings().all()
 
     top_keys = [r["dim_key"] for r in top_rows]
     if not top_keys:
@@ -2539,37 +2559,53 @@ async def ventas_temporal_por_dimension(
 
     # Name resolution
     name_map = {}
-    try:
-        if dimension == "rubro":
-            nr = (await db.execute(text(
-                "SELECT DISTINCT ON (cod_articulo) cod_rubro, rubro FROM stock_disponible WHERE rubro IS NOT NULL"
-            ))).mappings().all()
-            name_map = {r["cod_rubro"]: r["rubro"] for r in nr}
-        elif dimension == "lista":
-            nr = (await db.execute(text("SELECT cod_lista, descripcion FROM listas_precios"))).mappings().all()
-            name_map = {r["cod_lista"]: r["descripcion"] for r in nr}
-        elif dimension == "vendedor":
-            nr = (await db.execute(text("SELECT cod_vendedor, nombre FROM vendedores"))).mappings().all()
-            name_map = {r["cod_vendedor"]: r["nombre"] for r in nr}
-        elif dimension == "deposito":
-            nr = (await db.execute(text("SELECT cod_deposito, nombre FROM depositos"))).mappings().all()
-            name_map = {r["cod_deposito"]: r["nombre"] for r in nr}
-    except Exception:
-        pass
+    if is_cc:
+        name_map = {k: k for k in top_keys}
+    else:
+        try:
+            if dimension == "rubro":
+                nr = (await db.execute(text(
+                    "SELECT DISTINCT ON (cod_articulo) cod_rubro, rubro FROM stock_disponible WHERE rubro IS NOT NULL"
+                ))).mappings().all()
+                name_map = {r["cod_rubro"]: r["rubro"] for r in nr}
+            elif dimension == "lista":
+                nr = (await db.execute(text("SELECT cod_lista, descripcion FROM listas_precios"))).mappings().all()
+                name_map = {r["cod_lista"]: r["descripcion"] for r in nr}
+            elif dimension == "vendedor":
+                nr = (await db.execute(text("SELECT cod_vendedor, nombre FROM vendedores"))).mappings().all()
+                name_map = {r["cod_vendedor"]: r["nombre"] for r in nr}
+            elif dimension == "deposito":
+                nr = (await db.execute(text("SELECT cod_deposito, nombre FROM depositos"))).mappings().all()
+                name_map = {r["cod_deposito"]: r["nombre"] for r in nr}
+        except Exception:
+            pass
 
     # Temporal by dimension
-    keys_str = ",".join(str(k) for k in top_keys)
-    temporal = (await db.execute(text(f"""
-        SELECT
-            to_char(date_trunc('{trunc}', fecha), 'YYYY-MM-DD') AS periodo,
-            {dim_col} AS dim_key,
-            COALESCE(SUM(ABS(total)), 0) AS facturado_bruto,
-            COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END) AS tickets
-        FROM ventas
-        WHERE {where} AND {dim_col} IN ({keys_str})
-        GROUP BY 1, 2
-        ORDER BY 1, 2
-    """), params)).mappings().all()
+    if is_cc:
+        temporal = (await db.execute(text(f"""
+            SELECT
+                to_char(date_trunc('{trunc}', fecha), 'YYYY-MM-DD') AS periodo,
+                {cc_expr} AS dim_key,
+                COALESCE(SUM(ABS(total)), 0) AS facturado_bruto,
+                COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END) AS tickets
+            FROM ventas
+            WHERE {where}
+            GROUP BY 1, 2
+            ORDER BY 1, 2
+        """), params)).mappings().all()
+    else:
+        keys_str = ",".join(str(k) for k in top_keys)
+        temporal = (await db.execute(text(f"""
+            SELECT
+                to_char(date_trunc('{trunc}', fecha), 'YYYY-MM-DD') AS periodo,
+                {dim_col} AS dim_key,
+                COALESCE(SUM(ABS(total)), 0) AS facturado_bruto,
+                COUNT(CASE WHEN tipo_comprobante='FA' THEN 1 END) AS tickets
+            FROM ventas
+            WHERE {where} AND {dim_col} IN ({keys_str})
+            GROUP BY 1, 2
+            ORDER BY 1, 2
+        """), params)).mappings().all()
 
     # Pivot
     series_map = {}
